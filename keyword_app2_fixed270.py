@@ -1554,7 +1554,75 @@ if not cloud_enabled() and is_admin():
         st.session_state.kw_df = load_db(Path(new_path))
         scan_existing_counters()
 
-tab1, tab3, tab2 = st.tabs(["분석하기", "리포트(주간 Top N)", "키워드 관리"])
+def render_user_management():
+    """Load account data only on demand and keep it in this admin's session."""
+    st.subheader('사용자 관리')
+    st.caption('이 Supabase 프로젝트의 계정을 조회하고 앱 사용 역할을 변경합니다. 한 페이지에 최대 50개 계정을 표시합니다.')
+    token = st.session_state['auth_session']['access_token']
+    repository = SupabaseRepository()
+    page = st.number_input('페이지', min_value=1, max_value=100000, value=1,
+                           step=1, key='user_admin_page')
+    if st.button('사용자 목록 불러오기 / 새로고침', key='user_admin_load'):
+        st.session_state.pop('managed_users', None)
+        try:
+            st.session_state.managed_users = repository.list_users(token, page=int(page))
+            st.session_state.managed_users_page = int(page)
+        except (StorageError, PermissionError, ValueError) as e:
+            st.error(str(e))
+            return
+    users = st.session_state.get('managed_users')
+    if users is None:
+        st.info('사용자 목록을 불러와 역할을 변경하세요.')
+        return
+    if st.session_state.get('managed_users_page') != int(page):
+        st.info('선택한 페이지의 사용자 목록을 다시 불러오세요.')
+        return
+    if not users:
+        st.info('이 페이지에 계정이 없습니다.')
+        return
+    labels = {'member': '일반 사용자', 'admin': '관리자'}
+    st.dataframe(pd.DataFrame([{
+        '이메일': user['email'], '역할': labels.get(user['role'], '앱 권한 미지정'),
+        '이메일 확인': '완료' if user['email_confirmed'] else '미완료',
+    } for user in users]), hide_index=True, width='stretch')
+    by_id = {user['id']: user for user in users}
+    target_id = st.selectbox('변경할 계정', options=list(by_id),
+                            format_func=lambda uid: by_id[uid]['email'] or uid,
+                            key='user_admin_target')
+    if target_id not in by_id:
+        st.error('목록에서 계정을 선택하세요.')
+        return
+    target = by_id[target_id]
+    st.caption('현재 역할: ' + labels.get(target['role'], '앱 권한 미지정'))
+    own_account = target_id == st.session_state.cloud_user['id']
+    if own_account:
+        st.info('자신의 관리자 권한은 해제할 수 없습니다.')
+    with st.form('user_admin_role_form'):
+        role = st.selectbox('변경할 역할', options=['member', 'admin'],
+                            index=1 if target['role'] == 'admin' else 0,
+                            format_func=lambda value: labels[value],
+                            key='user_admin_role_' + target_id, disabled=own_account)
+        confirm = st.checkbox('선택한 계정의 역할 변경을 확인했습니다.', key='user_admin_confirm_' + target_id)
+        submit = st.form_submit_button('역할 저장', disabled=own_account)
+    if submit:
+        if not confirm:
+            st.warning('역할 변경 확인에 체크하세요.')
+            return
+        try:
+            updated = repository.set_user_role(token, target_id, role, target['role'])
+            # Keep the displayed snapshot consistent without resending a saved form.
+            st.session_state.managed_users = [updated if u['id'] == target_id else u for u in users]
+            st.session_state.user_admin_success = '역할을 저장했습니다. 해당 사용자는 로그아웃 후 다시 로그인하세요.'
+            st.rerun()
+        except (StorageError, PermissionError, ValueError) as e:
+            st.error(str(e))
+
+
+show_user_management = cloud_enabled() and is_admin()
+tab_names = ["분석하기", "리포트(주간 Top N)", "키워드 관리"]
+if show_user_management:
+    tab_names.append('사용자 관리')
+tab1, tab3, tab2, *user_tabs = st.tabs(tab_names)
 
 with tab1:
     # ① 텍스트 입력
@@ -2876,3 +2944,9 @@ with tab3:
                     st.success(f"최근 7일 로그 {removed}건 삭제 완료")
             except Exception as e:
                 st.error(f"최근 7일 초기화 실패: {e}")
+
+if user_tabs:
+    with user_tabs[0]:
+        if message := st.session_state.pop('user_admin_success', None):
+            st.success(message)
+        render_user_management()

@@ -1,5 +1,6 @@
 """Server-only Supabase REST access. No mutable user session is shared."""
 import os
+from uuid import UUID
 
 import pandas as pd
 import requests
@@ -16,6 +17,13 @@ class StorageError(RuntimeError):
 
 class ConflictError(StorageError):
     pass
+
+
+def _user_summary(user):
+    """Expose only fields used by the application administrator screen."""
+    return {'id': user['id'], 'email': user.get('email', ''),
+            'role': (user.get('app_metadata') or {}).get('role'),
+            'email_confirmed': bool(user.get('email_confirmed_at'))}
 
 
 class SupabaseRepository:
@@ -117,6 +125,41 @@ class SupabaseRepository:
         if user.get('is_anonymous') or not user.get('id'):
             raise PermissionError('사내 사용자 계정으로 로그인하세요.')
         return user
+
+    def _require_app_admin(self, token):
+        # Validate against Auth for each operation, never a UI flag or decoded JWT.
+        actor = self.user(token)
+        if (actor.get('app_metadata') or {}).get('role') != 'admin':
+            raise PermissionError('사용자 관리는 관리자만 이용할 수 있습니다.')
+        return actor
+
+    def list_users(self, token, page=1):
+        self._require_app_admin(token)
+        if not isinstance(page, int) or not 1 <= page <= 100000:
+            raise ValueError('올바른 페이지 번호를 입력하세요.')
+        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page=50')
+        return [_user_summary(user) for user in result['users']]
+
+    def set_user_role(self, token, user_id, role, expected_role):
+        if role not in {'admin', 'member'}:
+            raise ValueError('역할은 admin 또는 member만 지정할 수 있습니다.')
+        user_id = str(UUID(str(user_id)))
+        actor = self._require_app_admin(token)
+        if user_id == actor['id'] and role != 'admin':
+            raise ValueError('자신의 관리자 권한은 해제할 수 없습니다.')
+        path = '/auth/v1/admin/users/' + user_id
+        target = self.request('GET', path)
+        if target.get('is_anonymous'):
+            raise ValueError('익명 계정에는 앱 역할을 부여할 수 없습니다.')
+        # ponytail: this preflight check is not atomic; serialize edits if concurrent admins need it.
+        if (target.get('app_metadata') or {}).get('role') != expected_role:
+            raise ConflictError('이 계정의 역할이 변경되었습니다. 목록을 새로 불러오세요.')
+        # Auth Admin merges this metadata patch, preserving provider and other keys.
+        # Always use the server key here; the actor's token is only used above.
+        updated = self.request('PUT', path, {'app_metadata': {'role': role}})
+        if updated.get('id') != user_id or (updated.get('app_metadata') or {}).get('role') != role:
+            raise StorageError('역할 변경 결과를 확인할 수 없습니다. 목록을 새로 불러오세요.')
+        return _user_summary(updated)
 
     def logout(self, token):
         self.request('POST', '/auth/v1/logout', token=token)

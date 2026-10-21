@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pandas as pd
@@ -186,6 +186,97 @@ class IntegrationTests(unittest.TestCase):
             record.assert_called_once()
             self.assertEqual(record.call_args.args[2], 'user-1')
             self.assertTrue(app.button(key='report_reset_btn').disabled)
+            self.assertNotIn('사용자 관리', [tab.label for tab in app.tabs])
+            self.assertFalse(any(b.key == 'user_admin_load' for b in app.button))
+
+    def test_user_management_rechecks_admin_and_prevents_self_demotion(self):
+        admin_id, target_id = str(uuid4()), str(uuid4())
+        with patch.dict(os.environ, {'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}):
+            repository = SupabaseRepository()
+            with patch.object(repository, 'user', return_value={
+                    'id': admin_id, 'app_metadata': {'role': 'member'}}), \
+                 patch.object(repository, 'request') as request:
+                with self.assertRaises(PermissionError):
+                    repository.list_users('revoked-admin-token')
+                with self.assertRaises(PermissionError):
+                    repository.set_user_role('revoked-admin-token', target_id, 'admin', 'member')
+                request.assert_not_called()
+            with patch.object(repository, 'user', return_value={
+                    'id': admin_id, 'app_metadata': {'role': 'admin'}}), \
+                 patch.object(repository, 'request') as request:
+                with self.assertRaises(ValueError):
+                    repository.set_user_role('admin-token', admin_id, 'member', 'admin')
+                with self.assertRaises(ValueError):
+                    repository.set_user_role('admin-token', target_id, 'service_role', 'member')
+                with self.assertRaises(ValueError):
+                    repository.set_user_role('admin-token', '../users', 'member', None)
+                request.assert_not_called()
+                request.return_value = {'id': target_id, 'app_metadata': {'role': 'admin'}}
+                with self.assertRaises(ConflictError):
+                    repository.set_user_role('admin-token', target_id, 'member', None)
+                self.assertEqual(request.call_count, 1)  # stale snapshot never writes
+
+    def test_user_management_rest_uses_server_key_and_updates_only_app_role(self):
+        admin_id, target_id = str(uuid4()), str(uuid4())
+        actor = {'id': admin_id, 'app_metadata': {'role': 'admin'}}
+        target = {'id': target_id, 'email': 'member@example.test',
+                  'app_metadata': {'provider': 'email', 'role': 'member', 'team': 'keep'}}
+        bodies = [actor, {'users': [target]}, actor, target,
+                  {**target, 'app_metadata': {**target['app_metadata'], 'role': 'admin'}}]
+        responses = [Mock(status_code=200, content=b'json', json=Mock(return_value=body))
+                     for body in bodies]
+        with patch.dict(os.environ, {'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.requests.request', side_effect=responses) as request:
+            repository = SupabaseRepository()
+            users = repository.list_users('verified-admin-token', page=2)
+            self.assertEqual(users[0]['role'], 'member')
+            self.assertNotIn('app_metadata', users[0])
+            updated = repository.set_user_role('verified-admin-token', target_id, 'admin', 'member')
+        self.assertEqual(updated['role'], 'admin')
+        calls = request.call_args_list
+        self.assertEqual(calls[0].kwargs['headers']['Authorization'], 'Bearer verified-admin-token')
+        self.assertTrue(calls[1].args[1].endswith('/admin/users?page=2&per_page=50'))
+        for call in (calls[1], calls[3], calls[4]):
+            self.assertEqual(call.kwargs['headers']['apikey'], 'sb_secret_test')
+            self.assertNotIn('Authorization', call.kwargs['headers'])
+        self.assertEqual(calls[4].args[0], 'PUT')
+        self.assertEqual(calls[4].kwargs['json'], {'app_metadata': {'role': 'admin'}})
+
+    def test_admin_can_assign_missing_role_from_screen(self):
+        admin_id, target_id = str(uuid4()), str(uuid4())
+        actor = {'id': admin_id, 'email': 'admin@example.test', 'app_metadata': {'role': 'admin'}}
+        users = [{'id': admin_id, 'email': actor['email'], 'role': 'admin', 'email_confirmed': True},
+                 {'id': target_id, 'email': 'new@example.test', 'role': None, 'email_confirmed': True}]
+        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
+                                    'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.SupabaseRepository.user', return_value=actor), \
+             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
+             patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
+             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
+             patch('repository.SupabaseRepository.list_users', return_value=users) as load, \
+             patch('repository.SupabaseRepository.set_user_role', return_value={
+                 **users[1], 'role': 'member'}) as save:
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py'))
+            app.session_state['auth_session'] = {'access_token': 'admin-token', 'expires_at': 9999999999}
+            app.run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertIn('사용자 관리', [tab.label for tab in app.tabs])
+            load.assert_not_called()  # hidden tab does not fetch accounts
+            app.button(key='user_admin_load').click().run(timeout=30)
+            load.assert_called_once_with('admin-token', page=1)
+            self.assertTrue(app.button(key='FormSubmitter:user_admin_role_form-역할 저장').disabled)
+            app.selectbox(key='user_admin_target').select(target_id).run(timeout=30)
+            app.button(key='FormSubmitter:user_admin_role_form-역할 저장').click().run(timeout=30)
+            save.assert_not_called()  # explicit confirmation is required
+            app.checkbox(key='user_admin_confirm_' + target_id).check()
+            app.button(key='FormSubmitter:user_admin_role_form-역할 저장').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            save.assert_called_once_with('admin-token', target_id, 'member', None)
+            self.assertTrue(any('역할을 저장했습니다' in message.value for message in app.success))
+            self.assertEqual(app.session_state['managed_users'][1]['role'], 'member')
 
 
 if __name__ == '__main__':
