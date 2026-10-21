@@ -1619,10 +1619,13 @@ def render_user_management():
 
 
 show_user_management = cloud_enabled() and is_admin()
-tab_names = ["분석하기", "리포트(주간 Top N)", "키워드 관리"]
+tab_names = ["분석하기", "리포트(주간 Top N)"]
+if is_admin():
+    tab_names.append('키워드 관리')
 if show_user_management:
     tab_names.append('사용자 관리')
-tab1, tab3, tab2, *user_tabs = st.tabs(tab_names)
+tab1, tab3, *admin_tabs = st.tabs(tab_names)
+user_tabs = admin_tabs[1:]
 
 with tab1:
     # ① 텍스트 입력
@@ -2552,8 +2555,8 @@ with tab1:
     st.session_state.kw_df[get_db_cols()].to_csv(buf_bytes, index=False, encoding="utf-8-sig")
     st.download_button("키워드 CSV 다운로드", data=buf_bytes.getvalue(), file_name="keywords_current.csv", mime="text/csv", key="dl_kw_current")
 
-with tab2:
-    if is_admin():
+if is_admin():
+    with admin_tabs[0]:
         st.subheader("키워드 관리 (편집/삭제/템플릿/업로드)")
 
         st.markdown("### 📂 키워드 업로드 (.csv / .xlsx)")
@@ -2828,10 +2831,6 @@ with tab2:
         st.caption(f"현재 저장된 항목: {len(st.session_state.kw_df)}")
         st.dataframe(_rename_fcol(sort_for_display(st.session_state.kw_df[get_db_cols()])), width="stretch")
 
-
-    else:
-        st.subheader("키워드 관리 (관리자 전용)")
-        st.info("이 탭은 관리자 전용입니다. 좌측 사이드바의 '관리자 로그인' 영역에서 인증 후 이용할 수 있습니다.")
 
 with tab3:
     st.subheader("📈 리포트 — 최근 7일 Top N")
