@@ -6,9 +6,14 @@ Keyword Risk Analyzer (v101 – Follow DB column order & values)
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
 """
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import List, Tuple, Set, Optional
 import pandas as pd
+from matching_engine import (
+    DB_COLS, Match2, MatchingConfig,
+    _KO_SUFFIX_WHITELIST, _DEFAULT_IGNORED_SPECIAL_SYMBOLS,
+    find_matches as _engine_find_matches,
+    find_matches_nlp as _engine_find_matches_nlp,
+)
 import streamlit as st
 
 # Global tooltip data for highlight preview (kept separate from preview HTML)
@@ -32,8 +37,26 @@ div.stButton > button {
 # --- End Custom CSS ---
 import streamlit.components.v1 as components
 import html, io, re, zipfile, os, json
+import hashlib
+import time
+from uuid import uuid4
+from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
+from app_config import configure, cloud_enabled
+from repository import SupabaseRepository, StorageError, ConflictError
+from service import match_text
+
+try:
+    configure(dict(st.secrets))
+except FileNotFoundError:
+    configure()
+
+
+def _require_admin():
+    if not st.session_state.get('is_admin', False):
+        st.error('관리자만 데이터를 변경할 수 있습니다.')
+        st.stop()
 
 st.markdown("""
 <style>
@@ -45,6 +68,11 @@ div.streamlit-expander {
 
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+
+def now_kst():
+    return datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
 
 # Streamlit cache alias (지원 버전 차이 대응)
 try:
@@ -190,11 +218,6 @@ def get_config_path() -> Path:
 # -----------------------------
 # Constants & defaults
 # -----------------------------
-DB_COLS = [
-    "kwd_no", "키워드명", "상품카테고리", "리스크 등급", "대체키워드",
-    "리스크 등급별 세부 심의기준", "증빙자료유형",
-    "키워드 조회 수(누적카운트)", "마지막 출력일자"
-]
 
 DISPLAY_F_COL = "리스크 등급별 세부 심의기준 (셀을 더블 클릭하여 전체 내용을 확인하세요)"
 RAW_F_COL = "리스크 등급별 세부 심의기준"
@@ -247,7 +270,6 @@ RISK_COLORS = {
 }
 
 # Regex patterns (compiled once for performance)
-_delim_pattern = re.compile(r"[\/,;\|]")
 _bracket_pairs = r"\(\)\[\]{}（）【】"
 # kwd_no는 접두사(영문 대문자 1자 이상) + 숫자(3자리 이상) 패턴을 기본으로 가정
 # 예: A001, US000, USA0123
@@ -260,14 +282,18 @@ _custom_kwd_pattern = re.compile(r"^([A-Za-z]+)(\d{1,})$")
 # -----------------------------
 def load_dropdown_config() -> dict:
     """JSON 파일에서 드롭다운 설정 불러오기"""
+    if cloud_enabled():
+        config = SupabaseRepository().load_setting('dropdown_config', None)
+        if config is not None:
+            return config
     config_path = get_config_path()
-    if config_path.exists():
+    if not cloud_enabled() and config_path.exists():
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             st.warning(f"드롭다운 설정을 불러오는 중 오류 발생: {e}")
-    
+
     # 파일이 없거나 오류 시 기본값 반환
     return {
         "opt_categories": DEFAULT_CATEGORIES.copy(),
@@ -279,6 +305,7 @@ def load_dropdown_config() -> dict:
 
 def save_dropdown_config():
     """현재 드롭다운 설정을 JSON 파일로 저장"""
+    _require_admin()
     normalize_dropdown_lists()
     config_path = get_config_path()
     config = {
@@ -289,6 +316,9 @@ def save_dropdown_config():
         "opt_alt_terms": st.session_state.opt_alt_terms
     }
     try:
+        if cloud_enabled():
+            SupabaseRepository().save_setting('dropdown_config', config)
+            return
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
@@ -380,6 +410,12 @@ def _ensure_counter_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 def load_db(path: Path) -> pd.DataFrame:
+    if cloud_enabled():
+        df = SupabaseRepository().load_keywords()
+        st.session_state.cloud_revision = df.attrs['revision']
+        df = _ensure_counter_columns(df)
+        st.session_state.db_cols_order = list(df.columns)
+        return df
     if path.exists():
         try:
             raw = path.read_bytes()
@@ -396,6 +432,16 @@ def load_db(path: Path) -> pd.DataFrame:
     return df
 
 def save_db(df: pd.DataFrame, path: Path) -> None:
+    _require_admin()
+    if cloud_enabled():
+        try:
+            SupabaseRepository().save_keywords(df[get_db_cols()], st.session_state.get('cloud_revision'))
+            st.session_state.kw_df = load_db(path)
+        except (StorageError, ValueError, PermissionError) as e:
+            st.session_state.kw_df = load_db(path)
+            st.error(str(e))
+            st.stop()
+        return
     from pathlib import Path as _P
 
 
@@ -405,12 +451,13 @@ def save_db(df: pd.DataFrame, path: Path) -> None:
         sorted_df[get_db_cols()].to_csv(path, index=False, encoding="utf-8-sig")
     except Exception as e:
         st.error(f"DB 저장 중 오류: {e}")
+        st.stop()
 
 def append_hits_log(kwd_list: List[str]) -> None:
     if not kwd_list:
         return
     log_p = hits_log_path()
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ts = now_kst().strftime("%Y-%m-%d %H:%M:%S")
     rows = [{"ts": ts, "kwd_no": k} for k in kwd_list if k]
     df = pd.DataFrame(rows, columns=["ts","kwd_no"])
     try:
@@ -426,8 +473,10 @@ def append_hits_log(kwd_list: List[str]) -> None:
     except Exception:
         pass
 
-@_cache_data(show_spinner=False)
+@_cache_data(show_spinner=False, ttl=30)
 def load_hits_log() -> pd.DataFrame:
+    if cloud_enabled():
+        return SupabaseRepository().load_hits()
     log_p = hits_log_path()
     if not log_p.exists():
         return pd.DataFrame(columns=["ts","kwd_no"])
@@ -438,6 +487,9 @@ def load_hits_log() -> pd.DataFrame:
 
 def overwrite_hits_log(df: pd.DataFrame) -> None:
     """Overwrite the hits log CSV safely with utf-8-sig encoding."""
+    _require_admin()
+    if cloud_enabled():
+        raise StorageError('클라우드 로그는 전체 덮어쓰기를 지원하지 않습니다.')
     log_p = hits_log_path()
     try:
         df.to_csv(log_p, mode="w", header=True, index=False, encoding="utf-8-sig")
@@ -484,18 +536,6 @@ def sort_for_display(df: pd.DataFrame) -> pd.DataFrame:
     )
     return sorted_df
 
-# -----------------------------
-# Data model for matches
-# -----------------------------
-@dataclass
-class Match2:
-    term: str
-    start: int
-    end: int
-    category: str = ""
-    risk: str = ""
-    detail: str = ""
-    kwd_no: str | None = None
 
 # -----------------------------
 # Session init & numbering helpers
@@ -510,7 +550,7 @@ def init_state():
             st.session_state.db_cols_order = list(st.session_state.kw_df.columns)
         except Exception:
             st.session_state.db_cols_order = list(DB_COLS)
-    
+
     # 드롭다운 설정을 JSON 파일에서 불러오기
     if "opt_categories" not in st.session_state:
         config = load_dropdown_config()
@@ -719,91 +759,9 @@ def normalize_upload(df: pd.DataFrame) -> pd.DataFrame:
         d[c] = d[c].astype(str).str.strip()
     return d
 
-# -----------------------------
-# Variant generation for partial matching
-# -----------------------------
-def generate_keyword_variants(term: str) -> list:
-    """Generate safe keyword variants for '유사 키워드 포함' mode.
-
-    변경점(정밀도 개선):
-    - (A) prefix(앞부분) 변형(예: 여드, 다이) 생성 로직 제거
-    - 구두점/구분자 분리, 괄호 안/밖 텍스트 추출 등 '표기 변형'만 허용
-    """
-    if term is None:
-        return []
-    t = str(term).strip()
-    if not t:
-        return []
-    variants = set()
-
-    def add(v: str):
-        v = (v or "").strip()
-        if not v:
-            return
-        # 너무 짧은 토큰은 오탐 위험이 높아 제외 (영문 3미만, 한글 2미만)
-        if re.search(r"[A-Za-z]", v):
-            if len(v) < 3:
-                return
-        else:
-            if len(v) < 2:
-                return
-        variants.add(v)
-
-    # 원문
-    add(t)
-
-    # 구분자(/ , ; |) 분리
-    for piece in _delim_pattern.split(t):
-        add(piece)
-
-    # 괄호 밖 텍스트만 추출
-    outside = re.sub(r"\s*[\(\[（【].*?[\)\]）】]\s*", " ", t).strip()
-    add(outside)
-
-    # (추가) 괄호 제거 결과를 한 번 더 정리해 '여드름(acne)' 같은 표기에서 '여드름'이 안정적으로 후보에 포함되도록 함
-    outside_clean = re.sub(r"[^\w가-힣]+", " ", outside).strip()
-    outside_clean = re.sub(r"\s+", " ", outside_clean)
-    add(outside_clean)
-    for piece in _delim_pattern.split(outside_clean):
-        add(piece)
-
-    # 괄호 안 텍스트도 후보로 추가
-    for inner in re.findall(r"[\(\[（【](.*?)[\)\]）】]", t):
-        add(inner)
-        for piece in _delim_pattern.split(inner):
-            add(piece)
-
-    # 공백 정규화
-    variants = {re.sub(r"\s+", " ", v) for v in variants}
-    return list(variants)
-
-
-# -----------------------------
-# Matching & highlight
-# -----------------------------
-def _tokenize_with_spans(s: str):
-    """Tokenize text into (token, start, end) spans.
-    - 한글/영문/숫자 덩어리를 토큰으로 취급
-    - 매칭은 토큰 단위(=단어 경계)로 수행하기 위함
-    """
-    if not s:
-        return []
-    token_re = re.compile(r"[A-Za-z0-9]+|[가-힣]+")
-    return [(m.group(0), m.start(), m.end()) for m in token_re.finditer(s)]
-
-
-def _tokenize_only(s: str):
-    return [t for (t, _, _) in _tokenize_with_spans(s)]
 
 # --- Korean postposition/ending whitelist for fuzzy matching ---
 # Used to treat patterns like '여드름에는' as a fuzzy hit for keyword '여드름' (highlighting only the stem).
-_KO_SUFFIX_WHITELIST = {
-    "와","과","은","는","이","가","을","를","의","도","만","까지","부터","보다","마다",
-    "에","에서","에게","께","한테","로","으로","로서","으로서","로써","으로써","처럼","같이",
-    "나","이나","든","든지","라도","이나마",
-    "라고","이라고","이라","이라도","이라면","이면","면","라는","이란","란","이라는","이라는","이야","야",
-    "에는","에선","에서","에서의","에의","에만","에도","부터는","까지는",
-}
 
 # ---- Suffix whitelist persistence & UI helpers ----
 _SUFFIX_CONFIG_PATH = Path(__file__).with_name("ko_suffix_whitelist.json")
@@ -812,6 +770,8 @@ def load_suffix_whitelist_config() -> list:
     """Load user-managed Korean suffix whitelist additions from JSON.
     Returns a list of suffix strings (may be empty).
     """
+    if cloud_enabled():
+        return SupabaseRepository().load_setting('ko_suffix_whitelist', {'extra_suffixes': []})['extra_suffixes']
     try:
         if _SUFFIX_CONFIG_PATH.exists():
             data = json.loads(_SUFFIX_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -827,8 +787,12 @@ def load_suffix_whitelist_config() -> list:
 
 def save_suffix_whitelist_config(extra_suffixes: list) -> bool:
     """Persist user-managed suffix whitelist additions to JSON."""
+    _require_admin()
     try:
         payload = {"extra_suffixes": [str(x).strip() for x in (extra_suffixes or []) if str(x).strip()]}
+        if cloud_enabled():
+            SupabaseRepository().save_setting('ko_suffix_whitelist', payload)
+            return True
         _SUFFIX_CONFIG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
     except Exception:
@@ -848,69 +812,18 @@ def get_ko_suffix_whitelist() -> set:
     return wl
 
 
-# --- English inflection helpers for fuzzy matching (verbs/adjectives/nouns) ---
-def _normalize_english_token(token: str) -> str:
-    """Lowercase & strip non-letter/hyphen characters for simple English comparisons."""
-    return re.sub(r"[^a-zA-Z\-]", "", str(token)).lower()
-
-def _english_inflection_common_prefix(a: str, b: str) -> int:
-    """Return length of common prefix if a,b are considered inflectional variants (core rule set1+set2); otherwise 0.
-    This is used only in '유사 키워드 포함' mode to highlight the shared stem part."""
-    a_norm = _normalize_english_token(a)
-    b_norm = _normalize_english_token(b)
-    if not a_norm or not b_norm:
-        return 0
-    if a_norm == b_norm:
-        # highlight full token when exactly equal
-        return len(a_norm)
-
-    def _is_variant(base: str, other: str) -> bool:
-        # basic regular inflections: plural, past, progressive, comparative/superlative
-        if len(base) < 3 or len(other) < 3:
-            return False
-        # direct suffixes for core rule sets 1+2
-        for suf in ("s", "es", "ed", "ing", "er", "est"):
-            if other == base + suf:
-                return True
-        # e-drop variants: base[:-1] + ed/ing/er/est when base endswith 'e'
-        if base.endswith("e") and len(base) > 3:
-            root = base[:-1]
-            for suf in ("ed", "ing", "er", "est"):
-                if other == root + suf:
-                    return True
-            # special: keep trailing 'e' and just add 'd' (e.g. 'even-tone' -> 'even-toned')
-            if other == base + "d":
-                return True
-        return False
-
-    eq = _is_variant(a_norm, b_norm) or _is_variant(b_norm, a_norm)
-    if not eq:
-        return 0
-
-    # They are inflectional variants -> highlight longest common prefix as shared stem
-    pref = 0
-    for ch_a, ch_b in zip(a_norm, b_norm):
-        if ch_a == ch_b:
-            pref += 1
-        else:
-            break
-    # avoid extremely short stems
-    if pref < 3:
-        return 0
-    return pref
-
-
-
 # --- Ignored special symbols whitelist (for relaxed normalization) ---
 # When '(괄호 제거·공백 정규화·영문 대소문자 무시)' is enabled, we can additionally
 # treat configured special symbols as whitespace (replace with space, length preserved).
 _SPECIAL_SYMBOLS_CONFIG_PATH = Path(__file__).with_name("ignored_special_symbols.json")
-_DEFAULT_IGNORED_SPECIAL_SYMBOLS = ["/", "&", ",", "*"]
 
 def load_ignored_special_symbols_config() -> list:
     """Load user-managed ignored special symbols list from JSON.
     Returns a list of *single-character* symbols.
     """
+    if cloud_enabled():
+        value = SupabaseRepository().load_setting('ignored_special_symbols', None)
+        return value['symbols'] if value is not None else _DEFAULT_IGNORED_SPECIAL_SYMBOLS.copy()
     try:
         if _SPECIAL_SYMBOLS_CONFIG_PATH.exists():
             data = json.loads(_SPECIAL_SYMBOLS_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -939,6 +852,7 @@ def load_ignored_special_symbols_config() -> list:
 
 def save_ignored_special_symbols_config(symbols: list) -> bool:
     """Persist ignored special symbols list to JSON."""
+    _require_admin()
     try:
         cleaned = []
         seen = set()
@@ -952,6 +866,9 @@ def save_ignored_special_symbols_config(symbols: list) -> bool:
                 seen.add(x)
                 cleaned.append(x)
         payload = {"symbols": cleaned}
+        if cloud_enabled():
+            SupabaseRepository().save_setting('ignored_special_symbols', payload)
+            return True
         _SPECIAL_SYMBOLS_CONFIG_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
     except Exception:
@@ -967,802 +884,30 @@ def get_ignored_special_symbols() -> list:
         pass
     return _DEFAULT_IGNORED_SPECIAL_SYMBOLS.copy()
 
-def _replace_ignored_symbols_with_space_keep_len(s: str, symbols: list) -> str:
-    """Replace each configured symbol character with a single space.
-    Length is preserved (important for start/end index mapping).
-    """
-    if not s:
-        return s or ""
-    if not symbols:
-        return s
-    # Build safe regex class for the given characters
-    try:
-        cls = "[" + "".join(re.escape(ch) for ch in symbols if isinstance(ch, str) and len(ch) == 1) + "]"
-        if cls == "[]":
-            return s
-        return re.sub(cls, " ", s)
-    except Exception:
-        # Fallback: simple replace loop (still length-preserving)
-        out = s
-        for ch in symbols:
-            if isinstance(ch, str) and len(ch) == 1:
-                out = out.replace(ch, " ")
-        return out
 
-def _normalize_relaxed_whitespace_with_map(s: str) -> tuple[str, list[int]]:
-    """
-    Normalize text for relaxed exact matching while preserving a mapping back to original indices.
-
-    - Collapse any run of whitespace-like chars (space, \n, \t, NBSP, ZWSP, BOM, etc.) into a single ' '.
-    - Casefold for stable matching.
-    - Returns (normalized_string, index_map) where index_map[i] is the original index of normalized_string[i].
-    """
-    if s is None:
-        return "", []
-    norm_chars: list[str] = []
-    idx_map: list[int] = []
-    in_ws = False
-
-    def _is_ws(ch: str) -> bool:
-        return ch.isspace() or ch in ("\u00A0", "\u200B", "\uFEFF")
-
-    for i, ch in enumerate(s):
-        if _is_ws(ch):
-            if not in_ws:
-                norm_chars.append(" ")
-                idx_map.append(i)
-                in_ws = True
-            continue
-        in_ws = False
-        norm_chars.append(ch.casefold())
-        idx_map.append(i)
-
-    return "".join(norm_chars), idx_map
-
-
-def _normalize_relaxed_whitespace(s: str) -> str:
-    """Normalize like _normalize_relaxed_whitespace_with_map but without index mapping."""
-    return _normalize_relaxed_whitespace_with_map(s)[0]
-
-
-
-def _find_spans_by_compact_match(original: str, target: str, symbols: list) -> list:
-    """Find spans in original where removing spaces and configured symbols yields target.
-    Returns list of (start, end) spans (end is exclusive).
-    This enables 'ignore special symbols' matching while preserving highlight indices.
-    """
-    if not original or not target:
-        return []
-    symset = set(ch for ch in (symbols or []) if isinstance(ch, str) and len(ch) == 1)
-    n = len(original)
-    tlen = len(target)
-    spans = []
-    for i in range(n):
-        # quick skip: if char is ignorable, don't start here
-        if original[i].isspace() or original[i] in symset:
-            continue
-        j = i
-        built = []
-        # Build compact until length reaches target length or end.
-        while j < n and len(built) < tlen:
-            ch = original[j]
-            if ch.isspace() or ch in symset:
-                j += 1
-                continue
-            built.append(ch)
-            j += 1
-        if len(built) != tlen:
-            continue
-        if "".join(built) == target:
-            spans.append((i, j))
-    return spans
-
-
-
-def find_matches(text: str, kw_df: pd.DataFrame, match_mode: str = "유사 키워드 포함", exact_relaxed: bool = False, suffix_suggestions: dict = None, **kwargs) -> List[Match2]:
-    """Find keyword matches in text.
-
-    정밀도 개선(요청사항):
-    - (A) prefix 변형 생성 제거: generate_keyword_variants에서 처리
-    - (B) 단어 경계 매칭: 유사 모드에서 토큰 경계 기준으로만 검출
-    - (C) 토큰 기반 매칭: 본문/키워드를 토큰화하고 토큰 시퀀스 비교로 검출
-
-    * '정확 일치' 모드는 기존 substring 기반 동작을 유지합니다.
-    """
-    matches: List[Match2] = []
-    base = text or ""
-    # For relaxed normalization, optionally replace configured special symbols with spaces (length preserved)
-    base_for_match = base
-    if exact_relaxed:
-        try:
-            base_for_match = _replace_ignored_symbols_with_space_keep_len(base_for_match, get_ignored_special_symbols())
-        except Exception:
-            base_for_match = base
-    lower = base_for_match.lower()
-    # Precompute normalized base (whitespace-collapsed + casefold) for relaxed exact matching
-    base_norm, base_norm_map = ("", [])
-    if exact_relaxed:
-        try:
-            base_norm, base_norm_map = _normalize_relaxed_whitespace_with_map(base_for_match)
-        except Exception:
-            base_norm, base_norm_map = ("", [])
-
-    df = kw_df.copy()
-    for col in DB_COLS:
-        if col not in df.columns:
-            df[col] = ""
-    df = df[df["키워드명"].astype(str).str.strip() != ""]
-
-    occupied_set = set()
-    exact_candidates: List[Match2] = []  # exact-mode candidates collected before overlap resolution
-    records = df.to_dict("records")
-
-    # 토큰화(유사 모드에서 사용)
-    token_spans = _tokenize_with_spans(base_for_match)
-    tokens_lower = [t.lower() for (t, _, _) in token_spans]
-    tokens_compact = [re.sub(r"\s+", "", t.lower()) for (t, _, _) in token_spans]  # 안전장치
-
-    for r in records:
-        term = str(r["키워드명"]).strip()
-        category = str(r.get("상품카테고리", ""))
-        risk = str(r.get("리스크 등급", ""))
-        detail = str(r.get("리스크 등급별 세부 심의기준", ""))
-        kwd_no = r.get("kwd_no") or None
-
-        # 부분 문자열(최소 글자수) 모드: 키워드 내부 부분 문자열로 느슨하게 매칭
-        if match_mode == "부분 문자열(최소 글자수)":
-            try:
-                min_len = int(kwargs.get("partial_min_len", 2))
-            except Exception:
-                min_len = 2
-            if min_len < 2:
-                min_len = 2
-            term_norm = re.sub(r"\s+", "", str(term))
-            if term_norm and len(term_norm) >= min_len:
-                seen_spans = set()
-                base_lower = base_for_match.lower()
-                term_norm_lower = term_norm.lower()
-                for L in range(min_len, len(term_norm_lower) + 1):
-                    for i_sub in range(0, len(term_norm_lower) - L + 1):
-                        sub = term_norm_lower[i_sub:i_sub+L]
-                        start_idx = 0
-                        while True:
-                            idx2 = base_lower.find(sub, start_idx)
-                            if idx2 == -1:
-                                break
-                            end2 = idx2 + L
-                            span_key = (idx2, end2)
-                            if span_key in seen_spans:
-                                start_idx = idx2 + 1
-                                continue
-                            seen_spans.add(span_key)
-                            range_occupied = any(i in occupied_set for i in range(idx2, end2))
-
-                            # NOTE: 부분 문자열 모드에서도 같은 span(동일 start/end)에 대해
-                            # 서로 다른 kwd_no(또는 term)가 매칭되는 경우는 결과 리스트에 함께 남깁니다.
-                            # 하이라이트(occupied_set)는 최초 1회만 점유하도록 유지합니다.
-                            already_same_span = False
-                            if kwd_no is not None:
-                                already_same_span = any(
-                                    (m.start == idx2 and m.end == end2 and (m.kwd_no == kwd_no))
-                                    for m in matches
-                                )
-                            else:
-                                already_same_span = any(
-                                    (m.start == idx2 and m.end == end2 and (m.term == term))
-                                    for m in matches
-                                )
-
-                            if (not range_occupied) or (range_occupied and not already_same_span):
-                                matches.append(
-                                    Match2(
-                                        term=term,
-                                        start=idx2,
-                                        end=end2,
-                                        category=category,
-                                        risk=risk,
-                                        detail=detail,
-                                        kwd_no=kwd_no,
-                                    )
-                                )
-                                if not range_occupied:
-                                    for i2 in range(idx2, end2):
-                                        occupied_set.add(i2)
-                            start_idx = idx2 + 1
-            continue  # 다음 키워드로
-
-        variants = generate_keyword_variants(term)
-
-        # 기존 옵션: (괄호 제거·공백 정규화·영문 대소문자 무시)
-        if match_mode == "유사 키워드 포함" and exact_relaxed:
-            term_no_br = re.sub(r"\s*[\(\[（【].*?[\)\]）】]\s*", " ", str(term)).strip()
-            term_no_br = re.sub(r"\s+", " ", term_no_br)
-            term_norm = re.sub(r"\s+", " ", str(term)).strip()
-            for _cand in [term_no_br, term_norm]:
-                if _cand and _cand not in variants:
-                    variants.insert(0, _cand)
-                # Also add a version with ignored special symbols replaced by spaces (length preserved)
-                if _cand and exact_relaxed:
-                    try:
-                        _cand2 = _replace_ignored_symbols_with_space_keep_len(_cand, get_ignored_special_symbols())
-                        _cand2 = re.sub(r"\s+", " ", _cand2).strip()
-                        if _cand2 and _cand2 not in variants:
-                            variants.insert(0, _cand2)
-                    except Exception:
-                        pass
-
-        if match_mode == "정확 일치":
-            variants = [str(term)]
-            if exact_relaxed:
-                term_no_br = re.sub(r"\s*[\(\[（【].*?[\)\]）】]\s*", " ", str(term)).strip()
-                term_no_br = re.sub(r"\s+", " ", term_no_br)
-                term_norm = re.sub(r"\s+", " ", str(term)).strip()
-                for _cand in [term_no_br, term_norm]:
-                    if _cand and _cand not in variants:
-                        variants.append(_cand)
-
-        variants = [v for v in variants if v]
-        variants.sort(key=lambda s: len(s), reverse=True)
-
-        # ----------------------------
-        # 유사 모드: 토큰 기반 + 단어 경계 + (안전한) 띄어쓰기 무시(토큰 결합) 매칭
-        # ----------------------------
-        if match_mode == "유사 키워드 포함":
-            for v in variants:
-                v = str(v).strip()
-                if not v:
-                    continue
-                v_tokens = _tokenize_only(v)
-                if not v_tokens:
-                    continue
-                v_tokens_lower = [x.lower() for x in v_tokens]
-                v_compact = "".join(v_tokens_lower)
-
-                n = len(v_tokens_lower)
-                if n <= 0:
-                    continue
-
-                # 1) 정확한 토큰 시퀀스 일치
-                # Helpers for highlight-span overrides (init before reverse-single)
-                suffix_hit_end = {}  # legacy: end override (kept for backward compatibility)
-                span_override = {}   # {token_index: (start_orig, end_orig)} for highlight span overrides
-
-                starts = []
-                for i in range(0, max(0, len(tokens_lower) - n + 1)):
-                    if tokens_lower[i:i+n] == v_tokens_lower:
-                        starts.append(i)
-
-                # 2) 띄어쓰기 변형(붙여쓰기)을 위한 토큰 결합 일치
-                #    - 예: '피부 보습' ↔ '피부보습'
-                #    - window 토큰들을 붙인 문자열이 키워드 토큰 결합과 같으면 매칭
-                #    - 단, 2토큰 이상일 때만 수행(1토큰은 1)에서 충분)
-                if n >= 2:
-                    for i in range(0, max(0, len(tokens_lower) - n + 1)):
-                        if "".join(tokens_compact[i:i+n]) == v_compact:
-                            starts.append(i)
-
-                
-
-                # (2-c) Reverse matching for single-token input (옵션):
-                #   - When the input text is just one token (e.g., 'spot'), many DB keywords are longer (2+ tokens)
-                #     so forward token-window matching cannot trigger. If enabled, allow matching when the
-                #     single input token is contained in any keyword token (including compound tokens).
-                #   - Highlight span remains the input token itself.
-                # Reverse-match on input (옵션):
-                #   - 기존: 입력이 1토큰(단어)일 때만 역매칭 허용
-                #   - 신규: 옵션(similar_reverse_any) ON 시 토큰 수와 무관하게 역매칭 허용 (오탐/성능 영향 가능)
-                use_rev_any = bool(kwargs.get("similar_reverse_any", False))
-                use_rev_single = bool(kwargs.get("similar_reverse_single", False))
-
-                # Reverse-match modes:
-                #  - single-token mode: only when the whole input is 1 token (legacy behavior)
-                #  - any-token mode: allow additional hit positions even if forward matches already exist,
-                #    but keep it conservative: only match tokens that equal the FIRST token of the keyword.
-                #    (This helps cases like later 'acne' showing the same keyword set as earlier 'acne mark care'.)
-                if use_rev_single and (not starts) and len(tokens_lower) == 1:
-                    q = (tokens_lower[0] or "").strip()
-                    if q and any((q in t) for t in v_tokens_lower):
-                        starts = [0]
-                        try:
-                            span_override[0] = (token_spans[0][1], token_spans[0][2])
-                        except Exception:
-                            pass
-
-                if use_rev_any and (tokens_lower is not None) and v_tokens_lower:
-                    for i_tok, q0 in enumerate(tokens_lower or []):
-                        q = (q0 or "").strip()
-                        if not q:
-                            continue
-                        # multi-token input: skip very short tokens to reduce false positives
-                        if len(tokens_lower) != 1 and len(q) < 4:
-                            continue                        # 역매칭: 키워드 토큰 어디든 포함되면 허용 (토큰 제한 없음)
-                        if not any((q.lower() in t) for t in v_tokens_lower):
-                            continue
-                        if i_tok not in starts:
-                            starts.append(i_tok)
-                        try:
-                            span_override[i_tok] = (token_spans[i_tok][1], token_spans[i_tok][2])
-                        except Exception:
-                            pass
-
-                # If token-based match fails, allow limited Korean stem+suffix hits (whitelist),
-                # e.g., '여드름에는' matching keyword '여드름' in fuzzy mode.
-                # (3) 조사/어미(접미사) 화이트리스트 기반 매칭 + (4) 합성어(붙여쓰기) 내부 접미 매칭(제한적)
-                # - 3) 예: '여드름에는' -> '여드름' + '에는'(whitelist)
-                # - 4) 예: '미세스피큘' -> '스피큘'(token suffix)  ※ 유사일치에서만, 한글 키워드에 한해 제한적으로 허용
-
-                # 2-b) English inflection-aware token sequence match (core rule sets 1+2)
-                #     - 단수/복수, 시제(-ed), 진행형(-ing), 비교급/최상급(-er/-est) 정도의 굴절만 허용
-                #     - '정확 일치'가 아닌 '유사 키워드 포함' 모드에서만 사용
-                if n >= 1:
-                    window_len = max(0, len(tokens_lower) - n + 1)
-                    for i2 in range(window_len):
-                        # 정확 일치로 이미 검출된 window는 건너뜀
-                        if tokens_lower[i2:i2+n] == v_tokens_lower:
-                            continue
-                        ok = True
-                        local_override = None
-                        # 각 토큰이 같거나(동일) 영어 굴절형(세트1+2) 관계인지 검사
-                        for j2 in range(n):
-                            src_tok = v_tokens_lower[j2]
-                            tgt_tok = tokens_lower[i2 + j2]
-                            if src_tok == tgt_tok:
-                                continue
-                            stem_len = _english_inflection_common_prefix(src_tok, tgt_tok)
-                            if stem_len <= 0:
-                                ok = False
-                                break
-                            # 공통 어간 부분까지만 하이라이트하도록 span_override에 기록
-                            # (여러 토큰이 굴절형인 경우도 있을 수 있으나, 우선 마지막 것으로 덮어쓰기)
-                            t_start = token_spans[i2 + j2][1]
-                            t_end = t_start + stem_len
-                            # window 전체 기준으로는, 첫 토큰 시작~공통 어간 끝까지 표시
-                            local_override = (token_spans[i2][1], t_end)
-                        if ok:
-                            starts.append(i2)
-                            if local_override is not None:
-                                span_override[i2] = local_override
-
-
-                is_korean_kw = (n == 1 and v_compact and any("가" <= ch <= "힣" for ch in v_compact))
-                if is_korean_kw:
-                    kw_len = len(v_compact)
-
-                    # 3) 키워드 어간 + 조사/어미(접미사) 화이트리스트
-                    for _i, _tok in enumerate(tokens_compact):
-                        if _tok.startswith(v_compact) and len(_tok) > kw_len:
-                            _suf = _tok[kw_len:]
-                            if _suf in get_ko_suffix_whitelist():
-                                starts.append(_i)
-                                _s = token_spans[_i][1]
-                                _e = token_spans[_i][1] + kw_len
-                                span_override[_i] = (_s, _e)
-                                suffix_hit_end[_i] = _e
-                            else:
-                                # 후보 접미사 제안(승인형): 유사일치에서 키워드 어간+접미사 형태로 보이지만
-                                # 화이트리스트에 없어 매칭되지 않은 접미사를 수집합니다.
-                                if isinstance(suffix_suggestions, dict):
-                                    suffix_suggestions[_suf] = suffix_suggestions.get(_suf, 0) + 1
-
-                    # 4) 합성어 내부 접미(끝부분) 매칭: token.endswith(keyword)
-                    #    - 오탐 방지: (a) 한글 키워드 최소 길이, (b) 접두부 길이 제한, (c) 한글 토큰에 한함
-                    if kw_len >= 2:
-                        for _i, _tok in enumerate(tokens_compact):
-                            if _tok.endswith(v_compact) and len(_tok) > kw_len:
-                                prefix = _tok[:-kw_len]
-                                # 접두부가 너무 길면 오탐 가능성이 커져 제한합니다.
-                                if not (1 <= len(prefix) <= 6):
-                                    continue
-                                # 토큰이 순수 한글 덩어리일 때만 적용
-                                if not all(("가" <= ch <= "힣") for ch in _tok):
-                                    continue
-                                # 하이라이트는 키워드 부분만(토큰 끝에서 kw_len)
-                                _e = token_spans[_i][2]
-                                _s = _e - kw_len
-                                starts.append(_i)
-                                span_override[_i] = (_s, _e)
-
-                    # 5) 합성어 내부 접두(앞부분) 매칭: token.startswith(keyword)
-                    #    - 오탐 방지: (a) 한글 키워드 최소 길이, (b) 접미부 길이 제한, (c) 한글 토큰에 한함
-                    if kw_len >= 2:
-                        for _i, _tok in enumerate(tokens_compact):
-                            if _tok.startswith(v_compact) and len(_tok) > kw_len:
-                                suffix = _tok[kw_len:]
-                                # 접미부가 너무 길면 오탐 가능성이 커져 제한합니다.
-                                if not (1 <= len(suffix) <= 6):
-                                    continue
-                                # 토큰이 순수 한글 덩어리일 때만 적용
-                                if not all(("가" <= ch <= "힣") for ch in _tok):
-                                    continue
-                                # 하이라이트는 키워드 부분만(토큰 시작에서 kw_len)
-                                _s = token_spans[_i][1]
-                                _e = _s + kw_len
-                                # 안전장치: 계산된 end가 토큰 끝을 넘지 않도록
-                                if _e > token_spans[_i][2]:
-                                    _e = token_spans[_i][2]
-                                starts.append(_i)
-                                span_override[_i] = (_s, _e)
-
-
-                # (4/5-EN) English compound/prefix/suffix fuzzy hits (옵션 A):
-                #     - Korean '합성어 내부 접두/접미' 규칙을 영어에도 동일한 철학으로 적용
-                #     - 예: 'spot' -> 'hotspot'(endswith), 'spotless'(startswith)
-                #     - 오탐 방지: (a) 키워드 최소 길이, (b) 접두/접미 길이 제한, (c) 알파벳 토큰에 한함
-                is_english_kw = (n == 1 and v_compact and all('a' <= ch <= 'z' for ch in v_compact))
-                if is_english_kw:
-                    kw_len = len(v_compact)
-                    if kw_len >= 2:
-                        for _i, _tok in enumerate(tokens_compact):
-                            if not _tok or len(_tok) <= kw_len:
-                                continue
-                            # 알파벳 토큰에만 적용 (숫자/혼합/기호 제외)
-                            if not _tok.isalpha():
-                                continue
-
-                            # 접미(끝부분) 매칭: token.endswith(keyword)
-                            if _tok.endswith(v_compact):
-                                prefix = _tok[:-kw_len]
-                                if not (1 <= len(prefix) <= 6):
-                                    pass
-                                else:
-                                    _e = token_spans[_i][2]
-                                    _s = _e - kw_len
-                                    starts.append(_i)
-                                    span_override[_i] = (_s, _e)
-
-                            # 접두(앞부분) 매칭: token.startswith(keyword)
-                            if _tok.startswith(v_compact):
-                                suffix = _tok[kw_len:]
-                                if not (1 <= len(suffix) <= 6):
-                                    pass
-                                else:
-                                    _s = token_spans[_i][1]
-                                    _e = _s + kw_len
-                                    if _e > token_spans[_i][2]:
-                                        _e = token_spans[_i][2]
-                                    starts.append(_i)
-                                    span_override[_i] = (_s, _e)
-# dedup starts
-                if not starts:
-                    continue
-                starts = sorted(set(starts))
-
-                for si in starts:
-                    if 'span_override' in locals() and si in span_override:
-                        start_orig, end_orig = span_override[si]
-                    else:
-                        start_orig = token_spans[si][1]
-                        end_orig = suffix_hit_end.get(si, token_spans[si + n - 1][2])
-
-                    # 기존 겹침/우선순위 로직 유지
-                    for _i_m, _m in enumerate(list(matches)):
-                        old_start = getattr(_m, 'start', None)
-                        old_end = getattr(_m, 'end', 0)
-                        if old_start is None:
-                            continue
-                        old_len = max(0, old_end - old_start)
-                        new_len = max(0, end_orig - start_orig)
-                        # 기존 로직: 같은 시작점에서 더 긴 매치가 있으면 교체 (대표 span 유지)
-                        if old_start == start_orig and old_end < end_orig:
-                            for _j in range(old_start, old_end):
-                                occupied_set.discard(_j)
-                            _m.start = start_orig
-                            _m.end = end_orig
-                            for _j in range(start_orig, end_orig):
-                                occupied_set.add(_j)
-                            continue
-                        # 보완 로직: 포함 관계인 경우 더 넓은 구간을 대표 span으로 사용하고,
-                        #           이후 매치들은 이 대표 span에 kwd_no를 누적해서 표시
-                        if (start_orig <= old_start and end_orig >= old_end) or (old_start <= start_orig and old_end >= end_orig):
-                            new_start = min(start_orig, old_start)
-                            new_end = max(end_orig, old_end)
-                            # 기존 occupied 구간 정리 후 대표 구간 재설정
-                            for _j in range(old_start, old_end):
-                                occupied_set.discard(_j)
-                            _m.start = new_start
-                            _m.end = new_end
-                            for _j in range(new_start, new_end):
-                                occupied_set.add(_j)
-                            # 현재 후보도 대표 구간을 사용
-                            start_orig, end_orig = new_start, new_end
-
-                    range_occupied = any(i in occupied_set for i in range(start_orig, end_orig))
-
-                    if not range_occupied:
-                        matches.append(Match2(term=term, start=start_orig, end=end_orig, category=category, risk=risk, detail=detail, kwd_no=kwd_no))
-                        for i2 in range(start_orig, end_orig):
-                            occupied_set.add(i2)
-                    else:
-                        same_span_exists = any((m2.start == start_orig and m2.end == end_orig) for m2 in matches)
-                        already_same = any((m2.start == start_orig and m2.end == end_orig and (m2.kwd_no == kwd_no and m2.category == category and m2.risk == risk)) for m2 in matches)
-                        if same_span_exists and not already_same:
-                            matches.append(Match2(term=term, start=start_orig, end=end_orig, category=category, risk=risk, detail=detail, kwd_no=kwd_no))
-            continue  # 다음 키워드로
-
-        # ----------------------------
-        # ----------------------------
-        # 정확 일치 모드: 후보 수집 후 "긴 span 우선"으로 overlap 해결
-        # - 기존 occupied_set(중복 방지) 때문에 짧은 키워드가 먼저 잡히면
-        #   긴 문장 키워드가 스킵되는 문제를 방지하기 위함
-        # ----------------------------
-        _before_term_exact_count = len(exact_candidates)
-        for v in variants:
-            v_cmp = str(v)
-            if exact_relaxed:
-                try:
-                    v_cmp = _replace_ignored_symbols_with_space_keep_len(v_cmp, get_ignored_special_symbols())
-                except Exception:
-                    v_cmp = str(v)
-            v_lower = str(v_cmp).lower()
-
-            def _add_exact(_s: int, _e: int):
-                if _s < 0 or _e <= _s:
-                    return
-                exact_candidates.append(Match2(term=term, start=_s, end=_e, category=category, risk=risk, detail=detail, kwd_no=kwd_no))
-
-            # 1) ignored symbol-aware compact match (e.g., '안티&에이징' ↔ '안티에이징')
-            if exact_relaxed:
-                try:
-                    syms = get_ignored_special_symbols()
-                except Exception:
-                    syms = []
-                if syms:
-                    target_compact = re.sub(r"\s+", "", v_lower)
-                    try:
-                        spans = _find_spans_by_compact_match(base.lower(), target_compact, syms)
-                    except Exception:
-                        spans = []
-                    for (_s0, _e0) in spans:
-                        _add_exact(_s0, _e0)
-
-            # 2) whitespace-flex regex on original base (keeps indices for highlight)
-            if exact_relaxed and (" " in str(v_cmp)):
-                try:
-                    ws_class = r"[ \t\r\n\u00A0\u200B\uFEFF]+"
-                    pat = re.escape(str(v_cmp).strip())
-                    pat = re.sub(r"(\\ )+", ws_class, pat)
-                    for _m_ws in re.finditer(pat, base, flags=re.IGNORECASE):
-                        _add_exact(_m_ws.start(), _m_ws.end())
-                except Exception:
-                    pass
-
-            # 3) normalized relaxed exact match (collapse whitespace to one space) with index mapping
-            if exact_relaxed:
-                try:
-                    kw_norm = _normalize_relaxed_whitespace(str(v_cmp)).strip()
-                    if kw_norm and base_norm and base_norm_map and ("".join(kw_norm.split()) != ""):
-                        _p = 0
-                        kw_cf = kw_norm.casefold()
-                        while True:
-                            _hit = base_norm.find(kw_cf, _p)
-                            if _hit == -1:
-                                break
-                            _hit_end = _hit + len(kw_norm)
-                            _s0 = base_norm_map[_hit]
-                            _e0 = base_norm_map[_hit_end - 1] + 1
-                            _add_exact(_s0, _e0)
-                            _p = _hit + 1
-                except Exception:
-                    pass
-
-            # 4) plain substring find on preprocessed lower (keeps indices as-is)
-            start2 = 0
-            while True:
-                idx = lower.find(v_lower, start2)
-                if idx == -1:
-                    break
-                _add_exact(idx, idx + len(v_cmp))
-                start2 = idx + len(v_cmp)
-
-        # (옵션) 긴 문장 키워드: 정확(완전)일치 실패 시 유사(토큰) 매칭으로 1회 재시도
-        # - 조건: 이 term에서 exact 후보가 하나도 생성되지 않았고, 키워드 토큰 수 >= N
-        # - 목적: 공백/줄바꿈/특수 공백 차이 등으로 긴 문장 키워드가 통째로 미검출되는 경우 보완
-        try:
-            _fallback_enabled = bool(kwargs.get("exact_fallback_similar", True))
-        except Exception:
-            _fallback_enabled = True
-        try:
-            _fallback_min_tokens = int(kwargs.get("exact_fallback_min_tokens", 4))
-        except Exception:
-            _fallback_min_tokens = 4
-
-        if _fallback_enabled and len(exact_candidates) == _before_term_exact_count:
-            _fb_v = str(variants[0]).strip() if variants else ""
-            _fb_tokens = _tokenize_only(_fb_v) if _fb_v else []
-            if _fb_tokens and len(_fb_tokens) >= _fallback_min_tokens:
-                _fb_tokens_lower = [x.lower() for x in _fb_tokens]
-                _fb_compact = "".join(_fb_tokens_lower)
-                _n = len(_fb_tokens_lower)
-
-                _starts = []
-                for _i in range(0, max(0, len(tokens_lower) - _n + 1)):
-                    if tokens_lower[_i:_i+_n] == _fb_tokens_lower:
-                        _starts.append(_i)
-
-                if _n >= 2:
-                    for _i in range(0, max(0, len(tokens_lower) - _n + 1)):
-                        if "".join(tokens_compact[_i:_i+_n]) == _fb_compact:
-                            _starts.append(_i)
-
-                for _s in sorted(set(_starts)):
-                    try:
-                        start_orig = token_spans[_s][1]
-                        end_orig = token_spans[_s + _n - 1][2]
-                    except Exception:
-                        continue
-                    _add_exact(start_orig, end_orig)
-        # (옵션) 긴 문장 키워드: 정확(완전)일치 실패 시 유사(토큰) 매칭으로 1회 재시도
-        # - 조건: 이 term에서 exact match가 하나도 생성되지 않았고, 키워드 토큰 수 >= N
-        # - 목적: 공백/줄바꿈/특수 공백 차이 등으로 긴 문장 키워드가 통째로 미검출되는 경우 보완
-        try:
-            _fallback_enabled = bool(kwargs.get("exact_fallback_similar", True))
-        except Exception:
-            _fallback_enabled = True
-        try:
-            _fallback_min_tokens = int(kwargs.get("exact_fallback_min_tokens", 4))
-        except Exception:
-            _fallback_min_tokens = 4
-
-        if _fallback_enabled and len(matches) == _before_term_exact_count:
-            _fb_v = str(variants[0]).strip() if variants else ""
-            _fb_tokens = _tokenize_only(_fb_v) if _fb_v else []
-            if _fb_tokens and len(_fb_tokens) >= _fallback_min_tokens:
-                _fb_tokens_lower = [x.lower() for x in _fb_tokens]
-                _fb_compact = "".join(_fb_tokens_lower)
-                _n = len(_fb_tokens_lower)
-
-                # forward: exact token sequence
-                _starts = []
-                for _i in range(0, max(0, len(tokens_lower) - _n + 1)):
-                    if tokens_lower[_i:_i+_n] == _fb_tokens_lower:
-                        _starts.append(_i)
-
-                # forward: spacing variation (token-compact)
-                if _n >= 2:
-                    for _i in range(0, max(0, len(tokens_lower) - _n + 1)):
-                        if "".join(tokens_compact[_i:_i+_n]) == _fb_compact:
-                            _starts.append(_i)
-
-                # add matches
-                for _s in sorted(set(_starts)):
-                    try:
-                        start_orig = token_spans[_s][1]
-                        end_orig = token_spans[_s + _n - 1][2]
-                    except Exception:
-                        continue
-                    if start_orig < 0 or end_orig <= start_orig:
-                        continue
-
-                    # same overlap policy as exact: do not override occupied range
-                    if any(i in occupied_set for i in range(start_orig, end_orig)):
-                        continue
-                    matches.append(Match2(term=term, start=start_orig, end=end_orig, category=category, risk=risk, detail=detail, kwd_no=kwd_no))
-                    for _j in range(start_orig, end_orig):
-                        occupied_set.add(_j)
-
-    # Resolve overlaps for exact match mode by preferring longer spans.
-    if match_mode == "정확 일치":
-        try:
-            by_span = {}  # (start,end) -> list[Match2]
-            for m in exact_candidates:
-                by_span.setdefault((m.start, m.end), []).append(m)
-            spans = list(by_span.keys())
-            # Prefer longer matches first, then earlier start
-            spans.sort(key=lambda se: (-(se[1]-se[0]), se[0], se[1]))
-
-            def _overlaps(a, b):
-                return not (a[1] <= b[0] or b[1] <= a[0])
-
-            selected = []
-            for sp in spans:
-                if any(_overlaps(sp, s0) for s0 in selected):
-                    continue
-                selected.append(sp)
-
-            matches = []
-            for sp in selected:
-                matches.extend(by_span.get(sp, []))
-        except Exception:
-            matches = list(exact_candidates)
-    matches.sort(key=lambda m: (m.start, m.end))
-    return matches
-
-
-
-# -----------------------------
-# NLP-enhanced matching wrapper (spacing-insensitive)
-# -----------------------------
-def _build_compact_index(src_text: str):
-    """
-    Build a whitespace-removed version of the text and an index map
-    from compact index -> original index.
-    """
-    if not src_text:
-        return "", []
-    compact_chars = []
-    index_map = []
-    for i, ch in enumerate(src_text):
-        if ch.isspace():
-            continue
-        compact_chars.append(ch)
-        index_map.append(i)
-    return "".join(compact_chars), index_map
-
-
-def _spacing_insensitive_matches(
-    text: str,
-    kw_df: pd.DataFrame,
-    match_mode: str = "유사 키워드 포함",
-    exact_relaxed: bool = False,
-) -> List[Match2]:
-    """(Deprecated) 빈 결과를 반환합니다.
-
-    기존 버전에서는 공백 제거(compact) 기반 substring 매칭을 추가로 수행했는데,
-    이 방식이 '다이어트' ↔ '다 이유'처럼 우연한 글자 결합 오탐을 크게 유발했습니다.
-
-    현재는 find_matches()에서 토큰 기반 + (안전한) 토큰 결합 매칭으로 대체되어
-    별도의 공백 제거 substring 매칭을 수행하지 않습니다.
-    """
-    return []
-
-
-def find_matches_nlp(
-    text: str,
-    kw_df: pd.DataFrame,
-    match_mode: str = "유사 키워드 포함",
-    exact_relaxed: bool = False,
-    suffix_suggestions: dict = None,
-    **kwargs,
-) -> List[Match2]:
-    """
-    기존 find_matches에 **간단한 NLP 보정(띄어쓰기 무시 매칭)**을 얹은 래퍼입니다.
-
-    - 1차: 기존 find_matches 로직 그대로 수행 (기존 동작 유지)
-    - 2차: _spacing_insensitive_matches 로 추가 후보를 찾음
-    - 3차: (term, start, end, kwd_no) 기준으로 중복 제거 후 병합
-
-    향후 형태소 분석 / 오타 보정 로직을 이 함수 안에 단계적으로 추가할 수 있습니다.
-    """
-    base_matches = find_matches(
-        text,
-        kw_df,
-        match_mode=match_mode,
-        exact_relaxed=exact_relaxed,
-        **kwargs,
+def _matching_config() -> MatchingConfig:
+    """Copy current UI settings into the independent engine's explicit input."""
+    return MatchingConfig(
+        ignored_symbols=tuple(get_ignored_special_symbols()),
+        ko_suffixes=frozenset(get_ko_suffix_whitelist()),
     )
 
-    try:
-        extra_matches = _spacing_insensitive_matches(
-            text,
-            kw_df,
-            match_mode=match_mode,
-            exact_relaxed=exact_relaxed,
-            suffix_suggestions=suffix_suggestions,
-        )
-    except Exception:
-        extra_matches = []
 
-    merged: List[Match2] = []
-    # 먼저 기존 결과를 그대로 넣고
-    for m in base_matches or []:
-        merged.append(m)
+def find_matches(text, kw_df, match_mode="유사 키워드 포함", exact_relaxed=False,
+                 suffix_suggestions=None, **kwargs) -> List[Match2]:
+    return _engine_find_matches(
+        text, kw_df, match_mode=match_mode, exact_relaxed=exact_relaxed,
+        suffix_suggestions=suffix_suggestions, config=_matching_config(), **kwargs,
+    )
 
-    # 추가 결과를 병합하면서 중복 제거
-    def _same(a: Match2, b: Match2) -> bool:
-        return (
-            a.start == b.start
-            and a.end == b.end
-            and str(a.term) == str(b.term)
-            and (a.kwd_no or "") == (b.kwd_no or "")
-        )
 
-    for m in extra_matches:
-        if any(_same(m, ex) for ex in merged):
-            continue
-        merged.append(m)
+def find_matches_nlp(text, kw_df, match_mode="유사 키워드 포함", exact_relaxed=False,
+                     suffix_suggestions=None, **kwargs) -> List[Match2]:
+    return _engine_find_matches_nlp(
+        text, kw_df, match_mode=match_mode, exact_relaxed=exact_relaxed,
+        suffix_suggestions=suffix_suggestions, config=_matching_config(), **kwargs,
+    )
 
-    merged.sort(key=lambda m: (m.start, m.end))
-    return merged
 
 def build_kwd_tooltip_attr(kwd_no: str) -> str:
     """kwd_no에 해당하는 키워드 리스트(kw_df)의 행(ROW) 전체 정보를 tooltip용 문자열로 변환합니다.
@@ -1806,7 +951,6 @@ def build_kwd_tooltip_attr(kwd_no: str) -> str:
     except Exception as e:
         tip = f"kwd_no: {kwd_no}\n(tooltip 생성 중 오류: {e})"
         return html.escape(tip, quote=True).replace("\n", "&#10;")
-
 
 
 def build_kwd_tooltip_html(kwd_no: str) -> str:
@@ -1877,7 +1021,6 @@ def build_kwd_tooltip_html(kwd_no: str) -> str:
         return f"<span class='kwd-tooltip'>{body}</span>"
     except Exception as e:
         return _msg_box(f"kwd_no: {kwd_no}\\n(tooltip 생성 중 오류: {e})")
-
 
 
 def build_kwd_tooltip_data(kwd_no: str):
@@ -2278,30 +1421,78 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-init_state()
+def render_cloud_login():
+    """Authenticate before reading shared data; validate roles on every rerun."""
+    repository = SupabaseRepository()
+    if st.sidebar.button('로그아웃', key='cloud_logout'):
+        session = st.session_state.get('auth_session')
+        try:
+            if session:
+                repository.logout(session['access_token'])
+        finally:
+            st.session_state.clear()
+        st.rerun()
+    session = st.session_state.get('auth_session')
+    if not session:
+        st.subheader('사내 계정 로그인')
+        with st.form('cloud_login'):
+            email = st.text_input('이메일')
+            password = st.text_input('비밀번호', type='password')
+            submit = st.form_submit_button('로그인')
+        if submit:
+            try:
+                st.session_state.auth_session = repository.login(email, password)
+                st.rerun()
+            except (StorageError, PermissionError):
+                st.error('로그인에 실패했습니다. 계정과 연결 설정을 확인하세요.')
+        st.stop()
+    try:
+        if session.get('expires_at', 0) < time.time() + 60:
+            session = repository.refresh(session['refresh_token'])
+            st.session_state.auth_session = session
+        user = repository.user(session['access_token'])
+        role = user.get('app_metadata', {}).get('role')
+        if role not in {'admin', 'member'}:
+            st.error('사내 앱 사용 권한이 없습니다. 관리자에게 문의하세요.')
+            st.stop()
+        st.session_state.cloud_user = user
+        st.session_state.is_admin = role == 'admin'
+        st.sidebar.caption(user.get('email', '로그인됨'))
+    except (StorageError, PermissionError):
+        st.error('로그인 세션을 확인할 수 없습니다. 로그아웃 후 다시 로그인하세요.')
+        st.stop()
+
+
+if cloud_enabled():
+    try:
+        render_cloud_login()
+    except StorageError as e:
+        st.error(str(e))
+        st.stop()
+
+try:
+    init_state()
+except (StorageError, PermissionError) as e:
+    st.error(str(e))
+    st.stop()
 scan_existing_counters()
 
 # Sidebar: 저장 경로 및 유틸 (초기화 UI는 제거됨)
 st.sidebar.header("🗂 데이터 저장")
-st.sidebar.caption("CSV로 저장/불러오기 (경로 문제 시 OneDrive 외부 경로 권장)")
-st.sidebar.write("현재 경로:")
-st.sidebar.code(st.session_state.storage_path, language="text")
-new_path = st.sidebar.text_input("저장 경로 변경", value=st.session_state.storage_path)
-c_sb1, c_sb2 = st.sidebar.columns(2)
-if c_sb1.button("경로 적용", key="apply_path"):
-    st.session_state.storage_path = new_path
-    st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
-    scan_existing_counters()
-    st.sidebar.success("경로 적용 및 DB 로드 완료")
-if c_sb2.button("강제 저장", key="force_save"):
-    save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
-    st.sidebar.success("저장 완료")
-
+if cloud_enabled():
+    st.sidebar.caption('Supabase 공유 저장소')
+    if st.sidebar.button('최신 데이터 불러오기'):
+        st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
+        load_hits_log.clear()
+else:
+    st.sidebar.caption('CSV 개발 모드 — 공유 운영은 Supabase를 사용하세요.')
 
 
 # --- 관리자 로그인 영역 (키워드 관리 탭 비공개용) ---
 def render_admin_login():
     """사이드바에서 관리자 계정 로그인/로그아웃을 처리하고, st.session_state.is_admin 플래그를 유지합니다."""
+    if cloud_enabled():
+        return
     if "is_admin" not in st.session_state:
         st.session_state.is_admin = False
 
@@ -2356,13 +1547,20 @@ def is_admin() -> bool:
 
 render_admin_login()
 
+if not cloud_enabled() and is_admin():
+    new_path = st.sidebar.text_input('저장 경로 변경', value=st.session_state.storage_path)
+    if st.sidebar.button('경로 적용'):
+        st.session_state.storage_path = new_path
+        st.session_state.kw_df = load_db(Path(new_path))
+        scan_existing_counters()
+
 tab1, tab3, tab2 = st.tabs(["분석하기", "리포트(주간 Top N)", "키워드 관리"])
 
 with tab1:
     # ① 텍스트 입력
     st.subheader("① 텍스트 입력")
     sample = "이 문장에는 필러와 안티에이징이라는 키워드가 포함되어 있습니다."
-    text = st.text_area("분석할 텍스트", value=sample, height=180)
+    text = st.text_area("분석할 텍스트", value=sample, height=180, max_chars=20000)
 
     st.markdown("---")
     # ②) 분석 실행
@@ -2597,7 +1795,7 @@ with tab1:
                     st.code(", ".join(st.session_state.get("ignored_special_symbols", []) or _DEFAULT_IGNORED_SPECIAL_SYMBOLS), language="text")
 
 
-    
+
     if st.button("텍스트 분석하기", type="primary", key="btn_analyze"):
         try:
             # 항상 최신 키워드 DB 상태를 반영하기 위해 저장 경로에서 다시 로드
@@ -2609,21 +1807,22 @@ with tab1:
                 st.info("키워드가 없습니다. 먼저 추가하세요.")
             else:
                 suffix_suggestions = {}
-                matches = find_matches_nlp(
+                if cloud_enabled():
+                    st.session_state.ko_suffix_whitelist_extra = load_suffix_whitelist_config()
+                    st.session_state.ignored_special_symbols = load_ignored_special_symbols_config()
+                matches = match_text(
                     text,
                     st.session_state.kw_df,
                     match_mode=st.session_state.match_mode,
                     exact_relaxed=st.session_state.exact_relaxed,
-                    suffix_suggestions=suffix_suggestions,
+                    config=_matching_config(),
+                    categories=st.session_state.get('pre_cats', []),
+                    risks=st.session_state.get('pre_risks', []),
                     partial_min_len=int(st.session_state.get("partial_min_len", 2) or 2),
                     similar_reverse_single=bool(st.session_state.get("similar_reverse_single", True)),
                     similar_reverse_any=bool(st.session_state.get("similar_reverse_any", False)),
                 )
                 st.session_state.suffix_suggestions = suffix_suggestions
-                if st.session_state.get("pre_cats"):
-                    matches = [m for m in matches if str(m.category).strip() in set(st.session_state.pre_cats)]
-                if st.session_state.get("pre_risks"):
-                    matches = [m for m in matches if str(m.risk).strip() in set(st.session_state.pre_risks)]
 
                 if matches:
                     out = pd.DataFrame(
@@ -2645,9 +1844,22 @@ with tab1:
                     display_unique = display_unique.sort_values(by="kwd_no", ascending=True).reset_index(drop=True)
 
                     # 누적 카운팅 + 마지막 출력일자 + 로그 기록
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    now_str = now_kst().strftime("%Y-%m-%d %H:%M:%S")
                     unique_kwds = display_unique["kwd_no"].dropna().astype(str).str.strip().tolist()
-                    if unique_kwds:
+                    if unique_kwds and cloud_enabled():
+                        result = {'analysis_id': str(uuid4()),
+                                  'matches': [asdict(m) for m in matches],
+                                  'unique_keywords': unique_kwds,
+                                  'keyword_revision': st.session_state.cloud_revision,
+                                  'offset_unit': 'unicode_codepoint',
+                                  'end_exclusive': True, 'recorded': True}
+                        fingerprint = hashlib.sha256(text.encode()).hexdigest()
+                        SupabaseRepository().record_analysis(result['analysis_id'], fingerprint,
+                            st.session_state.cloud_user['id'],
+                            st.session_state.cloud_revision, result)
+                        st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
+                        load_hits_log.clear()
+                    elif unique_kwds:
                         df = st.session_state.kw_df
                         try:
                             df_indexed = df.set_index("kwd_no")
@@ -2671,7 +1883,10 @@ with tab1:
                                         prev = 0
                                     st.session_state.kw_df.at[idx, "키워드 조회 수(누적카운트)"] = str(prev + 1)
                                     st.session_state.kw_df.at[idx, "마지막 출력일자"] = now_str
-                        save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
+                        # CSV mode is local development only; analysis may update
+                        # counters without granting keyword editing privileges.
+                        sort_db_internal(st.session_state.kw_df)[get_db_cols()].to_csv(
+                            Path(st.session_state.storage_path), index=False, encoding='utf-8-sig')
                         append_hits_log(unique_kwds)
 
                     out_buf = io.BytesIO()
@@ -2732,7 +1947,7 @@ with tab1:
         if _persist_csv is not None:
             st.download_button("분석 결과 CSV 다운로드", data=_persist_csv, file_name="analysis_results.csv", mime="text/csv", key="dl_analysis")
 
-        
+
     st.subheader("하이라이트 미리보기")
     # 기존 하이라이트 HTML은 그대로 표시
     # Inject tooltip data + hover tooltip renderer (table-style) WITHOUT polluting preview body text
@@ -2783,7 +1998,7 @@ with tab1:
         #kwd-tt-float th {{ background: rgba(0,0,0,0.04); white-space: nowrap; }}
         /* hint cursor */
         [data-kwd] {{ cursor: pointer; }}
-      
+
 
 /* Highlight colors (risk grades) */
 .hl-box .hl-mark{
@@ -3045,7 +2260,7 @@ with tab1:
         save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
 
         # 조회 로그에도 kwd_no 변경 사항을 반영 (리포트 연동 유지)
-        if kwd_change_map:
+        if kwd_change_map and not cloud_enabled():
             try:
                 log_df = load_hits_log()
                 if not log_df.empty and "kwd_no" in log_df.columns:
@@ -3064,7 +2279,7 @@ with tab1:
     # - 입력값을 바꿔도 즉시 표에 반영하지 않고,
     # - "필터 적용" 버튼을 눌렀을 때만 적용되도록 합니다.
     # --------------------------------
-    
+
     # (Streamlit 경고 방지) key를 가진 위젯에는 default/value를 함께 주지 않습니다.
     # 대신 최초 1회만 session_state에 기본값을 세팅합니다.
     _init_defaults = {
@@ -3242,6 +2457,7 @@ with tab1:
                 key="list_filter_editor_tab1",
                 use_container_width=True,
                 column_config=_kwd_col_config or {},
+                disabled=['kwd_no', '키워드 조회 수(누적카운트)', '마지막 출력일자'] if cloud_enabled() else [],
             )
         except TypeError:
             # 구버전 Streamlit 호환: column_config 미지원
@@ -3249,6 +2465,7 @@ with tab1:
                 _list_view_df,
                 key="list_filter_editor_tab1",
                 use_container_width=True,
+                disabled=['kwd_no', '키워드 조회 수(누적카운트)', '마지막 출력일자'] if cloud_enabled() else [],
             )
         save_clicked = st.button("변경사항 저장 (현재 필터된 행에만 적용)", key="btn_list_filter_save_tab1")
         if save_clicked:
@@ -3312,7 +2529,7 @@ with tab2:
                     st.success(f"업로드 완료 — 추가 {added_cnt}건, (내부 중복제거 {dedup_removed}건) 저장됨.")
             except Exception as e:
                 st.error(f"업로드 처리 중 오류: {e}")
-    
+
         st.subheader("키워드 입력/관리")
 
         c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
@@ -3338,14 +2555,14 @@ with tab2:
 
         new_cat = new_detail = new_evid = new_alt = ""
         new_kwd = ""
-    
+
         if cat_choice == "(직접 입력)":
             cols_nc = st.columns([2,1])
             with cols_nc[0]:
                 new_cat = st.text_input("새 카테고리 입력", key="new_cat_input")
             with cols_nc[1]:
                 new_kwd = st.text_input("키워드NO (선택, 예: P001)", key="new_kwd_input")
-    
+
         if detail_choice == "(직접 입력)":
             new_detail = st.text_input("새 세부 심의기준 입력", key="new_detail_input")
         if evidence_choice == "(직접 입력)":
@@ -3374,7 +2591,7 @@ with tab2:
                             kwd = f"{pfx}{int(num):0{len(num)}d}"
                     if kwd is None:
                         kwd = next_kwd_no(category)
-                    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    now_str = now_kst().strftime("%Y-%m-%d %H:%M:%S")
                     _existing_kwds = st.session_state.kw_df['kwd_no'].astype(str).str.upper().tolist()
                     if str(kwd).upper() in _existing_kwds:
                         st.warning(f"{kwd}은(는) 이미 존재하는 키워드 번호입니다. 다른 번호를 지정해 주세요.")
@@ -3479,11 +2696,14 @@ with tab2:
                     "대체키워드": cc.SelectboxColumn(options=alt_opts, required=False),
                 },
                 width="stretch",
-                num_rows="dynamic",
+                num_rows="fixed" if cloud_enabled() else "dynamic",
+                disabled=['kwd_no', '키워드 조회 수(누적카운트)', '마지막 출력일자'] if cloud_enabled() else [],
                 key="editor_dropdown",
             )
         else:
-            edited_df = st.data_editor(_rename_fcol(base_df), width="stretch", num_rows="dynamic", key="editor_free")
+            edited_df = st.data_editor(_rename_fcol(base_df), width="stretch",
+                num_rows="fixed" if cloud_enabled() else "dynamic", key="editor_free",
+                disabled=['kwd_no', '키워드 조회 수(누적카운트)', '마지막 출력일자'] if cloud_enabled() else [])
 
         csave, cdel, ctmpl = st.columns([1, 1, 2])
         with csave:
@@ -3557,7 +2777,7 @@ with tab3:
         with col_r1:
             top_n = st.number_input("Top N", min_value=1, max_value=100, value=10, step=1, key="report_topn")
         with col_r2:
-            end_dt = datetime.now()
+            end_dt = now_kst()
             start_dt = end_dt - timedelta(days=7)
             st.write(f"기간: {start_dt.strftime('%Y-%m-%d %H:%M:%S')} ~ {end_dt.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -3592,7 +2812,7 @@ with tab3:
             # ---- Right align numeric columns ----
             align_cols = [c for c in ["최근7일_조회수", "키워드 조회 수(누적카운트)"] if c in report.columns]
             styled = report.style.set_properties(**{"text-align": "right"}, subset=align_cols)
-            
+
             st.dataframe(_rename_fcol(styled), width="stretch")
             rep_buf = io.BytesIO()
             report.to_csv(rep_buf, index=False, encoding="utf-8-sig")
@@ -3605,13 +2825,21 @@ with tab3:
     # ------------------------------
     st.markdown("---")
     st.markdown("### 🔁 조회 수 초기화")
+    if not is_admin():
+        st.caption('조회 수 초기화는 관리자만 사용할 수 있습니다.')
 
     # 전체 초기화: DB의 누적카운트=0, 마지막 출력일자 공백 (로그는 유지 — 기존 동작 유지)
     col_z1, col_z2 = st.columns([1,1])
     with col_z1:
         confirm_reset_all = st.checkbox("전체 조회 수를 0으로 초기화하고 '마지막 출력일자'를 비우기", value=False, key="report_reset_ck")
-        if st.button("전체 초기화 실행", disabled=not confirm_reset_all, key="report_reset_btn"):
+        if st.button("전체 초기화 실행", disabled=not confirm_reset_all or not is_admin(), key="report_reset_btn"):
+            _require_admin()
             try:
+                if cloud_enabled():
+                    SupabaseRepository().reset_counts()
+                    st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
+                    st.success('전체 초기화 완료 (로그 유지)')
+                    st.stop()
                 if "키워드 조회 수(누적카운트)" in st.session_state.kw_df.columns:
                     st.session_state.kw_df["키워드 조회 수(누적카운트)"] = "0"
                 if "마지막 출력일자" in st.session_state.kw_df.columns:
@@ -3624,13 +2852,19 @@ with tab3:
     # 최근 7일 초기화: 로그에서 최근 7일 기록만 삭제 (DB 누적카운트는 건드리지 않음)
     with col_z2:
         confirm_reset_week = st.checkbox("최근 7일 조회수 초기화 (로그에서 최근 7일 기록 삭제)", value=False, key="report_reset7_ck")
-        if st.button("최근 7일 초기화 실행", disabled=not confirm_reset_week, key="report_reset7_btn"):
+        if st.button("최근 7일 초기화 실행", disabled=not confirm_reset_week or not is_admin(), key="report_reset7_btn"):
+            _require_admin()
             try:
+                if cloud_enabled():
+                    removed = SupabaseRepository().reset_week()
+                    load_hits_log.clear()
+                    st.success(f'최근 7일 기록 {removed}건을 리포트에서 제외했습니다.')
+                    st.stop()
                 log_df2 = load_hits_log()
                 if log_df2.empty:
                     st.info("삭제할 로그가 없습니다.")
                 else:
-                    end_dt2 = datetime.now()
+                    end_dt2 = now_kst()
                     start_dt2 = end_dt2 - timedelta(days=7)
                     log_df2["ts_dt"] = pd.to_datetime(log_df2["ts"], errors="coerce")
                     before_cnt = len(log_df2)
