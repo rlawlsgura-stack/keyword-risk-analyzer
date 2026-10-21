@@ -16,21 +16,24 @@
     @media(max-width:950px){aside{position:relative;width:auto}aside a{display:inline-block;margin-right:18px}main{margin:0;padding:18px}.cover,.chapter{padding:25px 22px}h2{font-size:23px}}
     @media print{@page{size:A4;margin:17mm 15mm}body{background:white;font-size:10pt;line-height:1.65}aside,.no-print{display:none}main{margin:0;padding:0;max-width:none}.cover,.chapter{border:0;border-radius:0;padding:0;margin:0}.cover{margin-bottom:25px}.chapter{break-before:page}h2{font-size:20pt}h3{font-size:14pt}h4{font-size:12pt}h2,h3,h4{break-after:avoid}table{font-size:8.3pt}th,td{padding:5px 7px}thead{display:table-header-group}tr{break-inside:avoid}pre{font-size:8pt}img{max-height:220mm}a{color:inherit;text-decoration:none}.table-scroll{overflow:visible}figure{break-inside:avoid}details{display:none}}
     </style></head><body>
-    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong><a href="#README">설계 문서 안내</a><a href="#01_system_design">시스템 설계서</a><a href="#02_api_design">API 설계서</a><a href="#03_screen_design">화면 설계서</a><a href="#04_supabase_design">Supabase 설계서</a><a href="#05_matching_design">분석 로직 설계서</a><a href="#06_operations_test_plan">운영 배포와 검증 설계서</a><div class="meta">버전 1.0<br>2026년 10월 21일<br>현재 구현 기준</div></aside>
-    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header><section class="chapter" id="README"><h2>Keyword Risk Analyzer 설계 문서 안내</h2>
+    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong><a href="#README">설계 문서 안내</a><a href="#01_system_design">시스템 설계서</a><a href="#02_api_design">API 설계서</a><a href="#03_screen_design">화면 설계서</a><a href="#04_supabase_design">Supabase 설계서</a><a href="#05_matching_design">분석 로직 설계서</a><a href="#06_operations_test_plan">운영 배포와 검증 설계서</a><a href="#07_regulation_rag_design">법령·가이드라인 근거 검색과 문맥 검토 설계</a><div class="meta">버전 1.0<br>구현 기준: 2026년 10월 21일<br>규정 검색 제안 갱신: 10월 22일</div></aside>
+    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 구현 기준 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><p>규정 검색 도입 제안은 2026년 10월 22일 사용자 확정 범위를 반영했습니다.</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header><section class="chapter" id="README"><h2>Keyword Risk Analyzer 설계 문서 안내</h2>
 <p>문서 버전 1.0 · 작성 기준 2026년 10월 21일 한국 시간</p>
+<p>규정 검색 도입 제안은 2026년 10월 22일 <strong>화장품·식품·건강기능식품 / 외부 AI API 전송 허용</strong>으로 범위를 확정해 갱신했습니다.</p>
 <p>이 문서 묶음은 현재 Streamlit 화면과 FastAPI 코드, Supabase에 설치된 <code>kra_</code> 테이블과 함수를 기준으로 작성한 구현 기준 설계서입니다. 개발자 인수인계, 외부 시스템 연동, 운영 설정과 기능 검수에 사용합니다. 계획만 있는 기능은 구현 완료 기능과 구분했습니다.</p>
 <h3>문서 구성</h3>
 <div class="table-scroll"><table><thead><tr><th>문서</th><th>주요 독자</th><th>내용</th></tr></thead><tbody>
 <tr><td><a href="#01_system_design">시스템 설계서</a></td><td>기획자와 개발자</td><td>범위, 기능 요구사항, 아키텍처, 권한과 모듈</td></tr>
-<tr><td><a href="#02_api_design">API 설계서</a></td><td>연동 개발자</td><td>인증, 7개 경로, 요청과 응답, 오류와 재시도</td></tr>
+<tr><td><a href="#02_api_design">API 설계서</a></td><td>연동 개발자</td><td>인증, 6개 경로, 요청과 응답, 오류와 재시도</td></tr>
 <tr><td><a href="#03_screen_design">화면 설계서</a></td><td>기획자와 화면 개발자</td><td>화면 ID, 배치, 입력, 이벤트, 권한과 예외</td></tr>
 <tr><td><a href="#04_supabase_design">Supabase 설계서</a></td><td>백엔드와 DB 담당자</td><td>ERD, 5개 테이블, 원장 13개 컬럼, RPC 10개</td></tr>
 <tr><td><a href="#05_matching_design">분석 로직 설계서</a></td><td>분석 로직 담당자</td><td>매칭 모드, 정규화, 겹침 처리, 집계 규칙</td></tr>
 <tr><td><a href="#06_operations_test_plan">운영 배포와 검증 설계서</a></td><td>운영자와 검수자</td><td>환경 설정, 배포, 이관, 장애 처리, 테스트</td></tr>
+<tr><td><a href="#07_regulation_rag_design">법령·가이드라인 RAG 도입 설계</a></td><td>기획·심의·개발 담당자</td><td><strong>제안 단계</strong>: 공식 근거 수집, 적용일, 검색, 후속 AI 검토, 배포와 평가 순서</td></tr>
 </tbody></table></div>
 <p><code>design_book.html</code>은 위 문서를 한 파일로 열람하고 인쇄할 수 있는 통합본입니다. 외부 스크립트나 폰트를 내려받지 않습니다. <code>assets</code>의 SVG는 구성도와 화면 배치도이며, 실제 브라우저 캡처가 아닙니다.</p>
 <p><code>openapi.runtime.json</code>은 현재 FastAPI가 생성한 원본입니다. <code>openapi.json</code>은 여기에 문서용 응답 스키마와 오류 설명을 보충한 연동 명세입니다. 응답 모델이 실제 서버에서 강제 검증되는 것은 아닙니다.</p>
+<p><code>reference/regulation_openapi.proposed.json</code>은 아직 구현하지 않은 규정 검색 API 초안입니다. <code>reference/regulation_sources.json</code>은 공식 게시 정보만 확인한 출처 후보이며 본문 적재·법률 검수 완료 목록이 아닙니다. <code>reference/regulation_eval_cases.jsonl</code>의 26문항은 모두 검수 전 draft입니다. 저장소의 <code>scripts/evaluate_regulation_retrieval.py</code>는 향후 승인된 관련성 정답과 실제 검색 결과를 비교하는 오프라인 도구입니다. 전체와 제품군별 검색 지표를 계산하고 범위 검사·생성 모델 안전성 문항은 관련성 점수와 분리합니다. 모델 실행이나 법률 판단은 수행하지 않으며, 검수된 정답이 없을 때 정확도를 계산하지 않습니다. 외부 AI API 연동은 사용자 요청으로 보류했습니다. 초기 공식 조문 3개의 HTML·텍스트 수집본과 출처·해시는 저장소의 <code>data/regulations</code>에 보관했으며, RAG DB 적재와 별도 API 서버 배포는 아직 수행하지 않았습니다.</p>
 <h3>사실과 변경 제안의 구분</h3>
 <ul>
 <li><strong>구현</strong>: 코드 또는 DB 메타데이터에서 확인한 현재 동작입니다.</li>
@@ -54,7 +57,7 @@
 <h3>원본과 갱신 방법</h3>
 <p>기준 소스는 <code>keyword_app2_fixed270.py</code>, <code>api.py</code>, <code>service.py</code>, <code>repository.py</code>, <code>matching_engine.py</code>, <code>app_config.py</code>, <code>supabase/schema.sql</code>, <code>supabase/fix_reset_counts.sql</code>, <code>render.yaml</code>, <code>tests</code>입니다. 원본 코드와 설계서가 다르면 코드와 실제 DB를 먼저 확인하고 문서를 갱신합니다.</p>
 <pre><code>.\.venv\Scripts\python.exe scripts/build_design_docs.py</code></pre>
-<p>이 명령은 문서와 OpenAPI 산출물만 생성합니다. 계정 생성, DB 이관, 조회수 초기화나 배포를 실행하지 않습니다. 스냅샷 수량은 자동 실시간 조회가 아니라 위 관찰 기록입니다.</p></section><section class="chapter" id="01_system_design"><h2>Keyword Risk Analyzer 시스템 설계서</h2>
+<p>이 명령은 문서와 OpenAPI 산출물만 생성합니다. 계정 생성, DB 이관, 조회수 초기화나 배포를 실행하지 않습니다. 스냅샷 수량은 자동 실시간 조회가 아니라 위 관찰 기록입니다. <code>source_manifest.json</code>의 소스 해시는 운영체제와 Git 개행 변환에 관계없이 비교하도록 UTF-8·LF로 정규화해 계산합니다.</p></section><section class="chapter" id="01_system_design"><h2>Keyword Risk Analyzer 시스템 설계서</h2>
 <p>문서 ID KRA SYS 001 · 버전 1.0 · 기준일 2026년 10월 21일</p>
 <h3>목적과 서비스 범위</h3>
 <p>등록된 키워드와 리스크 기준을 이용해 입력 문장의 위험 표현을 찾고, 검출 위치와 심의 기준을 보여주는 사내 업무 도구입니다. 관리자는 원장과 분석 설정을 관리하고 사용자는 분석과 공유 통계를 조회합니다. 분석은 규칙 기반 Python 엔진에서 수행하며 외부 생성형 AI를 호출하지 않습니다. 결과는 등록된 원장과 매칭 규칙에 따른 검출 정보이며 자동 심의 승인이나 법적 적합성 판정은 구현 범위에 없습니다.</p>
@@ -259,7 +262,7 @@ Content-Type: application/json</code></pre>
 <p><code>api.py</code>의 AnalysisRequest, current_actor와 각 라우트, <code>service.py</code>의 analyze, <code>repository.py</code>의 request, <code>supabase/schema.sql</code>의 분석과 통계 RPC를 기준으로 작성했습니다.</p></section><section class="chapter" id="03_screen_design"><h2>Keyword Risk Analyzer 화면 설계서</h2>
 <p>문서 ID KRA UI 001 · 버전 1.0 · 기준일 2026년 10월 21일</p>
 <h3>화면 구성과 적용 범위</h3>
-<p>현재 Streamlit 화면을 업무 단위로 나눈 설계입니다. 화면 ID는 인수인계용 식별자이며 실제 URL 경로가 아닙니다. 로그인 후 하나의 앱에서 분석하기, 리포트, 키워드 관리 탭을 전환합니다. 배치도는 현재 위젯의 정보 구조를 정리한 것으로 정확한 픽셀 크기나 브라우저 캡처를 의미하지 않습니다.</p>
+<p>현재 Streamlit 화면을 업무 단위로 나눈 설계입니다. 화면 ID는 인수인계용 식별자이며 실제 URL 경로가 아닙니다. 일반 사용자에게는 분석하기·리포트 탭을 표시하고, 관리자에게는 키워드 관리와 Supabase 사용자 관리 탭도 표시합니다. 배치도는 현재 위젯의 정보 구조를 정리한 것으로 정확한 픽셀 크기나 브라우저 캡처를 의미하지 않습니다.</p>
 <figure><img alt="로그인 분석 리포트 관리 화면의 주요 배치" src="assets/screens.svg"><figcaption>로그인 분석 리포트 관리 화면의 주요 배치</figcaption></figure>
 <div class="table-scroll"><table><thead><tr><th>화면 ID</th><th>화면과 영역</th><th>진입 조건</th><th>주요 연결</th></tr></thead><tbody>
 <tr><td>UI 00</td><td>사내 계정 로그인</td><td>Supabase 모드의 미인증 사용자</td><td>Auth 로그인</td></tr>
@@ -334,7 +337,7 @@ Content-Type: application/json</code></pre>
 <tr><td>전체 초기화 실행</td><td>admin 및 확인 체크</td><td>hit_count=0, last_hit 빈 값</td><td>원장 정보, 분석 기록, 이벤트</td></tr>
 <tr><td>최근 7일 초기화 실행</td><td>admin 및 확인 체크</td><td>기간 이벤트 visible=false</td><td>누적 조회수, 분석 기록, 원래 이벤트</td></tr>
 </tbody></table></div>
-<p>비관리자는 실행 버튼이 비활성화되며 서버에서도 관리자 검사를 수행합니다. 전체 초기화는 주간 이벤트를 지우지 않으므로 주간 리포트가 계속 나올 수 있습니다. 주간 초기화는 실제 삭제가 아니라 리포트 제외입니다. 일부 기존 화면 문구가 로그 삭제라고 표현하더라도 클라우드 실제 동작은 visible 변경입니다.</p>
+<p>비관리자에게는 초기화 영역의 제목·체크박스·버튼 전체를 표시하지 않습니다. 실행 시 서버에서도 관리자 검사를 수행합니다. 전체 초기화는 주간 이벤트를 지우지 않으므로 주간 리포트가 계속 나올 수 있습니다. 주간 초기화는 실제 삭제가 아니라 리포트 제외입니다. 일부 기존 화면 문구가 로그 삭제라고 표현하더라도 클라우드 실제 동작은 visible 변경입니다.</p>
 <p>전체 초기화 함수는 갱신 대상 WHERE 조건을 사용하므로 Supabase safeupdate를 유지한 채 실행합니다. 아무 행도 바꿀 필요가 없어도 성공합니다. UI는 확인 체크만 사용하고 2차 승인이나 복원 버튼은 없습니다.</p>
 <h3>UI 30 가져오기와 등록</h3>
 <p>지원 파일은 <code>.csv</code>와 <code>.xlsx</code>입니다. CSV는 UTF 8 BOM, UTF 8, CP949, EUC KR, Latin 1 순으로 읽기를 시도합니다. XLSX는 pandas로 읽고 실패하면 단순 첫 시트 파서로 대체합니다. 대체 파서는 수식 평가, 병합 셀과 날짜 서식을 완전하게 지원하지 않습니다.</p>
@@ -353,8 +356,11 @@ Content-Type: application/json</code></pre>
 <p>드롭다운 제한 입력과 자유 입력 모드를 제공합니다. 클라우드에서는 행 수를 고정하고 코드와 집계 컬럼을 잠급니다. 신규 행은 단건 등록이나 업로드를 이용합니다. 변경사항 저장 버튼을 눌러야 DB에 반영합니다.</p>
 <p>삭제는 kwd_no 복수 선택 후 선택 삭제로 실행합니다. 원장 행을 물리 삭제하지만 과거 이벤트는 코드 참조를 유지합니다. 별도 원장 휴지통, soft delete와 삭제 복구 UI는 없습니다. 오래된 세션으로 저장하면 최신 데이터로 갱신하고 충돌 메시지를 표시합니다.</p>
 <h3>UI 32 공통 설정</h3>
-<p>드롭다운 값, 사용자 추가 조사 어미, 무시할 한 글자 특수기호를 관리합니다. 설정 저장은 관리자만 허용하고 revision을 증가시킵니다. 일부 설정 입력과 버튼이 일반 사용자에게도 보일 수 있지만 저장 함수에서 서버 권한을 검사합니다. 버튼 노출을 역할에 맞게 정리하는 것은 화면 개선 항목입니다.</p>
-<p>접미사 제안 영역은 존재하지만 현재 호환 래퍼가 제안 수집 인수를 엔진에 전달하지 않아 자동 후보가 비어 있을 수 있습니다. 제안 자동 수집이 검증된 기능이라고 문서화하지 않습니다.</p>
+<p>관리자 키워드 관리 탭 안의 공통 분석 규칙 영역에서 키워드 뒤에 붙는 말 허용 목록과 띄어쓰기·기호 처리 규칙을 관리합니다. 각 폼을 제출해야 저장되며 설정 저장은 관리자만 허용하고 revision을 증가시킵니다. 일반 사용자에게는 이 편집 위젯을 생성하지 않습니다. 드롭다운 편집은 기존 관리자 화면을 유지합니다.</p>
+<p>분석하기 탭은 키워드 찾는 방식, 이번 분석의 표기 차이 허용 옵션과 적용 중인 규칙 요약을 제공합니다. 기본 모드와 옵션 값은 유지합니다. 분석 실행 시 공통 규칙을 다시 읽고 요약도 사용한 스냅샷으로 갱신합니다. 기호는 한 줄에 하나씩 입력하며 쉼표도 저장할 수 있고, 여러 글자를 입력하면 저장하지 않습니다. 빈 기호 목록의 기본값 복원 동작은 유지합니다.</p>
+<p>기존 분석 경로에서 자동 수집되지 않던 접미사 후보 안내는 제거했습니다. 후보 제안 기능을 구현하거나 합성어 검출 정책을 변경한 것은 아닙니다.</p>
+<h3>UI 40 사용자 역할 관리</h3>
+<p>Supabase 관리자에게만 사용자 관리 탭을 표시합니다. 페이지당 최대 50개 계정을 직접 불러온 뒤 계정과 member/admin 역할을 선택하고 변경 확인을 체크해 저장합니다. 자신의 관리자 권한 해제는 차단합니다. 목록 조회와 저장마다 Auth 서버에서 관리자 역할을 재확인하고 대상 역할이 목록과 다르면 새로고침을 요청합니다. 새 계정 생성은 Supabase Dashboard에서 수행합니다.</p>
 <h3>화면 상태와 검수 기준</h3>
 <div class="table-scroll"><table><thead><tr><th>상태 그룹</th><th>주요 Session State</th><th>수명</th></tr></thead><tbody>
 <tr><td>인증</td><td>auth_session, cloud_user, is_admin</td><td>로그인 세션</td></tr>
@@ -537,12 +543,23 @@ where hit_count &lt;&gt; 0 or last_hit &lt;&gt; &#x27;&#x27;;</code></pre>
 <tr><td>similar_reverse_any</td><td>boolean</td><td>다중 입력 토큰의 역매칭</td></tr>
 </tbody></table></div>
 <p>MatchingConfig는 변경 불가 dataclass입니다. 기본 무시 기호는 <code>/</code>, <code>&amp;</code>, <code>,</code>, <code>*</code>이며 기본 한국어 조사 어미 목록을 포함합니다. 독립 엔진 호출자는 빈 tuple 또는 frozenset을 전달해 기본 규칙을 비활성화할 수 있습니다. 앱과 API 어댑터는 빈 무시 기호 목록을 기본값으로 되돌리는 기존 동작을 유지합니다.</p>
+<p>설정 스냅샷에는 mode(exact/similar/partial), exact_relaxed, partial_min_len, similar_reverse_single, similar_reverse_any, exact_fallback_similar와 exact_fallback_min_tokens도 포함합니다. UI와 API는 이 객체 하나로 엔진을 호출합니다. 기존 match_mode 등 개별 인수는 호환 어댑터인 _resolve_config에서 스냅샷으로 변환하며 명시한 인수가 우선합니다.</p>
+<p>화면 표시 이름은 등록 표현 찾기, 단어·변형 규칙으로 찾기, 키워드 일부로 찾기 — 탐색용입니다. 표시 이름은 mode ID와 분리되어 있으며 기존 한국어 모드 문자열을 받는 호환 경로도 유지합니다.</p>
 <h3>처리 순서</h3>
 <pre><code>원문과 원장 → 설정 스냅샷 → 기호 및 공백 정규화와 위치 맵
            → 키워드별 후보 생성 → 모드별 검출
            → 모드별 겹침 처리 → 원문 위치 정렬
            → 카테고리와 리스크 필터 → 결과 표시와 선택적 집계</code></pre>
 <p>원장 DataFrame은 엔진에서 복사합니다. 필수 컬럼이 없으면 보충하고 빈 키워드 행을 제외합니다. 기본 컬럼 이외의 추가 데이터는 저장소에서 보존하되 Match2 응답에는 필요한 필드만 담습니다.</p>
+<div class="table-scroll"><table><thead><tr><th>단계</th><th>담당 함수</th></tr></thead><tbody>
+<tr><td>옵션 호환과 설정 확정</td><td>_resolve_config</td></tr>
+<tr><td>원문 비교 준비와 위치 맵</td><td>_prepare_text</td></tr>
+<tr><td>원장 행과 키워드 후보 준비</td><td>_keyword_records, _keyword_variants</td></tr>
+<tr><td>모드별 검출</td><td>_match_exact, _match_similar, _match_partial</td></tr>
+<tr><td>정확 모드 겹침 처리</td><td>_resolve_exact_overlaps</td></tr>
+<tr><td>원문 위치 정렬</td><td>find_matches</td></tr>
+</tbody></table></div>
+<p>유사 모드의 대표 구간 확장과 부분 문자열 모드의 점유 처리는 기존 검출 순서와 함께 유지합니다. 리팩터링 단계에서 합성어 허용 범위, 중복 후보, 긴 문구 재시도와 모드별 기본값은 변경하지 않습니다.</p>
 <h3>정확 일치 모드</h3>
 <p>등록 문자열과 후보 변형에 대해 부분 문자열 위치를 찾고, 완화 옵션이 있으면 설정 기호 무시, 유연한 공백, 공백 정규화 위치 맵 등을 이용한 경로를 수행합니다. 정확 모드도 원문 전체가 등록 문자열과 완전히 같은지 비교하는 연산은 아닙니다. 문장 내부의 일치 구간을 찾습니다.</p>
 <p>정확 후보는 같은 start와 end별로 모읍니다. 긴 구간을 먼저 선택하고 다른 선택 구간과 겹치면 제외합니다. 같은 구간에 대응하는 여러 원장 항목은 결과에 함께 포함될 수 있습니다. 길이가 같은 후보는 시작과 끝 위치를 기준으로 정렬합니다.</p>
@@ -583,6 +600,8 @@ where hit_count &lt;&gt; 0 or last_hit &lt;&gt; &#x27;&#x27;;</code></pre>
 <p>현재 리스크 등급은 원장 문자열을 그대로 표시합니다. 여러 검출 등급을 하나의 종합 위험 점수로 합산하거나 가장 높은 등급을 최종 판정으로 선택하는 기능은 없습니다.</p>
 <h3>보존할 기존 동작과 검증</h3>
 <p><code>find_matches_nlp</code>는 호환 래퍼입니다. suffix_suggestions를 내부 find_matches에 전달하지 않는 기존 동작을 유지합니다. 제안 기능을 수정할 때는 별도 회귀 검증이 필요합니다.</p>
+<p>기존 분석 경로에서 수집하지 못하던 접미사 후보 제안은 화면에서 제거했습니다. 자동 제안 기능을 새로 구현한 것은 아닙니다. 공통 규칙 편집은 관리자 키워드 관리 화면으로 이동했습니다. 분석 화면에는 검사 방식과 적용 중인 규칙 요약을 제공합니다. 기호 입력은 한 줄에 하나씩 받아 쉼표도 저장합니다. 여러 글자 기호는 저장 전 거절합니다.</p>
+<p>커밋 2d17555의 동작을 담은 matching_baseline.json 27개 사례와 비교합니다. 동일 입력에서 기존 인수 경로와 MatchingConfig 경로가 같은 결과를 내는지 확인하며, 현재 중복 결과도 기준에 포함합니다. 추가로 1,431행 원장에 대해 두 원문·세 모드·완화 옵션 두 값의 12개 조합을 이전 엔진과 비교해 일치를 확인했습니다. 이 검증은 모든 가능한 입력의 동등성을 보장하지 않습니다.</p>
 <p>세 모드 직접 엔진 호출과 service 결과 비교, 같은 코드 반복 검출, 필터 후 결과, 빈 입력과 빈 원장, 기호와 공백, 영어 변화, 조사 어미, 겹침, 이모지 위치를 주요 검수 대상으로 둡니다. 현재 자동 테스트가 이 모든 조합을 완전하게 다루는 것은 아닙니다. 기존 테스트 범위와 추가 검수 항목은 운영 검증 설계서에서 구분합니다.</p>
 <h3>기준 소스</h3>
 <p><code>matching_engine.py</code>의 MatchingConfig, Match2, generate_keyword_variants, find_matches와 find_matches_nlp, <code>service.py</code>의 match_text와 analyze, Streamlit 분석 버튼의 저장 처리를 확인했습니다.</p></section><section class="chapter" id="06_operations_test_plan"><h2>Keyword Risk Analyzer 운영 배포와 검증 설계서</h2>
@@ -665,9 +684,15 @@ Copy-Item .env.example .env</code></pre>
 <tr><td>test_existing_streamlit_csv_screen_and_member_analysis</td><td>기존 CSV 화면과 분석, 비관리자 차단</td><td>임시 CSV</td></tr>
 <tr><td>test_cloud_requires_login_before_data_access</td><td>로그인 전 DB 조회 차단</td><td>가짜 연결</td></tr>
 <tr><td>test_cloud_member_uses_transaction_and_cannot_reset</td><td>member 분석과 초기화 차단</td><td>가짜 저장소</td></tr>
+<tr><td>test_user_management_rechecks_admin_and_prevents_self_demotion</td><td>역할 관리 권한 재검증, 자기 권한 해제 차단</td><td>가짜 HTTP</td></tr>
+<tr><td>test_user_management_rest_uses_server_key_and_updates_only_app_role</td><td>Auth Admin 헤더와 역할 변경 요청</td><td>가짜 HTTP</td></tr>
+<tr><td>test_admin_can_assign_missing_role_from_screen</td><td>관리자 역할 지정 GUI</td><td>가짜 저장소</td></tr>
+<tr><td>test_admin_common_rules_save_and_apply_on_next_analysis</td><td>관리자 폼 저장, 쉼표 보존과 다음 분석 적용</td><td>가짜 저장소</td></tr>
+<tr><td>test_captured_results_keep_positions_duplicates_and_overlap_rules</td><td>이전 커밋에서 캡처한 27개 사례 비교</td><td>없음</td></tr>
+<tr><td>test_common_rules_preserve_run_options_and_empty_list_fallback</td><td>설정 스냅샷 불변성과 기존 빈 목록 처리</td><td>가짜 저장소</td></tr>
 <tr><td>test_live_reset</td><td>실제 HTTP 누적 초기화와 원장 보존</td><td>실제 초기화, 명시적 opt in 필요</td></tr>
 </tbody></table></div>
-<p>기본 테스트는 8개를 실행하고 live reset 1개는 건너뜁니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.</p>
+<p>기본 테스트는 14개를 실행하고 live reset 1개는 건너뜁니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.</p>
 <pre><code>.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m pip check</code></pre>
 <h3>수동 인수 검수 항목</h3>
@@ -689,4 +714,183 @@ Copy-Item .env.example .env</code></pre>
 <p>540자 예시를 단일 실행했을 때 정확 일치 약 1.10초와 유사 약 0.72초가 관찰된 이력이 있으나 현재 하드웨어의 SLA나 동시 처리량으로 사용하지 않습니다. 길이별, 모드별, 키워드 수별로 여러 번 측정하고 p50과 p95, CPU와 메모리, DB 호출 시간을 함께 기록해야 합니다. 아직 부하 테스트 완료 수치와 동시 사용자 보장은 없습니다.</p>
 <p>코드 변경 시 매칭 회귀와 권한 테스트를 먼저 수행하고 DB 변경은 SQL 이력과 함께 배포합니다. safeupdate 오류는 SQL Editor 직접 호출만 성공해도 HTTP 세션에서는 실패할 수 있음을 보여준 사례입니다. DB 함수와 실제 서버 호출을 모두 확인합니다.</p>
 <h3>기준 소스</h3>
-<p><code>app_config.py</code>, <code>.env.example</code>, <code>.streamlit/secrets.toml.example</code>, <code>render.yaml</code>, requirements 파일, README와 tests를 확인했습니다. 환경 변수의 실제 값과 사용자 계정 정보는 문서에 포함하지 않았습니다.</p></section></main></body></html>
+<p><code>app_config.py</code>, <code>.env.example</code>, <code>.streamlit/secrets.toml.example</code>, <code>render.yaml</code>, requirements 파일, README와 tests를 확인했습니다. 환경 변수의 실제 값과 사용자 계정 정보는 문서에 포함하지 않았습니다.</p></section><section class="chapter" id="07_regulation_rag_design"><h2>법령·가이드라인 근거 검색과 문맥 검토 설계</h2>
+<p>상태: <strong>도입 제안 및 개발 기준 초안</strong> · 갱신일: 2026-10-22 · 운영 기능 미연결</p>
+<h3>1. 결정 요약</h3>
+<p>현재 시스템에는 <strong>기존 키워드 검사 + 검수된 공식 근거의 하이브리드 검색 + 선택적 AI 검토</strong>가 적합합니다. 먼저 관련 조항과 원문 위치를 정확히 찾고, 검색 품질을 검증한 뒤 설명을 생성합니다. 관련 문서의 검색 점수는 위반 확률이 아닙니다. 광고 문구만으로 제품의 허가·심사·실증 자료를 알 수 없으므로 자동으로 적법 또는 위법을 확정하지 않습니다.</p>
+<div class="table-scroll"><table><thead><tr><th>항목</th><th>초기 선택</th><th>이유와 변경 조건</th></tr></thead><tbody>
+<tr><td>사용자 화면</td><td>현재 Streamlit 유지</td><td>기존 로그인·권한·키워드 분석 재사용</td></tr>
+<tr><td>규정 검색</td><td>기존 FastAPI에 별도 경로 추가 계획</td><td>키워드 분석과 분리해 지연·실패의 영향을 제한</td></tr>
+<tr><td>근거 저장</td><td>기존 Supabase에 앱 전용 테이블과 pgvector 추가 계획</td><td>별도 벡터 DB 운영을 피함</td></tr>
+<tr><td>임베딩</td><td>관리형 임베딩 API 우선 평가, BGE-M3와 비교</td><td>외부 전송 허용 조건에 따라 초기 모델 서버 운영 부담을 줄임. 제품군별 평가로 최종 선택</td></tr>
+<tr><td>검색 조합</td><td>어휘 검색 + dense 검색을 RRF로 결합</td><td>조문명·금지 표현의 직접 일치와 의미가 비슷한 표현을 함께 찾음</td></tr>
+<tr><td>재정렬</td><td>초기 평가 후 필요할 때 추가</td><td>누락은 적고 상위 결과의 순서가 문제일 때 검토</td></tr>
+<tr><td>생성 모델</td><td>검색 검증 후 관리형 생성 API 연결</td><td>외부 전송 허용 확인 완료. 근거 검색과 인용 검증을 먼저 완성</td></tr>
+<tr><td>LangChain·LlamaIndex</td><td>초기에는 추가하지 않음</td><td>현재의 Python·requests·FastAPI로 고정된 검색 흐름 구성 가능</td></tr>
+<tr><td>운영 서버</td><td>화면은 Community Cloud, API 서버에서 외부 모델 호출</td><td>초기에는 자체 GPU·모델 프로세스 운영을 생략</td></tr>
+</tbody></table></div>
+<p><strong>2026-10-22 사용자 확정 사항:</strong> 1차 대상은 <strong>화장품·식품·건강기능식품</strong>이며 광고 문구의 외부 AI API 전송은 <strong>허용</strong>됩니다. 적용 국가는 기존 국내(KR) 설계를 유지합니다. 공산품·해외 광고는 후속 범위입니다. 세 제품군 모두 같은 순서로 공식 근거 확보와 검색 검증을 진행하고, 검수된 자료가 준비된 제품군부터 활성화합니다. API 제공업체·계정·모델·요금 한도는 아직 선정하지 않았습니다. 특정 업체의 성능이나 데이터 보관 조건이 확인됐다는 뜻은 아닙니다.</p>
+<p>이번 작업의 산출물은 이 설계서, 제안용 API 명세, 공식 출처 후보 목록, 평가 문항 초안과 오프라인 평가 도구입니다. 실제 법령 본문 적재, pgvector 활성화, 임베딩 모델 설치, API 경로와 화면 연결은 아직 수행하지 않았습니다. 현재 <code>openapi.json</code>, <code>api.py</code>의 운영 계약과 키워드 검출 결과는 이 설계 때문에 바뀌지 않습니다.</p>
+<h4>2026-10-22 실행 준비 상태</h4>
+<p>키워드 분석 리팩터링과 이 문서의 설계·평가 도구는 완료했습니다. 국가법령정보센터의 화장품법 제13조, 식품표시광고법 제8조, 표시광고법 제3조 페이지를 <code>data/regulations/source_snapshots</code>에 수집하고 출처·버전·해시를 별도 manifest에 기록했습니다. 수집본은 법률 검수 전이며 DB 적재·임베딩 생성·운영 검색에는 사용하지 않았습니다.</p>
+<p>OpenAI 임베딩 연결 시험은 <code>429 / credit_balance_exhausted</code>로 실패했고 임베딩은 생성되지 않았습니다. 사용자 요청에 따라 <strong>외부 AI API 연동을 후속 작업으로 보류</strong>했습니다. RAG용 Supabase 테이블·데이터 적재와 새 FastAPI 서버 배포도 아직 실행하지 않았습니다. 현재의 기존 Streamlit·Supabase 키워드 기능과 구분해 진행 상태를 관리합니다.</p>
+<h3>2. 현재 코드에서 이어 붙일 지점</h3>
+<div class="table-scroll"><table><thead><tr><th>현재 구현</th><th>규정 검사 확장 원칙</th></tr></thead><tbody>
+<tr><td><code>matching_engine.py</code>의 <code>MatchingConfig</code>와 매칭 모드</td><td>기존의 정확·유사·부분 매칭 유지. 의미 검색을 기존 유사일치 모드로 혼합하지 않음</td></tr>
+<tr><td><code>service.py</code>를 Streamlit과 FastAPI가 공유</td><td>키워드 분석은 현재 경로 유지. 규정 검색만 별도 서비스 함수로 추가</td></tr>
+<tr><td><code>repository.py</code>의 서버 전용 Supabase 접근</td><td>검색 RPC도 서버에서 호출. 브라우저에는 서버 키를 전달하지 않음</td></tr>
+<tr><td>Supabase Auth의 <code>app_metadata.role</code></td><td>로그인한 member/admin만 검색. 원문 등록·승인·철회는 admin 검증 후 수행</td></tr>
+<tr><td>키워드별 조회수와 <code>kra_runs</code></td><td>관련 규정 검색으로 키워드 조회수를 올리지 않음. AI 관련 버전은 기존 키워드 revision과 분리</td></tr>
+<tr><td>Streamlit Community Cloud</td><td>기존 화면 유지. 모델 서버 장애에도 키워드 검사는 계속 사용 가능하게 구성</td></tr>
+</tbody></table></div>
+<p>로컬 CSV에는 식품 400건, 화장품 357건, 공산품 266건, USA 177건, 건강기능식품 110건, 일본 68건, 반려동물 40건, 공통 13건이 있습니다. 이는 검토 시점의 원장 분포입니다. 기존 키워드 결과의 카테고리 필터는 매칭 후 필터입니다. 법령 검색의 적용 국가·제품군은 <strong>검색 후보를 만들기 전 필수 조건</strong>으로 사용해야 합니다.</p>
+<h3>3. 전체 흐름</h3>
+<figure><img alt="규정 검색 도입 구성도" src="assets/regulation_rag.svg"><figcaption>규정 검색 도입 구성도</figcaption></figure>
+<pre><code>[현재] 광고 원문 → 공통 키워드 엔진 → 검출 위치·위험 등급
+
+[추가 계획] 사용자가 &#x27;관련 규정 찾기&#x27; 실행
+    → FastAPI: 인증·분량·제품군·국가·적용일 검사
+    → 관리형 임베딩 API: 질의 임베딩
+    → Supabase: 검수·적용 기간 필터 → 어휘 검색 + 벡터 검색
+    → 순위 결합 → 조항과 예외 문맥 복원 → 출처 카드
+
+[후속] 사용자 요청 시 근거 기반 검토
+    → 승인된 생성 모델 → 인용 ID·원문 위치 검증 → 담당자 검토
+
+[별도 관리 작업] 공식 원문 수집 → 추출·구조화 → 검수
+    → 임베딩 생성 → 새 근거 묶음 검증 → 활성 버전 전환</code></pre>
+<p>Streamlit은 키워드 분석을 공통 모듈로 직접 실행하고 규정 검색만 FastAPI로 요청합니다. AI 서버를 호출하지 않은 결과를 AI 문맥 검사 완료로 표시하지 않습니다. 처음부터 에이전트, 다중 도구 호출, 작업 큐, 여러 벡터 DB를 도입할 필요는 없습니다.</p>
+<h3>4. BGE-M3와 생성 모델 선택</h3>
+<p>외부 API 전송이 허용됐으므로 초기에는 <strong>관리형 임베딩 API + 관리형 생성 API</strong> 조합을 우선 평가합니다. BGE-M3는 동일한 광고·법령 자료로 비교할 후보로 유지합니다. BGE-M3를 선택하더라도 처음부터 자체 GPU를 운영하기보다 해당 모델을 제공하는 관리형 엔드포인트와 자체 운영 비용을 비교합니다. 검색 정확도·지연·월 비용이 자체 운영을 정당화할 때 전환합니다. 실제 외부 API 호출은 아직 수행하지 않았습니다.</p>
+<p>BGE-M3 공식 모델 카드는 1024차원 임베딩, 최대 8192 토큰, 100개가 넘는 언어와 dense·sparse·multi-vector 검색 지원을 설명합니다. 저자는 하이브리드 검색과 재정렬을 권합니다. 이 특성은 후보 선정 근거이며 한국어 광고 심의에서 가장 우수하다는 보장은 아닙니다. <a href="https://huggingface.co/BAAI/bge-m3">BGE-M3 공식 모델 카드</a></p>
+<div class="table-scroll"><table><thead><tr><th>평가 대상</th><th>측정 목적</th></tr></thead><tbody>
+<tr><td>현재 키워드 검사</td><td>어떤 표현을 명시적으로 찾는지 비교하는 별도 기준. 법령 검색 정확도로 해석하지 않음</td></tr>
+<tr><td>어휘 검색만 사용</td><td>임베딩 도입에 따른 실제 개선 확인</td></tr>
+<tr><td>관리형 임베딩 API</td><td>세 제품군의 한국어 관련성 검색, 지연, 호출·재색인 비용을 함께 비교</td></tr>
+<tr><td>BGE-M3 dense만 사용</td><td>표현이 달라도 관련 조항을 찾는지 확인</td></tr>
+<tr><td>어휘 + BGE-M3 dense</td><td>조문명과 문맥 검색을 함께 사용했을 때의 누락·순서 비교</td></tr>
+<tr><td>하이브리드 + reranker</td><td>상위 5개 근거의 품질 개선이 지연·운영 부담을 정당화하는지 확인</td></tr>
+</tbody></table></div>
+<p>초기에는 선택한 모델의 dense 출력만 저장합니다. BGE-M3의 sparse·ColBERT까지 모두 운영하면 저장·검색·평가 경로가 늘어납니다. 어휘 검색과 dense 결합으로 부족한 문제가 확인되면 sparse 또는 reranker 중 필요한 하나를 평가합니다. LangChain과 LlamaIndex는 RAG를 구성하는 도구이며 법령의 최신성이나 법률 판단 정확성을 보장하지 않습니다. 문서 종류와 처리 단계가 늘어나 기존 코드로 관리하기 어려워질 때 하나를 선택합니다.</p>
+<p>후속 생성 모델은 특정 Llama-3-Korean 파생 모델로 미리 고정하지 않습니다. 모델별 한국어 근거 준수, 인용 정확도, 상업적 이용 조건, 문맥 길이, 실제 메모리와 응답 시간을 비교합니다. 외부 전송 허용 조건을 임베딩과 생성 단계에 모두 반영합니다. 회사의 범용 외부 전송 허용이 특정 업체의 보관·재학습·처리 지역 조건까지 확인했다는 의미는 아니므로 제공업체 선정 시 해당 조건을 기록합니다. 사용자 비밀번호·서버 키·계정 식별 정보는 모델 입력에 포함하지 않습니다. 서버에서 입력 길이·출력 토큰·사용자별 호출 수·재시도 횟수를 제한하고 API 키는 서버 Secrets에서 관리합니다.</p>
+<h3>5. 공식 근거 수집과 개정 관리</h3>
+<p>출처 후보 목록: <a href="reference/regulation_sources.json">regulation_sources.json</a>. 이는 게시 정보와 링크를 확인한 목록입니다. 검색용 본문, 법률 검수 또는 적재 완료 목록이 아닙니다.</p>
+<h4>세 제품군의 근거 묶음</h4>
+<div class="table-scroll"><table><thead><tr><th>선택 제품군</th><th>먼저 확보할 근거</th><th>별도로 확인할 제품 정보</th></tr></thead><tbody>
+<tr><td>화장품 (<code>cosmetics</code>)</td><td>화장품법·시행규칙과 표시·광고 관리 지침</td><td>기능성 심사·보고 여부, 심사 내용, 실증 자료</td></tr>
+<tr><td>식품 (<code>food</code>)</td><td>식품표시광고법·시행령 별표 1, 부당한 표시·광고 내용 기준과 기능성 표시 예외 규정</td><td>식품 유형, 기능성 표시 적용 요건, 성분·함량·시험 조건</td></tr>
+<tr><td>건강기능식품 (<code>health_functional_food</code>)</td><td>식품표시광고법·시행령, 건강기능식품 표시기준과 해당 기능성 인정 근거</td><td>제품 신고·인정 정보, 인정 기능성, 섭취량·대상·주의 사항, 광고 심의 자료</td></tr>
+</tbody></table></div>
+<p>표시광고법 등 공통 근거는 검수자가 승인한 적용 제품군 배열에 세 코드를 명시합니다. 식품과 건강기능식품이 일부 법령을 공유해도 한 제품군의 모든 예외·허용 범위를 다른 제품군에 복사하지 않습니다. 일반 식품의 기능성 표현도 적용 요건과 예외 근거를 검색하며, 단순히 기능성이라는 표현만으로 판정을 만들지 않습니다. 건강기능식품도 기능성 인정 정보 없이 모든 효능 표현을 허용한다고 가정하지 않습니다. <a href="https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&amp;lsJoLnkSeq=1029094361">식품표시광고법 제8조</a>, <a href="https://law.go.kr/LSW/admRulLsInfoP.do?admRulId=75449&amp;efYd=0">일반 식품 기능성 표시·광고 규정</a></p>
+<p>광고 문구에서 제품군을 자동 추측해 검사 범위를 바꾸지 않습니다. 요청당 제품군 하나를 명시적으로 선택하고 입력이 불명확하면 제품 정보를 확인합니다. <code>전체</code> 선택으로 세 제품군의 조항을 섞어 반환하지 않습니다.</p>
+<ol>
+<li>국가법령정보센터의 법률·시행령·시행규칙·고시와 식약처·공정위의 공식 문서를 우선 등록합니다.</li>
+<li>문서 제목, 소관 기관, 문서 종류, 공포·게시일, 원문 URL과 조회 시점을 기록합니다.</li>
+<li>원본 파일 또는 공식 응답을 보관하고 SHA-256을 계산합니다. 현재 내용을 돌려주는 링크만으로 버전을 식별하지 않습니다.</li>
+<li>조·항·호·목·별표 행 단위로 구조화합니다. PDF의 표는 금지 표현, 허용 조건, 예외를 같은 의미 단위로 보존합니다.</li>
+<li>원문 페이지와 추출문을 대조합니다. OCR 오류, 표 행의 섞임, 각주와 예외 누락이 있으면 승인하지 않습니다.</li>
+<li>조항별 적용 시작일과 종료일, 제품군·국가, 상위 조문과 참조 조문을 검수합니다.</li>
+<li>승인된 자료만 새 근거 묶음에 넣고 검색·인용·날짜 검증 후 활성화합니다.</li>
+</ol>
+<p>법률, 고시, 민원인안내서, 사례집을 화면에서 구분합니다. 민원인안내서를 법률과 같은 효력의 규정으로 표시하지 않습니다. 뉴스·블로그·판매자 설명은 초기 규정 근거에서 제외합니다. 추후 사례 검색이 필요하면 별도 유형과 화면으로 분리합니다.</p>
+<h4>적용일은 문서가 아닌 조항 단위</h4>
+<p>2026-10-21 공식 조문 페이지에서는 화장품법에 <strong>법률 제22113호, 시행 2026-10-20</strong>이 표시됐습니다. 검색엔진의 이전 수집 결과에는 <strong>제21525호, 시행 2026-10-08</strong>이 남아 있었습니다. 같은 법의 개정문에는 <strong>2026-11-27 시행</strong>인 변경도 확인됩니다. 따라서 검색엔진 요약이나 문서 머리의 날짜 하나를 모든 조항의 시행일로 복사하면 안 됩니다. <a href="https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&amp;lsJoLnkSeq=1027656895">화장품법 조문 페이지</a>, <a href="https://law.go.kr/LSW/lsInfoP.do?lsiSeq=286275&amp;viewCls=lsRvsDocInfoR">별도 시행일이 있는 개정문</a></p>
+<p>기간은 <code>valid_from &lt;= as_of &lt; valid_to</code>로 판단하고 종료일이 없으면 상한을 두지 않습니다. 한 적용일에 같은 조항의 서로 다른 버전이 동시에 선택되면 근거 묶음의 배포를 차단합니다. 장래 조항은 보관할 수 있지만 현재 광고 검사 결과에 섞지 않습니다. 과거 기준일은 해당 시점 자료가 검수된 경우에만 지원하며, 자료가 없으면 현재 법으로 대신 판단하지 않습니다.</p>
+<p>건강기능식품 표시기준 역시 2026-66호 페이지에 2028-01-01 시행이 표시돼 있습니다. 공포·게시 시점과 조항 적용일을 구분하고, 현행과 장래 버전을 함께 확보해 부칙과 경과조치를 검수해야 합니다. <a href="https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000285156&amp;chrClsCd=010201">장래 시행 표시기준</a></p>
+<h4>갱신과 철회</h4>
+<p>관리자가 공식 출처 변경을 정기 확인하고, 변경 해시가 다르면 새 버전을 검수합니다. 초기 운영은 주 1회 확인과 주요 개정 공지 시 수시 확인을 제안합니다. 자동 수집만으로 자동 승인하지 않습니다. 자료마다 <code>review_due_on</code>을 두고, 검수 기한이 지나거나 오류가 확인된 자료는 검색 대상에서 제외합니다. 기한 내라는 사실도 법적 최신성을 보증하지 않으므로 화면에는 마지막 확인일과 원문 링크를 함께 표시합니다.</p>
+<h3>6. 청킹과 검색 규칙</h3>
+<div class="table-scroll"><table><thead><tr><th>단계</th><th>초기 설계</th></tr></thead><tbody>
+<tr><td>원문 보존</td><td>인용할 텍스트와 검색용 텍스트를 구분. 원문은 기존 매칭 엔진의 기호 제거 규칙으로 바꾸지 않음</td></tr>
+<tr><td>의미 단위</td><td>조항·별표 행 우선. 목표 300~700 토큰, 최대 1000 토큰은 평가용 초기값</td></tr>
+<tr><td>예외·단서</td><td>조건·금지·예외가 분리되면 부모 또는 연결 ID로 반드시 함께 복원</td></tr>
+<tr><td>임베딩 입력</td><td>제목, 조문 경로, 제품군 설명, 해당 본문을 일정 형식으로 구성</td></tr>
+<tr><td>긴 광고</td><td>초기 요청 최대 2000자. 문장별 질의로 나누되 부정·조건·인용 문맥을 함께 유지. 조용히 자르지 않음</td></tr>
+<tr><td>필수 필터</td><td>활성 근거 묶음, 승인 상태, 검수 기한, 국가, 요청한 단일 제품군, 조항 적용 기간, 임베딩 프로필</td></tr>
+<tr><td>후보 수</td><td>어휘 상위 20 + 벡터 상위 20, 문장별 결과를 중복 제거 후 결합하는 값으로 시작</td></tr>
+<tr><td>순위 결합</td><td>RRF: 각 검색 순위 r에 대해 1 / (60 + r)를 더함. 60과 후보 수는 평가 후 조정</td></tr>
+<tr><td>반환</td><td>기본 5개, 최대 10개 주 근거. 같은 조항의 중복 청크를 묶고 필요한 부모·예외 문맥은 각자의 출처와 함께 첨부</td></tr>
+</tbody></table></div>
+<p>Supabase는 어휘 검색과 의미 검색을 결합하는 하이브리드 검색 예시를 제공합니다. 기존 점수의 크기가 다른 두 검색을 단순 합산하는 대신 순위를 결합하는 구성을 기준으로 삼습니다. <a href="https://supabase.com/docs/guides/ai/hybrid-search">Supabase 하이브리드 검색</a></p>
+<p>한국어 어휘 검색을 PostgreSQL <code>simple</code> FTS만으로 해결했다고 가정하지 않습니다. 조사·어미와 띄어쓰기 변화가 있으므로 <code>simple</code> FTS에 검수된 검색어를 함께 넣는 기준과 <code>pg_trgm</code>의 부분 어휘 검색을 실제 문항으로 비교한 뒤 선택합니다. <code>pg_trgm</code>은 BM25가 아닙니다. 이후에도 어휘 검색 품질이 부족하면 PGroonga 등 한 가지 확장을 검토합니다. 무조건 상위 N개를 의미 있는 근거로 간주하지 않으며, 보류 기준은 평가 데이터에서 정합니다. 모델과 자료가 바뀌면 같은 cosine 임계값을 그대로 재사용하지 않습니다.</p>
+<h3>7. Supabase 논리 설계 — 미적용</h3>
+<p>2026-10-21 읽기 전용 확인 시 프로젝트에 <code>vector</code>, <code>pg_trgm</code>, <code>pgroonga</code>는 설치되어 있지 않았습니다. 설치 가능 목록에는 vector 0.8.0, pg_trgm 1.6, PGroonga 3.2.5가 표시됐습니다. 이번 작업에서는 확장·테이블·권한을 생성하거나 변경하지 않았습니다.</p>
+<div class="table-scroll"><table><thead><tr><th>추가 예정 테이블</th><th>핵심 필드</th><th>불변 조건</th></tr></thead><tbody>
+<tr><td><code>kra_regulation_documents</code></td><td>id UUID, corpus_version, source_key, source_version, title, authority, source_kind, jurisdiction, source_url, 원본 보관 경로, content_sha256, published_on, review_status, verified_at/by, review_due_on</td><td>승인된 본문은 덮어쓰지 않음. 변경은 새 문서 버전. URL만으로 유일성 판단 금지</td></tr>
+<tr><td><code>kra_regulation_chunks</code></td><td>id UUID, document_id FK, provision_key, citation_label, 원문 content, 검색용 search_text, parent_id, 관련 조항 ID, category_codes, valid_from/to, locator, content_sha256</td><td>적용 시작일·정확한 위치·본문 필수. 같은 조항의 활성 버전 중복과 기간 역전 금지</td></tr>
+<tr><td><code>kra_regulation_embeddings</code></td><td>chunk_id FK, embedding_profile_id, provider, model_id, model_revision NULL 가능, dimensions, preprocessing_version, input_sha256, embedding vector(N)</td><td>N은 선택 모델의 출력 차원으로 배포 시 고정. 청크·프로필 조합 유일. 서로 다른 프로필의 벡터 혼합 금지</td></tr>
+</tbody></table></div>
+<p><code>source_kind</code>는 statute / decree / rule / notice / guideline으로 구분합니다. <code>locator</code>에는 조·항·호·목, 별표·표 행, PDF 실제 페이지와 인쇄 페이지를 구분해 기록합니다. 부분 개정이나 연결 문맥을 포함한 적용 여부는 청크별로 검수합니다. 원본 파일은 비공개 보관소에 두고 화면에는 검증된 공식 URL을 제공합니다. <code>category_codes</code>는 cosmetics / food / health_functional_food 중 승인된 적용 범위를 담습니다. 문서가 공통 법령이어도 해당 청크의 적용 조건을 따로 검수하며, 출처 후보의 분류만으로 승인하지 않습니다.</p>
+<p>초기에는 운영 설정의 <code>REGULATION_CORPUS_VERSION</code> 하나로 검증된 근거 묶음을 선택하는 구성이 충분합니다. 모든 적재와 검증이 끝난 뒤 설정을 전환하며 이전 묶음은 되돌리기용으로 보존합니다. 승인·철회·검수 기한은 매 검색 시 확인합니다. 기존 <code>kra_state.revision</code>은 규정 적재로 변경하지 않습니다.</p>
+<p>보안은 기존 앱의 서버 전용 방식을 따릅니다. 새 public 테이블에 RLS를 켜고 PUBLIC·anon·authenticated의 직접 접근을 허용하지 않습니다. 서버 역할에 필요한 권한만 부여하고 검색 RPC는 SECURITY INVOKER, 고정 search_path와 명시적 스키마를 사용합니다. 관리자 승인 작업은 Auth 서버에서 역할을 재검증합니다. 서버 키가 RLS를 우회하므로 API 권한 검사는 필수입니다.</p>
+<p>필터용 B-tree와 외래키 인덱스부터 구성합니다. 소규모 근거 묶음은 정확 벡터 검색을 기준으로 측정하고, 데이터 증가로 지연 목표를 넘으면 cosine HNSW 인덱스를 추가합니다. ANN을 사용할 때 국가·기간 필터 뒤 결과가 부족해지는 문제를 평가해야 하며, 필터를 완화해서 결과 개수를 채우면 안 됩니다. <a href="https://supabase.com/docs/guides/ai/vector-indexes">Supabase 벡터 인덱스</a></p>
+<p>비교 후보 <code>BAAI/bge-m3</code>에 대해 확인한 모델 revision은 <code>5617a9f61b028005a4858fdac845db406aefb181</code>입니다. 이는 다운로드·동작 검증 완료 표시가 아닙니다. 실제 환경에서는 제공업체·모델 ID·출력 차원·전처리·정규화·최대 길이를 고정한 임베딩 프로필을 사용합니다. BGE-M3를 선택하면 N=1024이며 다른 모델을 선택하면 그 출력 차원과 인덱스 지원 범위를 확인합니다. 모델을 바꿀 때는 질의만 바꾸지 않고 근거 묶음도 새 프로필로 재임베딩한 후 검증·전환합니다. 관리형 API가 고정 revision을 공개하지 않으면 <code>model_revision=null</code>로 기록하고 버전이 고정됐다고 주장하지 않습니다. 요청·응답 모델 ID와 프로필·생성 시점을 기록하고, 고정된 합성 문장으로 변화를 점검합니다. 정확한 재현성이 필요한 경우 revision 고정이 가능한 제공 방식을 선택합니다.</p>
+<h3>8. API 초안 — 현재 API와 분리</h3>
+<p>기계 판독용 제안: <a href="reference/regulation_openapi.proposed.json">regulation_openapi.proposed.json</a>. 이 파일은 현재 앱이 제공하는 OpenAPI에 합쳐지지 않으며 엔드포인트도 아직 등록되지 않았습니다.</p>
+<div class="table-scroll"><table><thead><tr><th>항목</th><th>제안</th></tr></thead><tbody>
+<tr><td>경로</td><td>POST <code>/api/v1/regulations/search</code></td></tr>
+<tr><td>인증</td><td>Supabase 사용자 access token, member/admin. 기존 공유 <code>API_ACCESS_TOKEN</code>은 초기 AI 검색에서 403</td></tr>
+<tr><td>입력</td><td>text 1~2000자, jurisdiction=KR, category=cosmetics / food / health_functional_food 중 하나, as_of=검사 기준일, top_k=1~10</td></tr>
+<tr><td>추가 검증</td><td>공백 입력 거부. 초기에는 오늘을 포함한 과거의 검수된 기준일만 지원. 지원되지 않는 제품군·날짜는 422</td></tr>
+<tr><td>결과</td><td>관련 조항, 원문 발췌, 공식 URL, 정확한 위치, 버전·시행 기간·검수일, 검색 순위</td></tr>
+<tr><td>결과 상태</td><td>ok / insufficient_evidence. 근거 없음은 적법 판정이 아님</td></tr>
+<tr><td>운영 오류</td><td>429 호출 제한, 503 근거 미준비·모델/DB 장애. 장애를 근거 없음으로 처리하지 않음</td></tr>
+<tr><td>저장</td><td>초기에는 광고 원문과 결과 본문을 영구 저장하지 않음. 요청 ID·처리 시간·오류 코드·근거 버전만 기록</td></tr>
+</tbody></table></div>
+<p>기존 키워드 검사와 규정 검색은 각각 실행·응답합니다. <code>/api/v1/analyses</code>에 무거운 작업을 끼워 넣지 않습니다. 규정 검색 실패 때문에 이미 완료한 키워드 검사를 실패로 돌리지 않습니다. 인증 토큰과 광고 문구를 URL, 프록시·애플리케이션 로그, 오류 메시지에 남기지 않습니다. 호출 제한은 서버에서 사용자별로 적용하며 Streamlit 버튼 비활성화만으로 대신하지 않습니다.</p>
+<h3>9. 화면 초안</h3>
+<h4>일반 사용자: 분석 결과 아래 별도 영역</h4>
+<p>표제: <strong>관련 규정 찾기</strong></p>
+<p>설명: <strong>광고 문구와 관련된 법령·가이드라인을 찾습니다. 제품 정보와 실증 자료에 따라 추가 검토가 필요할 수 있습니다.</strong></p>
+<p>입력: 적용 국가(KR), 제품군(화장품 / 식품 / 건강기능식품 중 하나), 검사 기준일. 제품군을 명시적으로 선택하게 하며 실제 검수·활성화된 근거 범위를 표시합니다. 미지원 범위는 실행하지 않습니다. 버튼: <strong>이 문구의 관련 규정 찾기</strong>. 입력할 때마다 자동으로 모델을 호출하지 않습니다.</p>
+<p>결과 카드에는 문서 종류, 조항 제목, 원문 발췌, 예외·조건, 적용 기간, 마지막 검수일과 <strong>공식 원문 보기</strong> 링크를 제공합니다. 검색 순위는 표시할 수 있지만 유사도 83%를 위반 확률 83%로 표시하지 않습니다. 기존 키워드 위험 등급과 별개 영역으로 보여줍니다.</p>
+<div class="table-scroll"><table><thead><tr><th>상황</th><th>표시 문구</th></tr></thead><tbody>
+<tr><td>검색 성공</td><td>관련 조항 N개를 찾았습니다. 적용 조건과 원문을 확인하세요.</td></tr>
+<tr><td>근거 부족</td><td>검수된 자료에서 충분한 근거를 찾지 못했습니다. 문제가 없다는 의미는 아닙니다.</td></tr>
+<tr><td>제품 정보 부족</td><td>기능성 심사 여부·시험 조건 등 추가 정보가 필요합니다.</td></tr>
+<tr><td>미지원 범위</td><td>이 국가·제품군·기준일의 규정 검사는 아직 지원하지 않습니다.</td></tr>
+<tr><td>모델 장애</td><td>규정 검색을 일시적으로 사용할 수 없습니다. 키워드 검사 결과는 확인할 수 있습니다.</td></tr>
+</tbody></table></div>
+<h4>관리자: 규정 자료 관리</h4>
+<p>관리자만 출처 등록, 추출문 미리보기, 페이지 대조, 조항 적용 기간 수정, 승인·철회를 수행합니다. 처음에는 검수 파일과 관리 스크립트로 시작하고, 반복 관리 수요가 확인되면 관리 화면을 추가합니다. 일반 사용자에게 모델명·차원·임베딩 옵션·수집용 입력창을 노출하지 않습니다.</p>
+<h3>10. 후속 AI 검토의 출력과 검증</h3>
+<p>검색 품질을 통과한 후 <strong>근거 기반 검토</strong>를 추가합니다. 초기 검색 API에는 판정 필드를 넣지 않습니다. 후속 검토는 문장별로 <code>needs_review</code> / <code>insufficient_information</code> / <code>no_issue_identified</code>를 반환하도록 설계합니다. 마지막 상태는 제한된 자료에서 문제를 식별하지 못했다는 의미이며 적법 인증이 아닙니다.</p>
+<div class="table-scroll"><table><thead><tr><th>필드</th><th>검증 규칙</th></tr></thead><tbody>
+<tr><td>original_span</td><td>원문의 시작·끝 code point와 정확히 일치하는 인용</td></tr>
+<tr><td>evidence_ids</td><td>이번 요청에서 실제 반환한 청크 ID만 허용</td></tr>
+<tr><td>explanation</td><td>근거 조항과 광고 표현의 관계 설명. 근거에 없는 요건을 만들지 않음</td></tr>
+<tr><td>missing_facts</td><td>기능성 심사 여부, 시험 대상·기간·조건 등 판단에 부족한 정보</td></tr>
+<tr><td>suggested_revision</td><td>선택적 수정 제안. 수정하면 법적 안전성이 보장된다고 설명하지 않음</td></tr>
+</tbody></table></div>
+<p>생성 모델에 광고와 문서 내용은 분석 대상 데이터로 전달합니다. 문서 안의 지시를 실행하지 않고 웹 접근·SQL·사용자 관리 도구를 제공하지 않습니다. 출력은 구조화해 파싱하고 인용 ID·원문 위치를 서버에서 확인합니다. 스키마 오류나 인용 불일치가 있으면 검토 결과를 보류하고 확인된 근거만 제공합니다. 허용 사례·부정문·인용문·조건문을 함께 평가하며, 단순히 금지 표현과 의미가 비슷하다는 이유로 모두 위험 처리하지 않습니다. 이미지·배치·음성·전체 상세페이지의 인상은 초기 텍스트 검사 범위에 포함되지 않습니다.</p>
+<h3>11. 배포와 장애 격리</h3>
+<div class="table-scroll"><table><thead><tr><th>구성 요소</th><th>초기 운영 방안</th></tr></thead><tbody>
+<tr><td>Streamlit</td><td>현재 Community Cloud 유지. 기존 requirements에 Torch·FlagEmbedding을 추가하지 않음</td></tr>
+<tr><td>규정 검색 API</td><td>현재 FastAPI 코드베이스에 추가하되 별도 서버에서 운영. Render는 후보이며 필수 아님</td></tr>
+<tr><td>임베딩</td><td>관리형 임베딩 API 우선 평가. 초기에는 자체 모델 프로세스·GPU 서버를 운영하지 않음</td></tr>
+<tr><td>본문 추출·적재</td><td>관리자 수동 배치. 사용자 요청 중 PDF 다운로드·OCR·재임베딩 금지</td></tr>
+<tr><td>PostgreSQL</td><td>기존 Supabase의 앱 전용 테이블. 초기 정확 검색 후 필요 시 벡터 인덱스</td></tr>
+<tr><td>생성 LLM</td><td>외부 API 전송 허용 확인 완료. 검색·인용 평가를 통과한 후 관리형 생성 API 연결</td></tr>
+</tbody></table></div>
+<p>Community Cloud는 자원 한도가 있는 공유 실행 환경입니다. 화면에서 모델을 로딩하지 않고 서버에서 관리형 API를 호출하는 선택은 이 제약과 초기 운영 부담을 고려한 설계 판단입니다. 자체 운영은 실제 품질·지연·사용량에서 전환 필요성이 확인될 때 검토합니다. <a href="https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app">Streamlit 앱 운영 문서</a></p>
+<p>API 키는 FastAPI 서버의 환경 변수·Secrets에만 보관합니다. 브라우저에 직접 모델 API 키를 전달하지 않습니다. 생성 단계에는 필요한 광고 문장·제품 정보·검색된 근거만 보내고 불필요한 계정 정보나 내부 원장을 함께 전송하지 않습니다. 월 예산과 호출 한도를 정하고 실제 사용량으로 비용을 확인합니다. 외부 전송 허용을 무제한 호출로 해석하지 않습니다.</p>
+<p>초기 제안 목표는 외부 API 왕복을 포함한 근거 검색 p95 5초 이내, 요청 전체 제한 시간 20초입니다. 이는 보장 수치가 아닙니다. 1·5·10 동시 사용자, 최초 로딩, DB 장애·모델 장애로 검증합니다. 타임아웃을 무제한 재시도하지 않고 사용자에게 재시도를 안내합니다. 비용은 서버 가동 시간, Supabase 자원·저장량, 월 요청 수와 모델 사용량으로 산정한 뒤 호스팅을 선택합니다.</p>
+<h3>12. 평가와 도입 순서</h3>
+<p>평가 문항 초안: <a href="reference/regulation_eval_cases.jsonl">regulation_eval_cases.jsonl</a>. 실제 법률 검토를 거친 정답이 아니므로 모두 draft이며, 아직 검색 정확도 수치를 산출할 수 없습니다. 원문 적재 후 담당자가 버전별 provision ID에 관련성 정답과 검색 금지 ID를 부여하고 approved로 바꿉니다. 정답은 &#x27;위반 여부&#x27;가 아닌 &#x27;찾아야 할 근거&#x27;입니다. 무관 문장도 광범위한 일반 조항과 관련될 수 있어 근거 없음 정답 역시 담당자 검수가 필요합니다.</p>
+<div class="table-scroll"><table><thead><tr><th>단계</th><th>작업</th><th>완료 기준</th></tr></thead><tbody>
+<tr><td>1</td><td>국내 세 제품군·외부 전송 허용 조건 반영, 담당 검수자와 API 제공 방식 선정</td><td>제품군과 전송 허용은 확정. 문서 승인 책임자·제공업체·모델·예산은 선정 필요</td></tr>
+<tr><td>2</td><td>출처 후보의 원문 확보·청킹·적용일 검수</td><td>출처·위치·해시·기간 누락 0건, 예외와 표 대조 완료</td></tr>
+<tr><td>3</td><td>세 제품군 각 30개 이상, 총 100개 이상의 관련 조항 라벨 작성</td><td>일반·변형·부정·조건·제품군 혼동·개정 전후를 포함한 승인 문항</td></tr>
+<tr><td>4</td><td>어휘/관리형 임베딩/BGE-M3/하이브리드 오프라인 비교</td><td>제품군별 Recall·MRR·지연과 호출·재임베딩 비용 측정</td></tr>
+<tr><td>5</td><td>Supabase 스테이징에 새 구조·검색 RPC 구현</td><td>날짜·검수·권한 필터 통과, 운영 DB 변경 전 재현 가능한 migration</td></tr>
+<tr><td>6</td><td>FastAPI와 Streamlit에 근거 검색 연결</td><td>인증·호출 제한·오류 격리·원문 링크와 위치 확인</td></tr>
+<tr><td>7</td><td>사내 파일럿 후 생성 모델 검토</td><td>실제 누락 유형을 보완한 뒤 인용 검증과 사람 검토 절차 적용</td></tr>
+</tbody></table></div>
+<p>초기 검색 목표 제안: 승인된 관련성 문항 Recall@10 ≥ 0.90, MRR@10 ≥ 0.80, 다른 국가·제품군·기간·미승인 근거의 반환 0건입니다. 담당자가 검수한 최소 100문항의 별도 평가 묶음에서 전체와 각 제품군을 각각 확인합니다. 하나의 제품군이 목표를 넘겨도 다른 제품군의 부족한 품질을 상쇄하지 않습니다. 이 수치는 현재 측정 결과가 아니며, 소수의 예시 문항으로 통과를 주장하지 않습니다. 모델·청킹·질의 확장·임계값 조정에 사용한 문항과 최종 평가 문항을 분리합니다.</p>
+<p>추가 의존성 없이 실행하는 평가 도구:</p>
+<pre><code>.\.venv\Scripts\python.exe scripts/evaluate_regulation_retrieval.py `
+  --cases path/to/approved_cases.jsonl `
+  --results path/to/retrieval_results.jsonl `
+  --output path/to/metrics.json</code></pre>
+<p>정답 JSONL 한 줄에는 <code>case_id</code>, <code>category</code>, <code>judgment_status=approved</code>, <code>relevant_ids</code>, <code>forbidden_ids</code>가 필요합니다. <code>evaluation_type</code>이 scope 또는 generation_safety인 문항은 관련성 집계에서 제외하며 별도 검수합니다. 결과 JSONL 한 줄에는 같은 <code>case_id</code>, 순서대로 정렬한 <code>retrieved_ids</code>, <code>latency_ms</code>, <code>abstained</code>가 필요합니다. ID는 <code>source_key::source_version::provision_key</code>처럼 버전이 포함된 평가용 키를 사용합니다. 근거 없음 정답은 <code>relevant_ids=[]</code>, 아직 정답을 모르는 문항은 <code>null</code>로 구분합니다. 도구는 미승인 문항을 정답으로 사용하지 않으며 승인 문항의 결과 누락·중복·알 수 없는 문항 ID가 있으면 실패합니다. 전체와 제품군별 Recall@5/10, MRR@10, 근거 없음 보류 정확도, 금지 근거 반환율@10, 지연 p50/p95를 계산합니다. 이 도구는 모델 실행·임베딩 생성·법률 판단을 수행하지 않습니다. 금지 근거 지표는 라벨에 적힌 ID와 주 근거 상위 10개만 비교합니다. 실제 날짜·국가 필터와 연결된 예외 문맥의 적격성은 DB·API 통합 검증으로 별도 확인해야 합니다.</p>
+<p>가장 먼저 할 실제 개발은 <strong>공식 원문 확보와 관련 조항 정답 작성</strong>입니다. 검색 품질의 기준 없이 LLM·GPU·프레임워크부터 추가하면 모델이 틀린 이유를 구분하기 어렵습니다.</p></section></main></body></html>

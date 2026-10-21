@@ -1,0 +1,252 @@
+{
+  "status": "metadata_only_not_ingested",
+  "notice": "공식 게시 정보와 링크 후보입니다. 본문·시행 기간·최신성 검수 및 검색 승인 전이며 자동 적재용 데이터가 아닙니다.",
+  "sources": [
+    {
+      "source_key": "KR-COSMETICS-ACT",
+      "title": "화장품법",
+      "authority": "식품의약품안전처",
+      "source_kind": "statute",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1027656895",
+      "link_behavior": "dynamic_current_article",
+      "observed_version": "법률 제22113호",
+      "observed_header_effective_on": "2026-10-20",
+      "target_sections": [
+        "제13조",
+        "제14조"
+      ],
+      "review_status": "metadata_only",
+      "content_sha256": null,
+      "notes": "검색엔진 수집본과 현재 페이지의 버전이 달랐음. 조항별 시행일 및 부칙 확인 후 원문 스냅샷 필요. 머리 날짜를 모든 조항에 적용하지 않음.",
+      "observed_on": "2026-10-21",
+      "candidate_category_codes": [
+        "cosmetics"
+      ]
+    },
+    {
+      "source_key": "KR-COSMETICS-RULES",
+      "title": "화장품법 시행규칙",
+      "authority": "식품의약품안전처",
+      "source_kind": "rule",
+      "source_url": "https://www.law.go.kr/LSW/lumLsLinkPop.do?chrClsCd=010202&lspttninfSeq=123252",
+      "link_behavior": "dynamic_linked_article",
+      "observed_version": "총리령 제2109호",
+      "observed_header_effective_on": "2026-04-02",
+      "target_sections": [
+        "제22조",
+        "별표 5"
+      ],
+      "review_status": "metadata_only",
+      "content_sha256": null,
+      "notes": "제22조의 별표 5 참조를 확인함. 별표 원본의 각 행과 단서·예외는 별도 확보·검수 필요.",
+      "observed_on": "2026-10-21",
+      "candidate_category_codes": [
+        "cosmetics"
+      ]
+    },
+    {
+      "source_key": "KR-MFDS-COSMETICS-AD-GUIDE",
+      "title": "화장품 표시·광고 관리 지침(민원인안내서)",
+      "authority": "식품의약품안전처",
+      "source_kind": "guideline",
+      "source_url": "https://www.mfds.go.kr/brd/m_1060/view.do?seq=15700",
+      "download_url": "https://www.mfds.go.kr/brd/m_1060/down.do?brd_id=data0011&data_tp=A&file_seq=2&seq=15700",
+      "link_behavior": "publication_with_attachment",
+      "observed_version": "안내서-0086-07",
+      "published_on": "2025-08-14",
+      "review_status": "metadata_only",
+      "content_sha256": null,
+      "notes": "공식 게시일·등록번호·PDF 첨부 링크 확인. PDF 본문 추출과 페이지 대조 미수행. 후속 개정 유무를 적재 시 다시 확인. 법률과 구분해 표시.",
+      "observed_on": "2026-10-21",
+      "candidate_category_codes": [
+        "cosmetics"
+      ]
+    },
+    {
+      "source_key": "KR-FAIR-ADS-ACT",
+      "title": "표시ㆍ광고의 공정화에 관한 법률",
+      "authority": "공정거래위원회",
+      "source_kind": "statute",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1026818955",
+      "link_behavior": "dynamic_current_article",
+      "observed_version": "법률 제20712호",
+      "observed_header_effective_on": "2025-01-21",
+      "target_sections": [
+        "제3조"
+      ],
+      "review_status": "metadata_only",
+      "content_sha256": null,
+      "notes": "일반 표시광고 규정 후보. 특정 제품의 허용·금지 판정에는 해당 제품군 규정과 사실관계의 추가 확인 필요.",
+      "observed_on": "2026-10-21",
+      "candidate_category_codes": [
+        "cosmetics",
+        "food",
+        "health_functional_food"
+      ]
+    },
+    {
+      "source_key": "KR-FAIR-ADS-DECREE",
+      "title": "표시ㆍ광고의 공정화에 관한 법률 시행령",
+      "authority": "공정거래위원회",
+      "source_kind": "decree",
+      "source_url": "https://www.law.go.kr/LSW/lsInfoP.do?lsId=005361",
+      "link_behavior": "dynamic_current_law",
+      "observed_version": "대통령령 제36416호",
+      "observed_header_effective_on": "2026-07-01",
+      "target_sections": [
+        "제3조"
+      ],
+      "review_status": "metadata_only",
+      "content_sha256": null,
+      "notes": "법률과 시행령의 제목·출처를 혼동하지 않음. 본문과 관련 고시는 별도 검수 후 추가.",
+      "observed_on": "2026-10-21",
+      "candidate_category_codes": [
+        "cosmetics",
+        "food",
+        "health_functional_food"
+      ]
+    },
+    {
+      "source_key": "KR-FOOD-ADS-ACT",
+      "title": "식품 등의 표시ㆍ광고에 관한 법률",
+      "source_kind": "statute",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1029094361",
+      "link_behavior": "dynamic_current_article",
+      "observed_version": "법률 제20826호",
+      "observed_header_effective_on": "2025-09-19",
+      "target_sections": [
+        "제8조"
+      ],
+      "candidate_category_codes": [
+        "food",
+        "health_functional_food"
+      ],
+      "notes": "제8조 공식 조문 및 머리 정보 확인. 제품군별 세부 적용과 심의·예외·기능성 요건은 시행령·고시·제품 자료와 함께 검수.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    },
+    {
+      "source_key": "KR-FOOD-ADS-DECREE",
+      "title": "식품 등의 표시ㆍ광고에 관한 법률 시행령",
+      "source_kind": "decree",
+      "source_url": "https://www.law.go.kr/LSW/lsInfoP.do?lsId=013453",
+      "link_behavior": "dynamic_current_law",
+      "observed_version": "대통령령 제35734호",
+      "observed_header_effective_on": "2025-09-19",
+      "target_sections": [
+        "제3조",
+        "별표 1"
+      ],
+      "candidate_category_codes": [
+        "food",
+        "health_functional_food"
+      ],
+      "notes": "공식 페이지 머리 정보 및 제3조의 별표 1 참조 확인. 별표의 예외·단서와 조항별 시행일·경과조치는 원본 대조 필요.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    },
+    {
+      "source_key": "KR-MFDS-UNFAIR-FOOD-ADS",
+      "title": "식품등의 부당한 표시 또는 광고의 내용 기준",
+      "source_kind": "notice",
+      "source_url": "https://law.go.kr/LSW/admRulLsInfoP.do?admRulId=69549&efYd=0",
+      "link_behavior": "dynamic_current_notice",
+      "observed_version": "식품의약품안전처고시 제2025-79호",
+      "observed_header_effective_on": "2025-12-04",
+      "target_sections": [
+        "제2조",
+        "별표와 예외"
+      ],
+      "candidate_category_codes": [
+        "food",
+        "health_functional_food"
+      ],
+      "notes": "현재 고시 페이지 머리 정보 확인. 검색 결과의 과거 고시·행정예고와 혼동하지 않음. 본문과 별표 검수 전.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    },
+    {
+      "source_key": "KR-MFDS-FOOD-FUNCTIONAL-CLAIMS",
+      "title": "부당한 표시 또는 광고로 보지 아니하는 식품등의 기능성 표시 또는 광고에 관한 규정",
+      "source_kind": "notice",
+      "source_url": "https://law.go.kr/LSW/admRulLsInfoP.do?admRulId=75449&efYd=0",
+      "link_behavior": "dynamic_current_notice",
+      "observed_version": "식품의약품안전처고시 제2024-62호",
+      "observed_header_effective_on": "2025-01-01",
+      "target_sections": [
+        "적용범위",
+        "표시·광고 요건",
+        "부칙·경과조치"
+      ],
+      "candidate_category_codes": [
+        "food"
+      ],
+      "notes": "일반 식품의 기능성 표시 예외를 검수할 출처 후보. 허용 문구를 모든 제품에 무조건 적용하지 않으며 성분·함량·제조 시점 등 자료 확인 필요.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    },
+    {
+      "source_key": "KR-MFDS-HFF-LABELING",
+      "title": "건강기능식품의 표시기준",
+      "source_kind": "notice",
+      "source_url": "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000263562",
+      "link_behavior": "historical_version",
+      "observed_version": "식품의약품안전처고시 제2025-61호",
+      "observed_header_effective_on": "2025-08-29",
+      "version_role": "historical_candidate_needs_consolidation",
+      "target_sections": [
+        "기능성표시",
+        "영양·기능정보",
+        "부칙·경과조치"
+      ],
+      "candidate_category_codes": [
+        "health_functional_food"
+      ],
+      "notes": "공식 연혁 페이지의 버전 확인. 이후 개정과 조항별 시행일을 대조해 현재 기준일에 적용할 통합 조항을 구성해야 함. 현행 승인 완료 표시가 아님.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    },
+    {
+      "source_key": "KR-MFDS-HFF-LABELING",
+      "title": "건강기능식품의 표시기준",
+      "source_kind": "notice",
+      "source_url": "https://www.law.go.kr/LSW/admRulInfoP.do?admRulSeq=2100000285156&chrClsCd=010201",
+      "link_behavior": "published_future_version",
+      "observed_version": "식품의약품안전처고시 제2026-66호",
+      "observed_header_effective_on": "2028-01-01",
+      "version_role": "future_published_candidate",
+      "target_sections": [
+        "개정 조항",
+        "부칙·경과조치"
+      ],
+      "candidate_category_codes": [
+        "health_functional_food"
+      ],
+      "notes": "2026년 공포됐지만 페이지 머리에는 2028-01-01 시행이 표시됨. 현재 검사에 그대로 사용하지 않고 개별 조항·경과조치 검수 후 기간별 관리.",
+      "authority": "식품의약품안전처",
+      "observed_on": "2026-10-22",
+      "review_status": "metadata_only",
+      "content_sha256": null
+    }
+  ],
+  "last_updated_on": "2026-10-22",
+  "confirmed_scope": {
+    "jurisdiction": "KR",
+    "categories": [
+      "cosmetics",
+      "food",
+      "health_functional_food"
+    ],
+    "confirmed_on": "2026-10-22"
+  }
+}

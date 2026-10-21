@@ -1,17 +1,27 @@
 {
   "document_version": "1.0",
   "basis_date_kst": "2026-10-21",
+  "regulation_design_updated_kst": "2026-10-22",
+  "source_hash_format": "SHA-256 of UTF-8 text without BOM, with CRLF/CR normalized to LF",
   "runtime_openapi": "3.1.0",
   "runtime_path_count": 6,
   "source_sha256": {
-    "keyword_app2_fixed270.py": "85241f5995d90eab1db3072886bf2981dddc434c4c4455d26218b7785d910efa",
-    "matching_engine.py": "36afe8ce6323d2e0ebc4ae44ff21ddf291ff52a6b6dd9b4e292f9fdff94c1e4f",
+    "keyword_app2_fixed270.py": "bb16d95c349dfe80185de0c35bd992adb250fdc4da1733ee8095709fdd864ca8",
+    "matching_engine.py": "847aba6801d8003b7b793525e5733c1ce561e20c9140e942b6b7227b3fc0b138",
     "api.py": "129d494f579a2a7d411dc792abab52c5482e123eb6f50ee787c13996b60a42e8",
-    "service.py": "fbf2b98f087d8bc3f3fff3f22a23d605389633fe2e5496da750ea21a3c51f8ef",
-    "repository.py": "0ff6f6befc28a176dc94bcd613f61aed3c8eb59bd8662d3ab50f0c3177ce8afc",
+    "service.py": "0d54c1ba7c79c5ea0decd61063bc3f52e7f9a321f01caa134be5e2f333a6cef2",
+    "repository.py": "cd57f729e0fb6ba22760454c58b0f0187b3fc2eab7ad4e2caa1e5d147bff3628",
     "app_config.py": "50f3d81c82fe0c3ce6a97a0811d8fb9537d20b960ad717cc3f6429665a637261",
     "supabase/schema.sql": "de3c2f7ed9b07052c32f9b071ad4eef0c7e7394c7f0535287f80da292a308813",
     "supabase/fix_reset_counts.sql": "d3606137d6437ddb077c16cfa22bd9ff14878edc05c36cb9dd973f763f3423fb",
-    "render.yaml": "0168a5256867aa125659d799e389338b5309fc2ed03b5b30f89b1133994dd0d9"
+    "render.yaml": "0168a5256867aa125659d799e389338b5309fc2ed03b5b30f89b1133994dd0d9",
+    "scripts/evaluate_regulation_retrieval.py": "912dfbda4108d2b6344edebd8742a6411319430cab9b82e55f8983c8f9eed1f1",
+    "data/regulations/source_manifest.json": "32c866a5b1e803fb36366c8c84c099691fe82b0fcceb07a16881a4ea7e15c88a"
+  },
+  "proposed_artifacts_sha256": {
+    "07_regulation_rag_design.md": "f9584c70ecee0e3fc845210c4c5fc5a5489fedffdd51935b40ac718f60f70551",
+    "reference/regulation_sources.json": "d87f4c6572e881f4922cc7a026db25d0cddf277bc76c30cebccce285d13d6a62",
+    "reference/regulation_openapi.proposed.json": "4d896d4347256a944c388ca0331493f6bd923fdbaaf6e6b677a3b3b65e73950a",
+    "reference/regulation_eval_cases.jsonl": "0e9fc6def065f7489e5d7e12b5c1d2ce1a7541fa01d66818145769b7436b2365"
   }
 }

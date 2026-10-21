@@ -111,9 +111,15 @@ render.yaml에는 keyword-risk-ui와 keyword-risk-api Web Service가 정의돼 �
 | test_existing_streamlit_csv_screen_and_member_analysis | 기존 CSV 화면과 분석, 비관리자 차단 | 임시 CSV |
 | test_cloud_requires_login_before_data_access | 로그인 전 DB 조회 차단 | 가짜 연결 |
 | test_cloud_member_uses_transaction_and_cannot_reset | member 분석과 초기화 차단 | 가짜 저장소 |
+| test_user_management_rechecks_admin_and_prevents_self_demotion | 역할 관리 권한 재검증, 자기 권한 해제 차단 | 가짜 HTTP |
+| test_user_management_rest_uses_server_key_and_updates_only_app_role | Auth Admin 헤더와 역할 변경 요청 | 가짜 HTTP |
+| test_admin_can_assign_missing_role_from_screen | 관리자 역할 지정 GUI | 가짜 저장소 |
+| test_admin_common_rules_save_and_apply_on_next_analysis | 관리자 폼 저장, 쉼표 보존과 다음 분석 적용 | 가짜 저장소 |
+| test_captured_results_keep_positions_duplicates_and_overlap_rules | 이전 커밋에서 캡처한 27개 사례 비교 | 없음 |
+| test_common_rules_preserve_run_options_and_empty_list_fallback | 설정 스냅샷 불변성과 기존 빈 목록 처리 | 가짜 저장소 |
 | test_live_reset | 실제 HTTP 누적 초기화와 원장 보존 | 실제 초기화, 명시적 opt in 필요 |
 
-기본 테스트는 8개를 실행하고 live reset 1개는 건너뜁니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.
+기본 테스트는 14개를 실행하고 live reset 1개는 건너뜁니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

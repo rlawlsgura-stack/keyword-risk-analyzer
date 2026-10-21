@@ -14,7 +14,7 @@ from streamlit.testing.v1 import AppTest
 import api
 from matching_engine import DB_COLS, MatchingConfig, find_matches_nlp
 from repository import ConflictError, SupabaseRepository
-from service import MODES, analyze
+from service import MODES, analyze, match_text
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -205,6 +205,11 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual([tab.label for tab in app.tabs], ['분석하기', '리포트(주간 Top N)'])
             self.assertEqual(len(app.file_uploader), 0)
             self.assertFalse(any(b.key == 'user_admin_load' for b in app.button))
+            self.assertFalse(any(b.key in {'btn_save_suffix_extra', 'btn_save_ignored_syms',
+                                          'btn_reset_suffix_extra', 'btn_reset_ignored_syms'} for b in app.button))
+            self.assertFalse(any((area.key or '').startswith(('ui_suffix_extra_editor', 'ui_ignored_syms_editor'))
+                                 for area in app.text_area))
+            self.assertIn('적용 중인 규칙 요약', [expander.label for expander in app.expander])
 
     def test_user_management_rechecks_admin_and_prevents_self_demotion(self):
         admin_id, target_id = str(uuid4()), str(uuid4())
@@ -301,6 +306,48 @@ class IntegrationTests(unittest.TestCase):
             save.assert_called_once_with('admin-token', target_id, 'member', None)
             self.assertTrue(any('역할을 저장했습니다' in message.value for message in app.success))
             self.assertEqual(app.session_state['managed_users'][1]['role'], 'member')
+
+    def test_admin_common_rules_save_and_apply_on_next_analysis(self):
+        settings = {}
+        actor = {'id': str(uuid4()), 'email': 'admin@example.test',
+                 'app_metadata': {'role': 'admin'}}
+        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
+                                    'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.SupabaseRepository.user', return_value=actor), \
+             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
+             patch('repository.SupabaseRepository.load_setting', side_effect=lambda name, default: settings.get(name, default)), \
+             patch('repository.SupabaseRepository.save_setting', side_effect=settings.__setitem__) as save, \
+             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
+             patch('repository.SupabaseRepository.record_analysis'), \
+             patch('service.match_text', wraps=match_text) as match:
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py'))
+            app.session_state['auth_session'] = {'access_token': 'admin-token', 'expires_at': 9999999999}
+            app.run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertFalse(any((area.key or '').startswith('ui_ignored_syms_editor')
+                                 for area in app.tabs[0].text_area))
+            self.assertTrue(any((area.key or '').startswith('ui_ignored_syms_editor')
+                                for area in app.tabs[2].text_area))
+            app.text_area(key='ui_ignored_syms_editor_0').input('/\n&\n,\n*')
+            app.button(key='btn_save_ignored_syms').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            save.assert_called_once_with('ignored_special_symbols', {'symbols': ['/', '&', ',', '*']})
+            app.text_area(key='ui_ignored_syms_editor_1').input('//')
+            app.button(key='btn_save_ignored_syms').click().run(timeout=30)
+            self.assertEqual(save.call_count, 1)
+            self.assertTrue(any('문자 하나' in error.value for error in app.error))
+            app.text_area(key='ui_suffix_extra_editor_1').input('테스트말\n에는')
+            app.button(key='btn_save_suffix_extra').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertEqual(settings['ko_suffix_whitelist'], {'extra_suffixes': ['테스트말']})
+            app.button(key='btn_analyze').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            config = match.call_args.kwargs['config']
+            self.assertEqual(config.mode, 'exact')
+            self.assertTrue(config.exact_relaxed)
+            self.assertIn('테스트말', config.ko_suffixes)
+            self.assertIn(',', config.ignored_symbols)
 
 
 if __name__ == '__main__':

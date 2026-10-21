@@ -1,16 +1,26 @@
 """The same matching and post-match filters for Streamlit and FastAPI."""
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import json
 from uuid import uuid4
 
-from matching_engine import MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
+from matching_engine import MATCH_MODES as MODES, MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
 
-MODES = {'exact': '정확 일치', 'similar': '유사 키워드 포함',
-         'partial': '부분 문자열(최소 글자수)'}
+def load_matching_config(repository, config):
+    """Add saved common rules to a frozen per-analysis configuration."""
+    symbols = repository.load_setting('ignored_special_symbols', None)
+    suffixes = repository.load_setting('ko_suffix_whitelist', {'extra_suffixes': []})
+    ignored_symbols = MatchingConfig().ignored_symbols
+    if symbols is not None:
+        # Preserve the existing app/API fallback for an empty saved list.
+        ignored_symbols = tuple(symbols.get('symbols', [])) or ignored_symbols
+    return replace(config,
+                   ignored_symbols=ignored_symbols,
+                   ko_suffixes=frozenset(_KO_SUFFIX_WHITELIST) |
+                               frozenset(suffixes.get('extra_suffixes', [])))
 
 
-def match_text(text, keywords, *, match_mode='유사 키워드 포함', exact_relaxed=False,
+def match_text(text, keywords, *, match_mode=None, exact_relaxed=None,
                config=None, categories=(), risks=(), **options):
     matches = find_matches_nlp(text, keywords, match_mode=match_mode,
                                exact_relaxed=exact_relaxed, config=config, **options)
@@ -33,22 +43,14 @@ def analyze(repository, request, actor):
         if previous is not None:
             return previous
     keywords = repository.load_keywords()
-    symbols = repository.load_setting('ignored_special_symbols', None)
-    suffixes = repository.load_setting('ko_suffix_whitelist', {'extra_suffixes': []})
-    config = MatchingConfig(ko_suffixes=frozenset(_KO_SUFFIX_WHITELIST) |
-                             frozenset(suffixes.get('extra_suffixes', [])))
-    if symbols is not None:
-        # Retain the app's empty-list fallback behavior.
-        config = MatchingConfig(ignored_symbols=tuple(symbols.get('symbols', [])) or
-                                  MatchingConfig().ignored_symbols,
-                                ko_suffixes=config.ko_suffixes)
+    config = load_matching_config(repository, MatchingConfig(
+        mode=payload.get('mode', 'similar'),
+        exact_relaxed=payload.get('exact_relaxed', False),
+        partial_min_len=payload.get('partial_min_len', 2),
+        similar_reverse_single=payload.get('similar_reverse_single', True),
+        similar_reverse_any=payload.get('similar_reverse_any', False)))
     matches = match_text(payload['text'], keywords, config=config,
-                         match_mode=MODES[payload.get('mode', 'similar')],
-                         exact_relaxed=payload.get('exact_relaxed', False),
-                         categories=payload.get('categories', []), risks=payload.get('risks', []),
-                         partial_min_len=payload.get('partial_min_len', 2),
-                         similar_reverse_single=payload.get('similar_reverse_single', True),
-                         similar_reverse_any=payload.get('similar_reverse_any', False))
+                         categories=payload.get('categories', []), risks=payload.get('risks', []))
     result = {'analysis_id': analysis_id, 'matches': [asdict(m) for m in matches],
               'unique_keywords': sorted({str(m.kwd_no) for m in matches if m.kwd_no}),
               'keyword_revision': keywords.attrs.get('revision'),

@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import List, Tuple, Set, Optional
 import pandas as pd
 from matching_engine import (
-    DB_COLS, Match2, MatchingConfig,
+    DB_COLS, Match2, MatchingConfig, MATCH_MODES,
     _KO_SUFFIX_WHITELIST, _DEFAULT_IGNORED_SPECIAL_SYMBOLS,
     find_matches as _engine_find_matches,
     find_matches_nlp as _engine_find_matches_nlp,
@@ -45,7 +45,7 @@ from xml.etree import ElementTree as ET
 from pathlib import Path
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
-from service import match_text
+from service import load_matching_config, match_text
 
 try:
     configure(dict(st.secrets))
@@ -890,6 +890,12 @@ def _matching_config() -> MatchingConfig:
     return MatchingConfig(
         ignored_symbols=tuple(get_ignored_special_symbols()),
         ko_suffixes=frozenset(get_ko_suffix_whitelist()),
+        mode={label: mode for mode, label in MATCH_MODES.items()}.get(
+            st.session_state.get('match_mode'), 'exact'),
+        exact_relaxed=bool(st.session_state.get('exact_relaxed', True)),
+        partial_min_len=int(st.session_state.get('partial_min_len', 2) or 2),
+        similar_reverse_single=bool(st.session_state.get('similar_reverse_single', True)),
+        similar_reverse_any=bool(st.session_state.get('similar_reverse_any', False)),
     )
 
 
@@ -1554,6 +1560,80 @@ if not cloud_enabled() and is_admin():
         st.session_state.kw_df = load_db(Path(new_path))
         scan_existing_counters()
 
+MATCH_MODE_LABELS = {
+    MATCH_MODES['exact']: '등록 표현 찾기',
+    MATCH_MODES['similar']: '단어·변형 규칙으로 찾기',
+    MATCH_MODES['partial']: '키워드 일부로 찾기 — 탐색용',
+}
+MATCH_MODE_HELP = {
+    MATCH_MODES['exact']: '문장 안에서 등록된 표현을 찾습니다. 다른 단어 안에 포함된 표현도 검출될 수 있습니다.',
+    MATCH_MODES['similar']: '단어·조사·어미·일부 합성어와 영어 변화형 규칙으로 찾습니다. 의미를 판단하는 AI 검색은 아닙니다.',
+    MATCH_MODES['partial']: '등록 키워드의 일부 글자가 일치해도 찾습니다. 최소 글자수가 짧으면 관련 없는 결과가 늘어날 수 있습니다.',
+}
+
+
+def render_matching_rules_summary(config):
+    with st.expander('적용 중인 규칙 요약', expanded=False):
+        st.write('검사 방식: ' + MATCH_MODE_LABELS[MATCH_MODES[config.mode]])
+        st.write('띄어쓰기·기호 차이 허용: ' + ('켜짐' if config.exact_relaxed else '꺼짐'))
+        st.caption('영문 대소문자는 기본적으로 구분하지 않습니다. 표기 차이 처리의 세부 동작은 검사 방식에 따라 다릅니다.')
+        extras = config.ko_suffixes - _KO_SUFFIX_WHITELIST
+        st.write(f'뒤에 붙는 말 허용 목록: 기본 {len(_KO_SUFFIX_WHITELIST)}개 + 관리자 추가 {len(extras)}개')
+        st.caption('단어·변형 규칙 검사에서 참조합니다. 합성어 검출 규칙은 별도로 적용됩니다.')
+        st.write('비교 시 처리할 기호: ' + (' · '.join(config.ignored_symbols) or '없음'))
+        st.caption('목록은 관리자 공통 설정입니다. 분석 실행 시 저장된 최신 규칙을 다시 불러옵니다.')
+
+
+def render_common_matching_rules():
+    _require_admin()
+    st.caption('저장한 규칙은 이후 분석부터 모든 사용자에게 적용됩니다. 이번 분석 옵션은 분석하기 탭에서 선택합니다.')
+    if message := st.session_state.pop('matching_rules_notice', None):
+        st.success(message)
+    version = st.session_state.get('matching_rules_editor_version', 0)
+
+    with st.expander('키워드 뒤에 붙는 말 허용 목록', expanded=False):
+        st.caption('예: 여드름 + 에는 → 여드름 검출. 기본 목록과 추가 목록을 합쳐 사용하며, 별도 합성어 규칙도 유지됩니다.')
+        st.write('기본 목록: ' + ', '.join(sorted(_KO_SUFFIX_WHITELIST)))
+        with st.form('common_suffix_rules'):
+            raw = st.text_area('추가로 허용할 말 — 한 줄에 하나 또는 쉼표로 구분',
+                               value='\n'.join(st.session_state.get('ko_suffix_whitelist_extra', [])),
+                               key=f'ui_suffix_extra_editor_{version}')
+            save = st.form_submit_button('허용 목록 저장', key='btn_save_suffix_extra')
+            reset = st.form_submit_button('추가 항목 모두 제거', key='btn_reset_suffix_extra')
+        if save or reset:
+            extra = [] if reset else list(dict.fromkeys(
+                value.strip() for value in re.split(r'[\n,]+', raw)
+                if value.strip() and value.strip() not in _KO_SUFFIX_WHITELIST))
+            if save_suffix_whitelist_config(extra):
+                st.session_state.ko_suffix_whitelist_extra = extra
+                st.session_state.matching_rules_editor_version = version + 1
+                st.session_state.matching_rules_notice = '허용 목록을 저장했습니다. 이후 분석부터 공통 적용됩니다.'
+                st.rerun()
+            st.error('저장하지 못했습니다. 연결과 권한을 확인하세요.')
+
+    with st.expander('띄어쓰기·기호 처리 규칙', expanded=False):
+        st.caption('표기 차이 허용 옵션에서 사용하는 기호입니다. 공백 치환 외에 기호를 건너뛰어 연결 비교하는 기존 경로도 유지됩니다.')
+        st.caption('기호는 한 줄에 하나씩 입력하세요. 쉼표(,)도 한 줄에 그대로 입력합니다. 목록을 비우면 기존 기본값 / & , *가 적용됩니다.')
+        with st.form('common_symbol_rules'):
+            raw_symbols = st.text_area('비교 시 처리할 기호 — 한 줄에 하나',
+                                       value='\n'.join(get_ignored_special_symbols()),
+                                       key=f'ui_ignored_syms_editor_{version}')
+            save = st.form_submit_button('기호 목록 저장', key='btn_save_ignored_syms')
+            reset = st.form_submit_button('기본 기호로 복원', key='btn_reset_ignored_syms')
+        if save or reset:
+            symbols = (_DEFAULT_IGNORED_SPECIAL_SYMBOLS.copy() if reset else
+                       list(dict.fromkeys(line.strip() for line in raw_symbols.splitlines() if line.strip())))
+            if any(len(symbol) != 1 for symbol in symbols):
+                st.error('각 줄에는 문자 하나만 입력하세요. 저장하지 않았습니다.')
+            elif save_ignored_special_symbols_config(symbols):
+                st.session_state.ignored_special_symbols = symbols
+                st.session_state.matching_rules_editor_version = version + 1
+                st.session_state.matching_rules_notice = '기호 목록을 저장했습니다. 이후 분석부터 공통 적용됩니다.'
+                st.rerun()
+            else:
+                st.error('저장하지 못했습니다. 연결과 권한을 확인하세요.')
+
+
 def render_user_management():
     """Load account data only on demand and keep it in this admin's session."""
     st.subheader('사용자 관리')
@@ -1646,226 +1726,25 @@ with tab1:
             pre_risks = st.multiselect("리스크 등급", options=db_risks, key="pre_risks")
         with cf3:
             match_mode = st.radio(
-                "매칭 조건",
-                ["정확 일치", "유사 키워드 포함", "부분 문자열(최소 글자수)"],
-                index=0,
-                key="match_mode",
+                "키워드 찾는 방식",
+                list(MATCH_MODE_LABELS), index=0, key="match_mode",
+                format_func=lambda value: MATCH_MODE_LABELS[value],
             )
-            # 매칭 조건별 말풍선 형태 설명 (마우스 오버 시 표시)
-            st.markdown(
-                """
-
-<style>
-.tooltip-mc { position: relative; display: inline-block; margin-right: 12px; cursor: help; }
-.tooltip-mc:hover { z-index: 10000; }
-.tooltip-mc .tooltip-mc-text {
-    display: none;
-    opacity: 0;
-    pointer-events: none;
-    width: 320px;
-    background-color: #333;
-    color: #fff;
-    text-align: left;
-    border-radius: 4px;
-    padding: 8px 10px;
-    position: absolute;
-    z-index: 9999;
-    bottom: 125%;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 11px;
-    line-height: 1.4;
-}
-.tooltip-mc .tooltip-mc-text::after {
-    content: "";
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    margin-left: -5px;
-    border-width: 5px;
-    border-style: solid;
-    border-color: #333 transparent transparent transparent;
-}
-.tooltip-mc:hover > .tooltip-mc-text { display: block; opacity: 1; pointer-events: auto; }
-</style>
-
-<div style="font-size: 12px; margin-top: 4px; margin-bottom: 4px;">
-  <span style="opacity:0.8;">매칭 조건 도움말:</span>
-  <span class="tooltip-mc">
-    <b>정확 일치</b>
-    <span class="tooltip-mc-text">
-      DB에 등록된 문자열을 거의 그대로 썼을 때만 잡는, 가장 엄격한 모드<br>
-      예) 키워드: Skin looked more even-toned<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;Skin looked more even-toned in 4 weeks → 매칭
-    </span>
-  </span>
-  <span class="tooltip-mc">
-    <b>유사 키워드 포함</b>
-    <span class="tooltip-mc-text">
-      정확 일치 케이스를 대부분 커버하면서, 실제 문장에서 자주 생기는 조사/어미, 합성어, 굴절형까지 더 넓게 잡는 모드<br>
-      예) 키워드: 미세바늘<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;미세바늘시술은 전문의 상담 후 → 매칭
-    </span>
-  </span>
-  <span class="tooltip-mc">
-    <b>부분 문자열(최소 글자수)</b>
-    <span class="tooltip-mc-text">
-      키워드의 일부분만 N글자 이상 일치해도 매칭하는 탐색용 모드<br>
-      (N은 사용자 지정: 2자 / 3자 / 4자 등)<br>
-      예) 키워드: 안티에이징, N=2<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;에이징 케어 크림 → 매칭<br>
-      예) 키워드: 안티에이징, N=4<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;에이 크림 → 미매칭
-    </span>
-  </span>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
-            # 부분 문자열 모드에서 최소 글자수 설정 (기본 2자 이상)
-            if match_mode == "부분 문자열(최소 글자수)":
-                st.number_input(
-                    "부분 문자열 최소 글자수",
-                    min_value=2,
-                    max_value=20,
-                    value=int(st.session_state.get("partial_min_len", 2) or 2),
-                    step=1,
-                    key="partial_min_len",
-                )
-            exact_relaxed = st.checkbox("(괄호 제거·공백 정규화·영문 대소문자 무시)", value=True, key="exact_relaxed")
-            if match_mode == "유사 키워드 포함":
-                st.checkbox("단어 1개 입력 시 역매칭(키워드 내 포함)", value=True, key="similar_reverse_single", help="입력 텍스트가 한 단어(예: spot)만 있을 때, 해당 단어가 포함된(토큰/합성어 포함) 키워드들을 유사 모드에서도 검출합니다.")
-                st.checkbox("토큰 수 무관 역매칭(문장 내 토큰 → 키워드 내 포함)", value=False, key="similar_reverse_any", help="입력 텍스트가 한 문장이라도, 각 토큰(영문/숫자 중심)이 키워드 토큰/합성어에 포함되면 유사 모드에서 검출합니다. 오탐/검출량 증가 및 성능 저하 가능성이 있어 필요 시에만 켜세요.")
-            with st.expander("유사일치 조사/어미(접미사) 설정", expanded=False):
-                st.caption("유사일치에서 '키워드+조사/어미' 결합 형태(예: 여드름에는, 미세바늘이라)를 인식하기 위한 설정입니다. 기본 리스트 + 사용자 추가분이 합쳐져 적용됩니다.")
-
-                default_suffixes = sorted(set(_KO_SUFFIX_WHITELIST))
-                extra_suffixes = st.session_state.get("ko_suffix_whitelist_extra", []) or []
-                extra_suffixes = [str(x).strip() for x in extra_suffixes if str(x).strip()]
-
-                st.markdown("**사용자 추가 접미사(편집 가능)**")
-                raw = st.text_area(
-                    "쉼표 또는 줄바꿈으로 구분해서 입력하세요",
-                    value="\n".join(sorted(set(extra_suffixes))),
-                    height=110,
-                    key="ui_suffix_extra_editor",
-                )
-
-                c1, c2, c3 = st.columns([1,1,2])
-                with c1:
-                    if st.button("저장", key="btn_save_suffix_extra"):
-                        items = []
-                        for part in re.split(r"[\n,]+", raw or ""):
-                            part = str(part).strip()
-                            if part:
-                                items.append(part)
-                        # 중복 제거(순서 유지)
-                        seen = set()
-                        cleaned = []
-                        for x in items:
-                            if x not in seen and x not in _KO_SUFFIX_WHITELIST:
-                                seen.add(x)
-                                cleaned.append(x)
-                        st.session_state.ko_suffix_whitelist_extra = cleaned
-                        ok = save_suffix_whitelist_config(cleaned)
-                        if ok:
-                            st.success("접미사 리스트를 저장했습니다.")
-                        else:
-                            st.warning("저장에 실패했습니다. (쓰기 권한/경로를 확인해주세요)")
-
-                with c2:
-                    if st.button("초기화(추가분 제거)", key="btn_reset_suffix_extra"):
-                        st.session_state.ko_suffix_whitelist_extra = []
-                        ok = save_suffix_whitelist_config([])
-                        if ok:
-                            st.success("사용자 추가분을 초기화했습니다.")
-                        else:
-                            st.warning("저장에 실패했습니다. (쓰기 권한/경로를 확인해주세요)")
-
-                with c3:
-                    st.markdown("**기본 접미사(읽기 전용)**")
-                    st.code(", ".join(default_suffixes), language="text")
-
-                # ---- 후보 접미사 제안(승인형) ----
-                suggestions = st.session_state.get("suffix_suggestions", {}) or {}
-                if suggestions:
-                    st.markdown("---")
-                    st.markdown("**미검출 접미사 후보(승인형)**")
-                    st.caption("최근 분석에서 '키워드+접미사' 형태로 보이지만 리스트에 없어 매칭되지 않은 접미사 후보입니다. 필요할 때만 추가하세요.")
-                    # 자주 나온 것부터
-                    for suf, cnt in sorted(suggestions.items(), key=lambda x: (-x[1], x[0])):
-                        is_in_default = suf in _KO_SUFFIX_WHITELIST
-                        is_in_extra = suf in set(st.session_state.get("ko_suffix_whitelist_extra", []) or [])
-                        cols = st.columns([3,1,1])
-                        cols[0].write(f"`{suf}`  (발견 {cnt}회)")
-                        if is_in_default or is_in_extra:
-                            cols[1].write("✅ 적용중")
-                            cols[2].write("")
-                        else:
-                            if cols[1].button("추가", key=f"btn_add_suffix_{suf}"):
-                                cur = st.session_state.get("ko_suffix_whitelist_extra", []) or []
-                                cur = [str(x).strip() for x in cur if str(x).strip()]
-                                if suf not in cur and suf not in _KO_SUFFIX_WHITELIST:
-                                    cur.append(suf)
-                                st.session_state.ko_suffix_whitelist_extra = cur
-                                save_suffix_whitelist_config(cur)
-                                cols[2].write("추가됨")
-                else:
-                    st.caption("미검출 접미사 후보가 아직 없습니다. (분석을 실행하면 후보가 수집됩니다.)")
-
-
-            with st.expander("정규화: 무시할 특수기호 설정(공백으로 치환)", expanded=False):
-                st.caption("정규화 옵션이 켜져 있을 때(괄호 제거·공백 정규화·영문 대소문자 무시) 적용됩니다. 입력한 특수기호는 *문자 1개 단위*로만 저장되며, 텍스트/키워드에서 해당 문자를 공백으로 바꿔 매칭합니다.")
-                cur_syms = st.session_state.get("ignored_special_symbols", []) or []
-                raw_syms = st.text_area(
-                    "무시할 특수기호(한 줄에 하나 또는 쉼표로 구분)",
-                    value="\n".join(cur_syms),
-                    height=110,
-                    key="ui_ignored_syms_editor",
-                )
-
-                c_sy1, c_sy2, c_sy3 = st.columns([1,1,2])
-                with c_sy1:
-                    if st.button("저장", key="btn_save_ignored_syms"):
-                        items = []
-                        for part in re.split(r"[\n,]+", raw_syms or ""):
-                            part = str(part)
-                            part = part.strip()
-                            if not part:
-                                continue
-                            # 문자 1개 단위만 허용
-                            if len(part) != 1:
-                                st.warning(f"'{part}' 는 1글자 특수기호가 아니라서 제외했습니다.")
-                                continue
-                            items.append(part)
-                        # 중복 제거(순서 유지)
-                        seen = set()
-                        cleaned = []
-                        for ch in items:
-                            if ch not in seen:
-                                seen.add(ch)
-                                cleaned.append(ch)
-                        st.session_state.ignored_special_symbols = cleaned
-                        ok = save_ignored_special_symbols_config(cleaned)
-                        if ok:
-                            st.success("특수기호 리스트를 저장했습니다.")
-                        else:
-                            st.warning("저장에 실패했습니다. (쓰기 권한/경로를 확인해주세요)")
-
-                with c_sy2:
-                    if st.button("기본값 복원", key="btn_reset_ignored_syms"):
-                        st.session_state.ignored_special_symbols = _DEFAULT_IGNORED_SPECIAL_SYMBOLS.copy()
-                        ok = save_ignored_special_symbols_config(st.session_state.ignored_special_symbols)
-                        if ok:
-                            st.success("기본값으로 복원했습니다.")
-                        else:
-                            st.warning("저장에 실패했습니다. (쓰기 권한/경로를 확인해주세요)")
-
-                with c_sy3:
-                    st.markdown("**현재 적용중 특수기호(읽기)**")
-                    st.code(", ".join(st.session_state.get("ignored_special_symbols", []) or _DEFAULT_IGNORED_SPECIAL_SYMBOLS), language="text")
-
-
+            st.caption(MATCH_MODE_HELP[match_mode])
+            if match_mode == MATCH_MODES['partial']:
+                st.number_input("일치해야 하는 최소 글자수", min_value=2, max_value=20,
+                                value=int(st.session_state.get("partial_min_len", 2) or 2),
+                                step=1, key="partial_min_len")
+            st.checkbox("띄어쓰기·기호 차이 허용", value=True, key="exact_relaxed",
+                        help="등록 표현의 괄호 밖 내용, 공백·기호 차이를 고려하는 기존 규칙을 사용합니다. 영문 대소문자는 이 옵션과 관계없이 구분하지 않습니다.")
+            if match_mode == MATCH_MODES['similar']:
+                with st.expander("고급: 짧은 입력으로 관련 키워드 찾기", expanded=False):
+                    st.caption("예: spot 입력으로 dark spot을 찾습니다. 관련 없는 결과가 늘어날 수 있습니다.")
+                    st.checkbox("한 단어 입력으로 관련 키워드 찾기", value=True, key="similar_reverse_single")
+                    st.checkbox("문장 속 단어로도 관련 키워드 찾기", value=False, key="similar_reverse_any")
+            rules_summary = st.empty()
+            with rules_summary.container():
+                render_matching_rules_summary(_matching_config())
 
     if st.button("텍스트 분석하기", type="primary", key="btn_analyze"):
         try:
@@ -1877,23 +1756,19 @@ with tab1:
             if st.session_state.kw_df.empty:
                 st.info("키워드가 없습니다. 먼저 추가하세요.")
             else:
-                suffix_suggestions = {}
+                config = _matching_config()
                 if cloud_enabled():
-                    st.session_state.ko_suffix_whitelist_extra = load_suffix_whitelist_config()
-                    st.session_state.ignored_special_symbols = load_ignored_special_symbols_config()
+                    config = load_matching_config(SupabaseRepository(), config)
+                    st.session_state.ko_suffix_whitelist_extra = sorted(config.ko_suffixes - _KO_SUFFIX_WHITELIST)
+                    st.session_state.ignored_special_symbols = list(config.ignored_symbols)
+                with rules_summary.container():
+                    render_matching_rules_summary(config)
                 matches = match_text(
-                    text,
-                    st.session_state.kw_df,
-                    match_mode=st.session_state.match_mode,
-                    exact_relaxed=st.session_state.exact_relaxed,
-                    config=_matching_config(),
+                    text, st.session_state.kw_df, config=config,
                     categories=st.session_state.get('pre_cats', []),
                     risks=st.session_state.get('pre_risks', []),
-                    partial_min_len=int(st.session_state.get("partial_min_len", 2) or 2),
-                    similar_reverse_single=bool(st.session_state.get("similar_reverse_single", True)),
-                    similar_reverse_any=bool(st.session_state.get("similar_reverse_any", False)),
                 )
-                st.session_state.suffix_suggestions = suffix_suggestions
+                st.session_state.suffix_suggestions = {}
 
                 if matches:
                     out = pd.DataFrame(
@@ -2558,6 +2433,8 @@ with tab1:
 if is_admin():
     with admin_tabs[0]:
         st.subheader("키워드 관리 (편집/삭제/템플릿/업로드)")
+        with st.expander('공통 분석 규칙 — 모든 사용자에게 적용', expanded=False):
+            render_common_matching_rules()
 
         st.markdown("### 📂 키워드 업로드 (.csv / .xlsx)")
         col_u1, col_u2 = st.columns([2, 2])

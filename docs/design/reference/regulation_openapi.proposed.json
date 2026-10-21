@@ -1,0 +1,655 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Keyword Risk Analyzer — proposed regulation evidence search",
+    "version": "0.2.0-proposed",
+    "description": "설계 초안입니다. 현재 앱에는 이 경로가 등록되지 않았습니다. No inference provider, database migration, or deployment is activated by this contract."
+  },
+  "x-implementation-status": "proposed-not-implemented",
+  "security": [
+    {
+      "SupabaseUserBearer": []
+    }
+  ],
+  "paths": {
+    "/api/v1/regulations/search": {
+      "post": {
+        "operationId": "search_regulation_evidence",
+        "summary": "Find reviewed regulatory evidence for Korean cosmetics, food, or health functional food ad copy",
+        "description": "Requires a verified Supabase member/admin session. The existing shared API_ACCESS_TOKEN is not allowed. No raw text or response body is persisted by default.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              },
+              "example": {
+                "text": "이 크림은 피부 질환을 치료합니다.",
+                "jurisdiction": "KR",
+                "category": "cosmetics",
+                "as_of": "2026-10-22",
+                "top_k": 5
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Evidence search only; no legal verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/invalid user session or application role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Shared integration token is not authorized for this pilot endpoint.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid input, unsupported jurisdiction/category/date, or incomplete historical coverage.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ValidationError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-user limit exceeded. Retry-After is returned.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "description": "Seconds until retry."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "corpus_not_ready, model_unavailable, or storage_unavailable; never convert an outage to zero evidence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "SupabaseUserBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Supabase access token"
+      }
+    },
+    "schemas": {
+      "SearchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "jurisdiction",
+          "category",
+          "as_of"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "description": "Whitespace-only input is rejected; never silently truncate."
+          },
+          "jurisdiction": {
+            "type": "string",
+            "enum": [
+              "KR"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "cosmetics",
+              "food",
+              "health_functional_food"
+            ],
+            "description": "Select one product category explicitly. Do not infer it from ad text or merge all categories."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "description": "A reviewed date at or before today in Asia/Seoul. Unsupported corpus coverage is rejected with 422."
+          },
+          "top_k": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 5
+          }
+        }
+      },
+      "Locator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "article",
+          "paragraph",
+          "item",
+          "table_row",
+          "pdf_page",
+          "printed_page"
+        ],
+        "properties": {
+          "article": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paragraph": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "item": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "table_row": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pdf_page": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "printed_page": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Evidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "chunk_id",
+          "document_id",
+          "provision_key",
+          "source_key",
+          "source_version",
+          "title",
+          "authority",
+          "source_kind",
+          "source_url",
+          "citation_label",
+          "excerpt",
+          "locator",
+          "valid_from",
+          "valid_to",
+          "verified_at",
+          "review_due_on",
+          "content_sha256",
+          "rank",
+          "rrf_score",
+          "context_evidence",
+          "category_codes"
+        ],
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provision_key": {
+            "type": "string"
+          },
+          "source_key": {
+            "type": "string"
+          },
+          "source_version": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "authority": {
+            "type": "string"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "statute",
+              "decree",
+              "rule",
+              "notice",
+              "guideline"
+            ]
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://",
+            "description": "Verified official URL; never an arbitrary user-provided download target."
+          },
+          "citation_label": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locator": {
+            "$ref": "#/components/schemas/Locator"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date"
+          },
+          "valid_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "review_due_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "rrf_score": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Retrieval rank score, never a probability of violation."
+          },
+          "context_evidence": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/ContextEvidence"
+            },
+            "description": "Reviewed, date-eligible parent or exception text, each with its own provenance. Do not omit a required exception to fit the response; abstain if context cannot be included."
+          },
+          "category_codes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "cosmetics",
+                "food",
+                "health_functional_food"
+              ]
+            },
+            "description": "Reviewed applicability. Must include the selected category; common provisions may list several categories."
+          }
+        }
+      },
+      "SearchResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id",
+          "status",
+          "assessment_performed",
+          "jurisdiction",
+          "category",
+          "as_of",
+          "coverage",
+          "corpus_version",
+          "embedding_model",
+          "items",
+          "warnings",
+          "disclaimer"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "insufficient_evidence"
+            ]
+          },
+          "assessment_performed": {
+            "type": "boolean",
+            "const": false
+          },
+          "jurisdiction": {
+            "type": "string",
+            "const": "KR"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "cosmetics",
+              "food",
+              "health_functional_food"
+            ],
+            "description": "The selected request category."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date"
+          },
+          "coverage": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "partial"
+            ],
+            "description": "Scope of the approved corpus; does not certify all applicable law was considered."
+          },
+          "corpus_version": {
+            "type": "string"
+          },
+          "embedding_model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "revision",
+              "preprocessing_version",
+              "profile_id",
+              "provider",
+              "dimensions"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "revision": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Null when the provider does not expose a pinned revision; never imply an immutable revision in that case."
+              },
+              "preprocessing_version": {
+                "type": "string"
+              },
+              "profile_id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "dimensions": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "disclaimer": {
+            "type": "string",
+            "description": "Related evidence is not an approval or final legal conclusion."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "detail",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "loc",
+                "msg",
+                "type"
+              ],
+              "properties": {
+                "loc": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "integer"
+                    ]
+                  }
+                },
+                "msg": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ContextEvidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "chunk_id",
+          "document_id",
+          "provision_key",
+          "source_key",
+          "source_version",
+          "title",
+          "authority",
+          "source_kind",
+          "source_url",
+          "citation_label",
+          "excerpt",
+          "locator",
+          "valid_from",
+          "valid_to",
+          "verified_at",
+          "review_due_on",
+          "content_sha256",
+          "category_codes"
+        ],
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "provision_key": {
+            "type": "string"
+          },
+          "source_key": {
+            "type": "string"
+          },
+          "source_version": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "authority": {
+            "type": "string"
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "statute",
+              "decree",
+              "rule",
+              "notice",
+              "guideline"
+            ]
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://",
+            "description": "Verified official URL; never an arbitrary user-provided download target."
+          },
+          "citation_label": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locator": {
+            "$ref": "#/components/schemas/Locator"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date"
+          },
+          "valid_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "verified_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "review_due_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "content_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "category_codes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "cosmetics",
+                "food",
+                "health_functional_food"
+              ]
+            },
+            "description": "Reviewed applicability. Must include the selected category; common provisions may list several categories."
+          }
+        }
+      }
+    }
+  },
+  "x-confirmed-decisions": {
+    "confirmed_on": "2026-10-22",
+    "jurisdiction": "KR",
+    "categories": [
+      "cosmetics",
+      "food",
+      "health_functional_food"
+    ],
+    "external_ai_api_allowed": true,
+    "provider_selected": false
+  }
+}

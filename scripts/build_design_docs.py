@@ -66,14 +66,27 @@ def diagrams():
     body = svg_text(28, 38, '현재 화면의 정보 구조', 23, weight=700)
     panels = [
         (25, 75, 'UI 00 로그인', ['사내 계정 로그인', '이메일 입력', '비밀번호 마스킹 입력', '로그인 버튼', '실패 시 안내, role 확인 후 진입']),
-        (595, 75, 'UI 10과 UI 11 분석', ['분석하기 | 리포트 | 키워드 관리', '원문 입력  최대 20,000자', '분류와 등급, 매칭 조건 선택', '분석 실행  고유 코드 수와 결과 표', '원문 하이라이트와 CSV 다운로드']),
+        (595, 75, 'UI 10과 UI 11 분석', ['일반 사용자: 분석하기 | 리포트', '원문 입력  최대 20,000자', '키워드 찾는 방식과 적용 규칙 요약', '분석 실행  고유 코드 수와 결과 표', '원문 하이라이트와 CSV 다운로드']),
         (25, 395, 'UI 20과 UI 21 리포트', ['최근 7일 Top N  기본 10', '시작과 종료 기간', '키워드별 주간 조회수 표', '리포트 CSV 다운로드', '관리자용 누적 초기화와 주간 제외']),
-        (595, 395, 'UI 30과 UI 31 관리', ['admin 전용', 'CSV와 XLSX 업로드  병합 또는 덮어쓰기', '키워드 단건 입력과 추가', '드롭다운 또는 자유 표 편집', '변경 저장  선택 삭제  템플릿 다운로드'])
+        (595, 395, 'UI 30~32와 UI 40 관리', ['admin 전용: 키워드 관리 | 사용자 관리', '공통 분석 규칙 편집과 저장', '키워드 추가·편집·업로드·삭제', '드롭다운과 템플릿 다운로드', '계정 목록 조회와 member/admin 역할 지정'])
     ]
     for x, y, title, lines in panels:
         body += svg_box(x, y, 535, 270, title, lines)
     body += svg_text(28, 715, '위 배치는 화면 설계용 도식입니다. 실제 캡처나 픽셀 단위 시안이 아닙니다.', 15)
     write_svg('screens.svg', 1155, 750, '로그인 분석 리포트 관리자 화면 배치도', body)
+
+    body = svg_text(30, 36, '규정 근거 검색 도입안 — 운영 기능 미연결', 23, weight=700)
+    body += svg_box(30, 75, 280, 165, '기존 Streamlit 화면 확장', ['국내 화장품·식품·건강기능식품', '제품군 하나와 검사 기준일 선택', '키워드 검사와 규정 검색 분리'])
+    body += svg_box(390, 75, 280, 165, '별도 FastAPI — 추가 계획', ['사용자 인증과 호출 제한', '검색 결과·원문 위치 반환', '키워드 API와 장애 분리'])
+    body += svg_box(750, 75, 280, 165, '외부 모델 API — 계획', ['관리형 임베딩 API 우선 평가', 'BGE-M3는 검색 품질 비교 후보', '생성 API는 검색 검증 후 연결'])
+    body += svg_box(390, 325, 280, 190, 'Supabase — 추가 계획', ['승인된 문서·조항·임베딩', '국가·제품군·조항 적용일 필터', '어휘 + 벡터 검색 순위 결합', '최종 판정 대신 관련 근거 반환'])
+    body += svg_box(30, 325, 280, 190, '관리자 자료 준비', ['공식 원문과 버전 확보', '페이지·표·단서·예외 검수', '적용 기간과 출처 승인', '배치 임베딩 후 근거 묶음 전환'])
+    body += svg_box(750, 325, 280, 190, '후속 근거 기반 검토', ['외부 API 전송 허용 확인 완료', '원문과 근거만으로 설명 생성', '인용·출력 형식 서버 검증', '추가 정보 확인과 담당자 검토'])
+    for path in ('M310 150H385', 'M670 150H745', 'M530 240V320', 'M310 420H385'):
+        body += f'<path d="{path}" fill="none" stroke="#60718c" stroke-width="2" marker-end="url(#arrow)"/>'
+    body += '<path d="M670 420H745" fill="none" stroke="#60718c" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>'
+    body += svg_text(30, 565, '검색 유사도는 위반 확률이 아닙니다. 자료의 효력·적용 조건·시행일과 제품 정보를 함께 확인합니다.', 15)
+    write_svg('regulation_rag.svg', 1060, 600, '규정 검색 추가 계획과 후속 AI 검토 구성', body)
 
 
 def inline(value):
@@ -230,14 +243,20 @@ def build():
     @media print{@page{size:A4;margin:17mm 15mm}body{background:white;font-size:10pt;line-height:1.65}aside,.no-print{display:none}main{margin:0;padding:0;max-width:none}.cover,.chapter{border:0;border-radius:0;padding:0;margin:0}.cover{margin-bottom:25px}.chapter{break-before:page}h2{font-size:20pt}h3{font-size:14pt}h4{font-size:12pt}h2,h3,h4{break-after:avoid}table{font-size:8.3pt}th,td{padding:5px 7px}thead{display:table-header-group}tr{break-inside:avoid}pre{font-size:8pt}img{max-height:220mm}a{color:inherit;text-decoration:none}.table-scroll{overflow:visible}figure{break-inside:avoid}details{display:none}}
     '''
     html_doc = f'''<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Keyword Risk Analyzer 통합 설계서</title><style>{css}</style></head><body>
-    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong>{''.join(nav)}<div class="meta">버전 1.0<br>2026년 10월 21일<br>현재 구현 기준</div></aside>
-    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header>{''.join(chapters)}</main></body></html>'''
+    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong>{''.join(nav)}<div class="meta">버전 1.0<br>구현 기준: 2026년 10월 21일<br>규정 검색 제안 갱신: 10월 22일</div></aside>
+    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 구현 기준 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><p>규정 검색 도입 제안은 2026년 10월 22일 사용자 확정 범위를 반영했습니다.</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header>{''.join(chapters)}</main></body></html>'''
     (OUT / 'design_book.html').write_text(html_doc, encoding='utf-8')
     source_files = ['keyword_app2_fixed270.py','matching_engine.py','api.py','service.py',
-                    'repository.py','app_config.py','supabase/schema.sql','supabase/fix_reset_counts.sql','render.yaml']
+                    'repository.py','app_config.py','supabase/schema.sql','supabase/fix_reset_counts.sql','render.yaml',
+                    'scripts/evaluate_regulation_retrieval.py','data/regulations/source_manifest.json']
+    proposed_files = ['07_regulation_rag_design.md', 'reference/regulation_sources.json',
+                      'reference/regulation_openapi.proposed.json', 'reference/regulation_eval_cases.jsonl']
     manifest = {'document_version':'1.0','basis_date_kst':'2026-10-21',
+                'regulation_design_updated_kst':'2026-10-22',
+                'source_hash_format':'SHA-256 of UTF-8 text without BOM, with CRLF/CR normalized to LF',
                 'runtime_openapi':runtime['openapi'],'runtime_path_count':len(runtime['paths']),
-                'source_sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in source_files}}
+                'source_sha256':{p:hashlib.sha256((ROOT/p).read_text(encoding='utf-8-sig').encode('utf-8')).hexdigest() for p in source_files},
+                'proposed_artifacts_sha256':{p:hashlib.sha256((OUT/p).read_text(encoding='utf-8-sig').encode('utf-8')).hexdigest() for p in proposed_files}}
     (OUT / 'source_manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
     reference = OUT / 'reference'
     reference.mkdir(exist_ok=True)
