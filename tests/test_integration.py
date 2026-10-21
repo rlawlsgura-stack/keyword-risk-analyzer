@@ -153,17 +153,21 @@ class IntegrationTests(unittest.TestCase):
                 app.button(key='btn_analyze').click().run(timeout=30)
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual(app.session_state['analysis_count'], 1)
-                self.assertTrue(app.button(key='report_reset_btn').disabled)
+                self.assertFalse(any(b.key in {'report_reset_btn', 'report_reset7_btn'} for b in app.button))
+                self.assertFalse(any(c.key in {'report_reset_ck', 'report_reset7_ck'} for c in app.checkbox))
                 self.assertEqual([tab.label for tab in app.tabs], ['분석하기', '리포트(주간 Top N)'])
                 app.session_state['is_admin'] = True
                 app.run(timeout=30)
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual([tab.label for tab in app.tabs],
                                  ['분석하기', '리포트(주간 Top N)', '키워드 관리'])
+                self.assertTrue(app.button(key='report_reset_btn').disabled)
+                self.assertTrue(app.button(key='report_reset7_btn').disabled)
                 app.session_state['is_admin'] = False
                 app.run(timeout=30)
                 self.assertEqual(len(app.exception), 0)
                 self.assertEqual([tab.label for tab in app.tabs], ['분석하기', '리포트(주간 Top N)'])
+                self.assertFalse(any(b.key in {'report_reset_btn', 'report_reset7_btn'} for b in app.button))
             self.assertEqual(pd.read_csv(target / 'keywords_hits_log.csv').shape[0], 1)
 
     def test_cloud_requires_login_before_data_access(self):
@@ -195,7 +199,9 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(app.session_state['analysis_count'], 1)
             record.assert_called_once()
             self.assertEqual(record.call_args.args[2], 'user-1')
-            self.assertTrue(app.button(key='report_reset_btn').disabled)
+            self.assertFalse(any(b.key in {'report_reset_btn', 'report_reset7_btn'} for b in app.button))
+            self.assertFalse(any(c.key in {'report_reset_ck', 'report_reset7_ck'} for c in app.checkbox))
+            self.assertFalse(any('조회 수 초기화' in m.value for m in app.markdown))
             self.assertEqual([tab.label for tab in app.tabs], ['분석하기', '리포트(주간 Top N)'])
             self.assertEqual(len(app.file_uploader), 0)
             self.assertFalse(any(b.key == 'user_admin_load' for b in app.button))
@@ -276,6 +282,12 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(len(app.exception), 0)
             self.assertEqual([tab.label for tab in app.tabs],
                              ['분석하기', '리포트(주간 Top N)', '키워드 관리', '사용자 관리'])
+            self.assertTrue(app.button(key='report_reset_btn').disabled)
+            self.assertTrue(app.button(key='report_reset7_btn').disabled)
+            app.checkbox(key='report_reset_ck').check().run(timeout=30)
+            self.assertFalse(app.button(key='report_reset_btn').disabled)
+            app.checkbox(key='report_reset7_ck').check().run(timeout=30)
+            self.assertFalse(app.button(key='report_reset7_btn').disabled)
             load.assert_not_called()  # hidden tab does not fetch accounts
             app.button(key='user_admin_load').click().run(timeout=30)
             load.assert_called_once_with('admin-token', page=1)

@@ -2890,59 +2890,58 @@ with tab3:
     # ------------------------------
     # 🔁 조회 수 초기화 (CSV 다운로드 영역 '아래'로 이동)
     # ------------------------------
-    st.markdown("---")
-    st.markdown("### 🔁 조회 수 초기화")
-    if not is_admin():
-        st.caption('조회 수 초기화는 관리자만 사용할 수 있습니다.')
+    if is_admin():
+        st.markdown("---")
+        st.markdown("### 🔁 조회 수 초기화")
 
-    # 전체 초기화: DB의 누적카운트=0, 마지막 출력일자 공백 (로그는 유지 — 기존 동작 유지)
-    col_z1, col_z2 = st.columns([1,1])
-    with col_z1:
-        confirm_reset_all = st.checkbox("전체 조회 수를 0으로 초기화하고 '마지막 출력일자'를 비우기", value=False, key="report_reset_ck")
-        if st.button("전체 초기화 실행", disabled=not confirm_reset_all or not is_admin(), key="report_reset_btn"):
-            _require_admin()
-            try:
-                if cloud_enabled():
-                    SupabaseRepository().reset_counts()
-                    st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
-                    st.success('전체 초기화 완료 (로그 유지)')
-                    st.stop()
-                if "키워드 조회 수(누적카운트)" in st.session_state.kw_df.columns:
-                    st.session_state.kw_df["키워드 조회 수(누적카운트)"] = "0"
-                if "마지막 출력일자" in st.session_state.kw_df.columns:
-                    st.session_state.kw_df["마지막 출력일자"] = ""
-                save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
-                st.success("전체 초기화 완료 (로그 파일은 유지됩니다)")
-            except Exception as e:
-                st.error(f"초기화 실패: {e}")
+        # 전체 초기화: DB의 누적카운트=0, 마지막 출력일자 공백 (로그는 유지 — 기존 동작 유지)
+        col_z1, col_z2 = st.columns([1,1])
+        with col_z1:
+            confirm_reset_all = st.checkbox("전체 조회 수를 0으로 초기화하고 '마지막 출력일자'를 비우기", value=False, key="report_reset_ck")
+            if st.button("전체 초기화 실행", disabled=not confirm_reset_all or not is_admin(), key="report_reset_btn"):
+                _require_admin()
+                try:
+                    if cloud_enabled():
+                        SupabaseRepository().reset_counts()
+                        st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
+                        st.success('전체 초기화 완료 (로그 유지)')
+                        st.stop()
+                    if "키워드 조회 수(누적카운트)" in st.session_state.kw_df.columns:
+                        st.session_state.kw_df["키워드 조회 수(누적카운트)"] = "0"
+                    if "마지막 출력일자" in st.session_state.kw_df.columns:
+                        st.session_state.kw_df["마지막 출력일자"] = ""
+                    save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
+                    st.success("전체 초기화 완료 (로그 파일은 유지됩니다)")
+                except Exception as e:
+                    st.error(f"초기화 실패: {e}")
 
-    # 최근 7일 초기화: 로그에서 최근 7일 기록만 삭제 (DB 누적카운트는 건드리지 않음)
-    with col_z2:
-        confirm_reset_week = st.checkbox("최근 7일 조회수 초기화 (로그에서 최근 7일 기록 삭제)", value=False, key="report_reset7_ck")
-        if st.button("최근 7일 초기화 실행", disabled=not confirm_reset_week or not is_admin(), key="report_reset7_btn"):
-            _require_admin()
-            try:
-                if cloud_enabled():
-                    removed = SupabaseRepository().reset_week()
-                    load_hits_log.clear()
-                    st.success(f'최근 7일 기록 {removed}건을 리포트에서 제외했습니다.')
-                    st.stop()
-                log_df2 = load_hits_log()
-                if log_df2.empty:
-                    st.info("삭제할 로그가 없습니다.")
-                else:
-                    end_dt2 = now_kst()
-                    start_dt2 = end_dt2 - timedelta(days=7)
-                    log_df2["ts_dt"] = pd.to_datetime(log_df2["ts"], errors="coerce")
-                    before_cnt = len(log_df2)
-                    # keep records outside the last 7 days or with NaT (safety)
-                    keep_mask = (log_df2["ts_dt"].isna()) | (log_df2["ts_dt"] < start_dt2) | (log_df2["ts_dt"] > end_dt2)
-                    new_log = log_df2.loc[keep_mask, ["ts","kwd_no"]].reset_index(drop=True)
-                    overwrite_hits_log(new_log)
-                    removed = before_cnt - len(new_log)
-                    st.success(f"최근 7일 로그 {removed}건 삭제 완료")
-            except Exception as e:
-                st.error(f"최근 7일 초기화 실패: {e}")
+        # 최근 7일 초기화: 로그에서 최근 7일 기록만 삭제 (DB 누적카운트는 건드리지 않음)
+        with col_z2:
+            confirm_reset_week = st.checkbox("최근 7일 조회수 초기화 (로그에서 최근 7일 기록 삭제)", value=False, key="report_reset7_ck")
+            if st.button("최근 7일 초기화 실행", disabled=not confirm_reset_week or not is_admin(), key="report_reset7_btn"):
+                _require_admin()
+                try:
+                    if cloud_enabled():
+                        removed = SupabaseRepository().reset_week()
+                        load_hits_log.clear()
+                        st.success(f'최근 7일 기록 {removed}건을 리포트에서 제외했습니다.')
+                        st.stop()
+                    log_df2 = load_hits_log()
+                    if log_df2.empty:
+                        st.info("삭제할 로그가 없습니다.")
+                    else:
+                        end_dt2 = now_kst()
+                        start_dt2 = end_dt2 - timedelta(days=7)
+                        log_df2["ts_dt"] = pd.to_datetime(log_df2["ts"], errors="coerce")
+                        before_cnt = len(log_df2)
+                        # keep records outside the last 7 days or with NaT (safety)
+                        keep_mask = (log_df2["ts_dt"].isna()) | (log_df2["ts_dt"] < start_dt2) | (log_df2["ts_dt"] > end_dt2)
+                        new_log = log_df2.loc[keep_mask, ["ts","kwd_no"]].reset_index(drop=True)
+                        overwrite_hits_log(new_log)
+                        removed = before_cnt - len(new_log)
+                        st.success(f"최근 7일 로그 {removed}건 삭제 완료")
+                except Exception as e:
+                    st.error(f"최근 7일 초기화 실패: {e}")
 
 if user_tabs:
     with user_tabs[0]:
