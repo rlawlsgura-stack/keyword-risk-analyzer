@@ -1,3 +1,11 @@
+## FIXED274 — 개발 중
+
+- FIXED273을 보존하고 최신 작업 파일을 keyword_app2_fixed274.py로 분기했습니다.
+
+- Added keyword inquiry registration with type and detail fields plus an explicitly named inquiry-history tab.
+- Added owner/admin Supabase RLS access and an administrator toggle for optional Resend email alerts. Approval and keyword DB writeback are not implemented.
+- Applied the inquiry and notification tables with RLS to the connected Supabase project; deployments remain unchanged.
+
 ## FIXED273 — Auxiliary analysis removed
 
 - Updated the matching and preview help to use numbered, sentence-separated explanations, including the risk-grade color legend.

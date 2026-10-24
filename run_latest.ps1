@@ -10,6 +10,12 @@ if (-not (Test-Path -LiteralPath $python)) {
     throw "Project virtual environment not found: $python"
 }
 
+$preflight = Join-Path $projectRoot 'scripts\check_supabase_connectivity.py'
+& $python $preflight
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
+
 $latest = Get-ChildItem -LiteralPath $projectRoot -Filter 'keyword_app2_fixed*.py' -File |
     Where-Object { $_.BaseName -match '^keyword_app2_fixed\d+$' } |
     Sort-Object -Property @{ Expression = { [int]($_.BaseName -replace '^keyword_app2_fixed', '') }; Descending = $true } |

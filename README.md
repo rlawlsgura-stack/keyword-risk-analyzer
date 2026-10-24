@@ -1,9 +1,10 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED273** (`keyword_app2_fixed273.py`).
-`run_latest.ps1` selects and runs the highest numbered FIXED application file. FIXED272 is preserved as the backup version; FIXED271 and FIXED270 are also retained.
+Current local development version: **FIXED274** (`keyword_app2_fixed274.py`).
+`run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED273 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
-Render and Streamlit Community Cloud remain configured for FIXED271 until their deployment settings are changed. FIXED273 is not deployed externally.
+See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the FIXED274 inquiry feature, Supabase SQL patch, and optional email settings.
+Render and Streamlit Community Cloud remain configured for FIXED271 until their deployment settings are changed. FIXED274 is not deployed externally.
 
 ## 설계 문서
 

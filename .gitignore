@@ -4,3 +4,5 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 .pytest_cache/
+logs/streamlit_*.out.log
+logs/streamlit_*.err.log

@@ -99,6 +99,40 @@ class SupabaseRepository:
     def save_setting(self, name, value):
         return self.rpc('set_setting', p_name=name, p_value=value)
 
+    def submit_keyword_request(self, payload, access_token):
+        rows = self.request(
+            'POST', '/rest/v1/kra_keyword_requests', payload,
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('문의가 저장되었는지 확인할 수 없습니다.')
+        return rows[0]
+
+    def load_keyword_requests(self, access_token, limit=1000):
+        limit = max(1, min(int(limit), 1000))
+        path = ('/rest/v1/kra_keyword_requests?select=id,requester_id,requester_email,'
+                'kwd_no,keyword_name,request_type,request_detail,created_at'
+                '&order=created_at.desc&limit=' + str(limit))
+        return self.request('GET', path, token=access_token) or []
+
+    def load_request_email_notifications(self, access_token=None):
+        rows = self.request(
+            'GET', '/rest/v1/kra_keyword_request_config?select=email_notifications_enabled'
+            '&id=eq.singleton&limit=1', token=access_token,
+        )
+        return bool(rows and rows[0].get('email_notifications_enabled'))
+
+    def save_request_email_notifications(self, enabled, access_token):
+        rows = self.request(
+            'PATCH', '/rest/v1/kra_keyword_request_config?id=eq.singleton'
+            '&select=email_notifications_enabled',
+            {'email_notifications_enabled': bool(enabled)}, token=access_token,
+            prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('알림 설정을 저장할 권한이 없거나 설정 행을 찾을 수 없습니다.')
+        return bool(rows[0].get('email_notifications_enabled'))
+
     def record_analysis(self, analysis_id, fingerprint, actor, revision, result):
         return self.rpc('record_analysis', p_id=analysis_id, p_fingerprint=fingerprint,
                         p_actor=actor, p_revision=revision, p_result=result)
