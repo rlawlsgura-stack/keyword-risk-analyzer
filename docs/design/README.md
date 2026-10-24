@@ -56,7 +56,7 @@ DB 조회 날짜는 서버 UTC로 2026년 10월 20일이었으며, 문서 작성
 
 ## 원본과 갱신 방법
 
-기준 소스는 `keyword_app2_fixed270.py`, `api.py`, `service.py`, `repository.py`, `matching_engine.py`, `app_config.py`, `supabase/schema.sql`, `supabase/fix_reset_counts.sql`, `render.yaml`, `tests`입니다. 원본 코드와 설계서가 다르면 코드와 실제 DB를 먼저 확인하고 문서를 갱신합니다.
+기준 소스는 `keyword_app2_fixed271.py`, `api.py`, `service.py`, `repository.py`, `matching_engine.py`, `app_config.py`, `supabase/schema.sql`, `supabase/fix_reset_counts.sql`, `render.yaml`, `tests`입니다. 원본 코드와 설계서가 다르면 코드와 실제 DB를 먼저 확인하고 문서를 갱신합니다.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/build_design_docs.py

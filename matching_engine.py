@@ -54,10 +54,29 @@ class MatchingConfig:
     similar_reverse_any: bool = False
     exact_fallback_similar: bool = True
     exact_fallback_min_tokens: int = 4
+    strip_bracket_notes: bool | None = None
+    normalize_whitespace: bool | None = None
+    ignore_case: bool | None = None
+    normalize_symbols: bool | None = None
 
     def __post_init__(self):
         if self.mode not in MATCH_MODES:
             raise ValueError('Unknown matching mode: ' + str(self.mode))
+
+    @property
+    def has_independent_options(self):
+        return any(getattr(self, name) is not None for name in NORMALIZATION_OPTIONS)
+
+    def normalization_options(self):
+        defaults = dict(strip_bracket_notes=self.exact_relaxed or self.mode != 'exact',
+                        normalize_whitespace=self.exact_relaxed or self.mode != 'exact',
+                        ignore_case=True, normalize_symbols=self.exact_relaxed)
+        return {name: defaults[name] if getattr(self, name) is None else getattr(self, name)
+                for name in NORMALIZATION_OPTIONS}
+
+
+NORMALIZATION_OPTIONS = ('strip_bracket_notes', 'normalize_whitespace', 'ignore_case', 'normalize_symbols')
+_BRACKET_NOTES = re.compile(r"[\(\[（【].*?[\)\]）】]")
 
 
 def _resolve_config(config, match_mode, exact_relaxed, options):
@@ -69,7 +88,7 @@ def _resolve_config(config, match_mode, exact_relaxed, options):
     if exact_relaxed is not None:
         updates['exact_relaxed'] = exact_relaxed
     for name in ('partial_min_len', 'similar_reverse_single', 'similar_reverse_any',
-                 'exact_fallback_similar', 'exact_fallback_min_tokens'):
+                 'exact_fallback_similar', 'exact_fallback_min_tokens', *NORMALIZATION_OPTIONS):
         if name in options:
             updates[name] = options[name]
     return replace(config or MatchingConfig(), **updates)
@@ -312,27 +331,79 @@ class _PreparedText:
     tokens_compact: list[str]
 
 
+def _compare_case(value, config):
+    return value if config.ignore_case is False else value.lower()
+
+
+def _comparison_with_map(value, config):
+    """Independent normalization, mapping every output character to the original."""
+    options = config.normalization_options()
+    if options['normalize_symbols']:
+        value = _replace_ignored_symbols_with_space_keep_len(value, config.ignored_symbols)
+    chars, positions = [], []
+    for i, char in enumerate(value):
+        if options['normalize_whitespace'] and (char.isspace() or char in '\u200b\ufeff'):
+            continue
+        folded = char.lower() if options['ignore_case'] else char
+        chars.extend(folded)
+        positions.extend([i] * len(folded))
+    return ''.join(chars), positions
+
+
+def _configured_spans(prepared, variant, config):
+    target, _ = _comparison_with_map(variant, config)
+    if not target:
+        return []
+    spans, offset = [], 0
+    while (found := prepared.normalized.find(target, offset)) >= 0:
+        spans.append((prepared.index_map[found], prepared.index_map[found + len(target) - 1] + 1))
+        offset = found + 1
+    return spans
+
+
+def _same_token_gaps(variant, matched, config):
+    """Token rules may change words, but cannot silently ignore unselected separators."""
+    expected = _tokenize_with_spans(variant)
+    actual = _tokenize_with_spans(matched)
+    if expected and actual:
+        for left, right in ((variant[:expected[0][1]], matched[:actual[0][1]]),
+                            (variant[expected[-1][2]:], matched[actual[-1][2]:])):
+            if _comparison_with_map(left, config)[0] != _comparison_with_map(right, config)[0]:
+                return False
+    if len(expected) != len(actual):
+        # Reverse and compound rules intentionally compare different token counts.
+        return True
+    for i in range(len(expected) - 1):
+        left = variant[expected[i][2]:expected[i + 1][1]]
+        right = matched[actual[i][2]:actual[i + 1][1]]
+        if _comparison_with_map(left, config)[0] != _comparison_with_map(right, config)[0]:
+            return False
+    return True
+
+
 def _prepare_text(text, config):
     base = text or ""
     # For relaxed normalization, optionally replace configured special symbols with spaces (length preserved)
     base_for_match = base
-    if config.exact_relaxed:
+    if config.normalization_options()['normalize_symbols']:
         try:
             base_for_match = _replace_ignored_symbols_with_space_keep_len(base_for_match, config.ignored_symbols)
         except Exception:
             base_for_match = base
-    lower = base_for_match.lower()
+    lower = _compare_case(base_for_match, config)
     # Precompute normalized base (whitespace-collapsed + casefold) for relaxed exact matching
     base_norm, base_norm_map = ("", [])
-    if config.exact_relaxed:
+    if config.has_independent_options:
+        base_norm, base_norm_map = _comparison_with_map(base, config)
+    elif config.exact_relaxed:
         try:
             base_norm, base_norm_map = _normalize_relaxed_whitespace_with_map(base_for_match)
         except Exception:
             base_norm, base_norm_map = ("", [])
 
     token_spans = _tokenize_with_spans(base_for_match)
-    tokens_lower = [t.lower() for (t, _, _) in token_spans]
-    tokens_compact = [re.sub(r"\s+", "", t.lower()) for (t, _, _) in token_spans]  # 안전장치
+    tokens_lower = [_compare_case(t, config) for (t, _, _) in token_spans]
+    tokens_compact = [re.sub(r"\s+", "", t) for t in tokens_lower]  # 안전장치
 
     return _PreparedText(base, base_for_match, lower, base_norm, base_norm_map,
                          token_spans, tokens_lower, tokens_compact)
@@ -349,6 +420,23 @@ def _keyword_records(kw_df):
 
 
 def _keyword_variants(term, config):
+    if config.has_independent_options:
+        term = str(term).strip()
+        options = config.normalization_options()
+        if config.mode in ('exact', 'partial'):
+            candidate = _BRACKET_NOTES.sub('', term).strip() if options['strip_bracket_notes'] else term
+            return [candidate] if candidate else []
+        variants = [term]
+        if options['strip_bracket_notes']:
+            variants.append(_BRACKET_NOTES.sub('', term).strip())
+            if config.mode == 'similar':
+                variants.extend(re.findall(r"[\(\[（【](.*?)[\)\]）】]", term))
+        if config.mode == 'similar' and (options['strip_bracket_notes'] or not _BRACKET_NOTES.search(term)):
+            variants.extend(piece for value in list(variants) for piece in _delim_pattern.split(value))
+        if config.mode == 'similar':
+            variants = [v for v in variants if v == term or len(v) >= (3 if re.search(r'[A-Za-z]', v) else 2)]
+        return sorted(dict.fromkeys(v for v in variants if v), key=len, reverse=True)
+
     exact_relaxed = config.exact_relaxed
     variants = generate_keyword_variants(term)
 
@@ -386,7 +474,58 @@ def _keyword_variants(term, config):
     return variants
 
 
+def _match_fragments(prepared, records, config):
+    """Find arbitrary consecutive fragments; retain maximal intervals per keyword."""
+    matches = []
+    minimum = max(2, int(config.partial_min_len))
+    for row in records:
+        variants = _keyword_variants(row['키워드명'], config)
+        best_ends = {}
+        seen = set()
+        for variant in variants:
+            target, _ = _comparison_with_map(variant, config)
+            for length in range(len(target), minimum - 1, -1):
+                for i in range(len(target) - length + 1):
+                    fragment = target[i:i + length]
+                    if fragment in seen:
+                        continue
+                    seen.add(fragment)
+                    offset = 0
+                    while (found := prepared.normalized.find(fragment, offset)) >= 0:
+                        start = prepared.index_map[found]
+                        end = prepared.index_map[found + length - 1] + 1
+                        best_ends[start] = max(best_ends.get(start, 0), end)
+                        offset = found + 1
+        furthest = -1
+        for start, end in sorted(best_ends.items()):
+            if end <= furthest:
+                continue
+            matches.append(Match2(str(row['키워드명']), start, end,
+                                  str(row.get('상품카테고리', '')), str(row.get('리스크 등급', '')),
+                                  str(row.get('리스크 등급별 세부 심의기준', '')), row.get('kwd_no') or None))
+            furthest = end
+    return matches
+
+
+def _maximal_matches(matches):
+    """Remove duplicate/contained spans only within the same keyword, never across codes."""
+    groups = {}
+    for match in matches:
+        key = (match.kwd_no, match.term, match.category, match.risk)
+        groups.setdefault(key, {})[(match.start, match.end)] = match
+    result = []
+    for spans in groups.values():
+        furthest = -1
+        for match in sorted(spans.values(), key=lambda m: (m.start, -m.end)):
+            if match.end > furthest:
+                result.append(match)
+                furthest = match.end
+    return result
+
+
 def _match_partial(prepared, records, config):
+    if config.has_independent_options:
+        return _match_fragments(prepared, records, config)
     matches = []
     occupied_set = set()
     base_for_match = prepared.comparable
@@ -412,13 +551,13 @@ def _match_partial(prepared, records, config):
                     sub = term_norm_lower[i_sub:i_sub+L]
                     start_idx = 0
                     while True:
-                        idx2 = base_lower.find(sub, start_idx)
-                        if idx2 == -1:
+                        comparison_idx = base_lower.find(sub, start_idx)
+                        if comparison_idx == -1:
                             break
-                        end2 = idx2 + L
+                        idx2, end2 = comparison_idx, comparison_idx + L
                         span_key = (idx2, end2)
                         if span_key in seen_spans:
-                            start_idx = idx2 + 1
+                            start_idx = comparison_idx + 1
                             continue
                         seen_spans.add(span_key)
                         range_occupied = any(i in occupied_set for i in range(idx2, end2))
@@ -453,7 +592,7 @@ def _match_partial(prepared, records, config):
                             if not range_occupied:
                                 for i2 in range(idx2, end2):
                                     occupied_set.add(i2)
-                        start_idx = idx2 + 1
+                        start_idx = comparison_idx + 1
         continue  # 다음 키워드로
     return matches
 
@@ -478,7 +617,7 @@ def _match_similar(prepared, records, config, suffix_suggestions):
             v_tokens = _tokenize_only(v)
             if not v_tokens:
                 continue
-            v_tokens_lower = [x.lower() for x in v_tokens]
+            v_tokens_lower = [_compare_case(x, config) for x in v_tokens]
             v_compact = "".join(v_tokens_lower)
 
             n = len(v_tokens_lower)
@@ -539,7 +678,7 @@ def _match_similar(prepared, records, config, suffix_suggestions):
                     # multi-token input: skip very short tokens to reduce false positives
                     if len(tokens_lower) != 1 and len(q) < 4:
                         continue                        # 역매칭: 키워드 토큰 어디든 포함되면 허용 (토큰 제한 없음)
-                    if not any((q.lower() in t) for t in v_tokens_lower):
+                    if not any((q in t) for t in v_tokens_lower):
                         continue
                     if i_tok not in starts:
                         starts.append(i_tok)
@@ -570,8 +709,12 @@ def _match_similar(prepared, records, config, suffix_suggestions):
                         src_tok = v_tokens_lower[j2]
                         tgt_tok = tokens_lower[i2 + j2]
                         if src_tok == tgt_tok:
+                            if local_override is not None and config.has_independent_options:
+                                local_override = (token_spans[i2][1], token_spans[i2 + j2][2])
                             continue
                         stem_len = _english_inflection_common_prefix(src_tok, tgt_tok)
+                        if not config.normalization_options()['ignore_case'] and src_tok[:stem_len] != tgt_tok[:stem_len]:
+                            stem_len = 0
                         if stem_len <= 0:
                             ok = False
                             break
@@ -651,7 +794,7 @@ def _match_similar(prepared, records, config, suffix_suggestions):
             #     - Korean '합성어 내부 접두/접미' 규칙을 영어에도 동일한 철학으로 적용
             #     - 예: 'spot' -> 'hotspot'(endswith), 'spotless'(startswith)
             #     - 오탐 방지: (a) 키워드 최소 길이, (b) 접두/접미 길이 제한, (c) 알파벳 토큰에 한함
-            is_english_kw = (n == 1 and v_compact and all('a' <= ch <= 'z' for ch in v_compact))
+            is_english_kw = (n == 1 and v_compact and all('a' <= ch.lower() <= 'z' for ch in v_compact))
             if is_english_kw:
                 kw_len = len(v_compact)
                 if kw_len >= 2:
@@ -685,17 +828,26 @@ def _match_similar(prepared, records, config, suffix_suggestions):
                                     _e = token_spans[_i][2]
                                 starts.append(_i)
                                 span_override[_i] = (_s, _e)
-        # dedup starts
-            if not starts:
-                continue
-            starts = sorted(set(starts))
-
-            for si in starts:
-                if 'span_override' in locals() and si in span_override:
-                    start_orig, end_orig = span_override[si]
+            candidate_spans = []
+            for si in sorted(set(starts)):
+                if si in span_override:
+                    candidate_spans.append(span_override[si])
                 else:
-                    start_orig = token_spans[si][1]
-                    end_orig = suffix_hit_end.get(si, token_spans[si + n - 1][2])
+                    candidate_spans.append((token_spans[si][1], suffix_hit_end.get(si, token_spans[si + n - 1][2])))
+            if config.has_independent_options:
+                if not config.normalization_options()['strip_bracket_notes'] and _BRACKET_NOTES.search(v):
+                    candidate_spans = []
+                candidate_spans.extend(_configured_spans(prepared, v, config))
+                candidate_spans = sorted(set(candidate_spans))
+
+            for start_orig, end_orig in candidate_spans:
+
+                if config.has_independent_options and not _same_token_gaps(v, prepared.original[start_orig:end_orig], config):
+                    continue
+
+                if config.has_independent_options:
+                    matches.append(Match2(term, start_orig, end_orig, category, risk, detail, kwd_no))
+                    continue
 
                 # 기존 겹침/우선순위 로직 유지
                 for _i_m, _m in enumerate(list(matches)):
@@ -761,6 +913,12 @@ def _match_exact(prepared, records, config):
         detail = str(r.get("리스크 등급별 세부 심의기준", ""))
         kwd_no = r.get("kwd_no") or None
         variants = _keyword_variants(term, config)
+        if config.has_independent_options:
+            for variant in variants:
+                for start, end in _configured_spans(prepared, variant, config):
+                    exact_candidates.append(Match2(term, start, end, category, risk, detail, kwd_no))
+            # Independent options must not be bypassed by legacy token fallbacks.
+            continue
         _before_term_exact_count = len(exact_candidates)
         for v in variants:
             v_cmp = str(v)
@@ -950,7 +1108,7 @@ def find_matches(text, kw_df, match_mode=None, exact_relaxed=None,
     """Prepare once, run selected rules, then resolve/sort original-text spans.
 
     New callers pass one MatchingConfig. Legacy keyword arguments remain supported.
-    Compound, duplicate and fallback behavior is intentionally unchanged.
+    Calls without independent normalization options retain their legacy behavior.
     """
     config = _resolve_config(config, match_mode, exact_relaxed, options)
     prepared = _prepare_text(text, config)
@@ -960,7 +1118,10 @@ def find_matches(text, kw_df, match_mode=None, exact_relaxed=None,
     elif config.mode == 'similar':
         matches = _match_similar(prepared, records, config, suffix_suggestions)
     else:
-        matches = _resolve_exact_overlaps(_match_exact(prepared, records, config))
+        candidates = _match_exact(prepared, records, config)
+        matches = candidates if config.has_independent_options else _resolve_exact_overlaps(candidates)
+    if config.has_independent_options:
+        matches = _maximal_matches(matches)
     matches.sort(key=lambda m: (m.start, m.end))
     return matches
 

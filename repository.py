@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pandas as pd
 import requests
+from urllib.parse import urlencode
 
 from matching_engine import DB_COLS
 
@@ -52,6 +53,14 @@ class SupabaseRepository:
                 body = response.json()
             except ValueError:
                 body = {}
+            if path.split('?', 1)[0] == '/auth/v1/signup':
+                detail = body.get('msg') or body.get('message') or body.get('error_description')
+                code = body.get('code') or body.get('error_code')
+                diagnostic = ': '.join(str(value) for value in (code, detail) if value)
+                if diagnostic:
+                    diagnostic = ' '.join(diagnostic.split())[:240]
+                    raise StorageError(
+                        f'Supabase request failed ({response.status_code}): {diagnostic}')
             if body.get('code') in {'40001', '23505'}:
                 raise ConflictError('데이터가 변경되었습니다. 새로 불러온 후 다시 시도하세요.')
             if response.status_code in {401, 403}:
@@ -115,6 +124,20 @@ class SupabaseRepository:
     def login(self, email, password):
         return self.request('POST', '/auth/v1/token?grant_type=password',
                             {'email': email, 'password': password})
+
+    def sign_up(self, email, password, redirect_to):
+        query = urlencode({'redirect_to': redirect_to})
+        return self.request('POST', '/auth/v1/signup?' + query,
+                            {'email': email.strip(), 'password': password})
+
+    def request_password_reset(self, email, redirect_to):
+        query = urlencode({'redirect_to': redirect_to})
+        return self.request('POST', '/auth/v1/recover?' + query,
+                            {'email': email.strip()})
+
+    def update_password(self, access_token, password):
+        return self.request('PUT', '/auth/v1/user', {'password': password},
+                            token=access_token)
 
     def refresh(self, refresh_token):
         return self.request('POST', '/auth/v1/token?grant_type=refresh_token',

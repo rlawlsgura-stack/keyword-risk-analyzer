@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (v101 – Follow DB column order & values)
+Keyword Risk Analyzer (FIXED270 - before auxiliary analysis)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -541,6 +541,10 @@ def sort_for_display(df: pd.DataFrame) -> pd.DataFrame:
 # Session init & numbering helpers
 # -----------------------------
 def init_state():
+    legacy_relaxed = bool(st.session_state.get('exact_relaxed', True))
+    for name in ('strip_bracket_notes', 'normalize_whitespace', 'normalize_symbols'):
+        st.session_state.setdefault(name, legacy_relaxed)
+    st.session_state.setdefault('ignore_case', True)
     if "storage_path" not in st.session_state:
         st.session_state.storage_path = str(default_storage_path())
     if "kw_df" not in st.session_state:
@@ -887,15 +891,20 @@ def get_ignored_special_symbols() -> list:
 
 def _matching_config() -> MatchingConfig:
     """Copy current UI settings into the independent engine's explicit input."""
+    selected_mode = {label: mode for mode, label in MATCH_MODES.items()}.get(
+        st.session_state.get('match_mode'), 'exact')
     return MatchingConfig(
         ignored_symbols=tuple(get_ignored_special_symbols()),
         ko_suffixes=frozenset(get_ko_suffix_whitelist()),
-        mode={label: mode for mode, label in MATCH_MODES.items()}.get(
-            st.session_state.get('match_mode'), 'exact'),
+        mode='exact' if selected_mode == 'exact' else 'partial',
         exact_relaxed=bool(st.session_state.get('exact_relaxed', True)),
-        partial_min_len=int(st.session_state.get('partial_min_len', 2) or 2),
-        similar_reverse_single=bool(st.session_state.get('similar_reverse_single', True)),
-        similar_reverse_any=bool(st.session_state.get('similar_reverse_any', False)),
+        strip_bracket_notes=bool(st.session_state.get('strip_bracket_notes', True)),
+        normalize_whitespace=bool(st.session_state.get('normalize_whitespace', True)),
+        ignore_case=bool(st.session_state.get('ignore_case', True)),
+        normalize_symbols=bool(st.session_state.get('normalize_symbols', True)),
+        partial_min_len=2 if selected_mode == 'similar' else int(st.session_state.get('partial_min_len', 2) or 2),
+        similar_reverse_single=False,
+        similar_reverse_any=False,
     )
 
 
@@ -1126,7 +1135,18 @@ def highlight_text(text: str, matches: List[Match2]) -> str:
     if not spans:
         return html.escape(text)
 
-    ordered = sorted(spans.items(), key=lambda kv: kv[0][0])
+    # Detection keeps every keyword. Only the visual highlight merges overlapping ranges.
+    ordered = []
+    for (start, end), info in sorted(spans.items(), key=lambda kv: (kv[0][0], -kv[0][1])):
+        if ordered and start < ordered[-1][0][1]:
+            (previous_start, previous_end), previous = ordered[-1]
+            merged_end = max(previous_end, end)
+            previous['seg'] = text[previous_start:merged_end]
+            previous['ids_raw'].extend(info['ids_raw'])
+            previous['risk_map'].update(info['risk_map'])
+            ordered[-1] = ((previous_start, merged_end), previous)
+        else:
+            ordered.append(((start, end), info))
 
     result_parts = []
     cur = 0
@@ -1440,17 +1460,19 @@ def render_cloud_login():
         st.rerun()
     session = st.session_state.get('auth_session')
     if not session:
-        st.subheader('사내 계정 로그인')
-        with st.form('cloud_login'):
-            email = st.text_input('이메일')
-            password = st.text_input('비밀번호', type='password')
-            submit = st.form_submit_button('로그인')
-        if submit:
-            try:
-                st.session_state.auth_session = repository.login(email, password)
-                st.rerun()
-            except (StorageError, PermissionError):
-                st.error('로그인에 실패했습니다. 계정과 연결 설정을 확인하세요.')
+        _, login_col, _ = st.columns([1, 2, 1])
+        with login_col:
+            st.subheader('사내 계정 로그인')
+            with st.form('cloud_login'):
+                email = st.text_input('이메일')
+                password = st.text_input('비밀번호', type='password')
+                submit = st.form_submit_button('로그인')
+            if submit:
+                try:
+                    st.session_state.auth_session = repository.login(email, password)
+                    st.rerun()
+                except (StorageError, PermissionError):
+                    st.error('로그인에 실패했습니다. 계정과 연결 설정을 확인하세요.')
         st.stop()
     try:
         if session.get('expires_at', 0) < time.time() + 60:
@@ -1561,38 +1583,110 @@ if not cloud_enabled() and is_admin():
         scan_existing_counters()
 
 MATCH_MODE_LABELS = {
-    MATCH_MODES['exact']: '등록 표현 찾기',
-    MATCH_MODES['similar']: '단어·변형 규칙으로 찾기',
-    MATCH_MODES['partial']: '키워드 일부로 찾기 — 탐색용',
+    MATCH_MODES['exact']: '키워드 완전 일치',
+    MATCH_MODES['similar']: '키워드 일부 일치',
+    MATCH_MODES['partial']: '글자 수 매칭 - 탐색용',
+}
+MATCH_NORMALIZATION_OPTIONS = {
+    'strip_bracket_notes': ('등록 키워드의 괄호 설명 제외',
+        '등록 키워드에서 괄호 설명을 제외한 표현을 검색합니다.\n\n'
+        '입력 원문의 괄호를 삭제하는 설정은 아닙니다.\n\n'
+        '예시) 키워드 완전 일치 / 등록: `안티에이징(anti-aging)` / 입력: `안티에이징으로`\n\n'
+        '- O · 옵션 켬 → `안티에이징` 검출\n'
+        '- X · 옵션 끔 → 미검출'),
+    'normalize_whitespace': ('띄어쓰기·줄바꿈 차이 허용',
+        '공백·탭·줄바꿈 차이를 무시하고 비교합니다.\n\n'
+        '끄면 공백과 줄바꿈을 그대로 비교합니다.\n\n'
+        '예시) 키워드 완전 일치 / 등록: `피부보습` / 입력: `피부 보습`\n\n'
+        '- O · 옵션 켬 → `피부 보습` 검출\n'
+        '- X · 옵션 끔 → 미검출'),
+    'ignore_case': ('영문 대소문자 무시',
+        '영문 대소문자를 구분하지 않고 비교합니다.\n\n'
+        '끄면 대소문자가 같아야 일치합니다.\n\n'
+        '예시) 키워드 완전 일치 / 등록: `Spot` / 입력: `spot`\n\n'
+        '- O · 옵션 켬 → `spot` 검출\n'
+        '- X · 옵션 끔 → 미검출'),
+    'normalize_symbols': ('설정된 기호를 공백으로 처리',
+        '관리자 공통 목록에 있는 기호만 공백으로 바꿉니다.\n\n'
+        '붙여 쓴 표현까지 비교하려면 띄어쓰기·줄바꿈 차이 허용도 켜세요.\n\n'
+        '예시) 키워드 완전 일치 / 공통 기호: `&` / 등록: `피부 보습` / 입력: `피부&보습`\n\n'
+        '- O · 옵션 켬 → `피부&보습` 검출\n'
+        '- X · 옵션 끔 → 미검출'),
 }
 MATCH_MODE_HELP = {
-    MATCH_MODES['exact']: '문장 안에서 등록된 표현을 찾습니다. 다른 단어 안에 포함된 표현도 검출될 수 있습니다.',
-    MATCH_MODES['similar']: '단어·조사·어미·일부 합성어와 영어 변화형 규칙으로 찾습니다. 의미를 판단하는 AI 검색은 아닙니다.',
-    MATCH_MODES['partial']: '등록 키워드의 일부 글자가 일치해도 찾습니다. 최소 글자수가 짧으면 관련 없는 결과가 늘어날 수 있습니다.',
+    MATCH_MODES['exact']: '문장 안에서 등록된 표현을 찾습니다.\n\n키워드 매칭 옵션을 각각 선택하세요.\n\n조사·어미 허용 목록은 사용하지 않습니다.\n\n다른 단어 안의 표현도 검출할 수 있습니다.\n\n예시) 등록 `피부` → 입력 `피부과` → O (`피부` 검출)',
+    MATCH_MODES['similar']: '등록 키워드의 앞·중간·뒷부분 중 연속된 2글자 이상이 일치하면 찾습니다.\n\n예시) 등록 `안티에이징` / 입력 `에이징 관리` → O · 키워드 `안티에이징` 검출',
+    MATCH_MODES['partial']: '일부 일치와 같은 원리로 검색하며 최소 글자수를 직접 조절합니다.\n\n2글자로 설정하면 키워드 일부 일치와 결과가 같습니다.\n\n최소 글자수가 짧으면 관련 없는 결과가 늘어날 수 있습니다.',
 }
+MATCH_MODE_DETAILS = {
+    MATCH_MODES['exact']: (
+        '등록된 키워드 표현 전체를 문장 안에서 찾습니다.\n\n'
+        '단어 경계를 강제하지 않아 다른 단어 안에 포함된 표현도 검출할 수 있습니다.\n\n'
+        '예시) 등록 키워드: `피부`\n\n'
+        '- O · `피부가 건조하다` → `피부` 검출\n'
+        '- O · `피부과` → 다른 단어 안의 `피부` 검출\n'
+        '- X · `피로` → `피부` 미검출\n\n'
+        '괄호 설명·공백·대소문자·기호 차이는 키워드 매칭 옵션의 선택을 따릅니다.'),
+    MATCH_MODES['similar']: (
+        '등록 키워드의 앞·중간·뒷부분 중 연속된 일부 글자를 문장 어디서든 찾습니다.\n\n'
+        '키워드의 첫 글자부터 일치하지 않아도 됩니다.\n\n'
+        '최소 2글자를 기준으로 등록 키워드를 검출합니다.\n\n'
+        '같은 위치에서는 가장 긴 일치 문구를 표시하며 포함된 모든 조각을 나열하지 않습니다.\n\n'
+        '예시) 등록 키워드: `안티에이징`\n\n'
+        '- O · 입력 `안티` → 키워드 `안티에이징` / 실제 일치 `안티`\n'
+        '- O · 입력 `에이징 관리` → 키워드 `안티에이징` / 실제 일치 `에이징`\n'
+        '- O · 입력 `티에이` → 키워드 `안티에이징` / 실제 일치 `티에이`\n'
+        '- X · 입력 `안` → 최소 글자수 미달\n'
+        '- X · 입력 `진정` → 미검출'),
+    MATCH_MODES['partial']: (
+        '키워드 일부 일치와 같은 검색 원리이며 최소 글자수를 직접 설정합니다.\n\n'
+        '최소 2글자이면 키워드 일부 일치와 결과가 같습니다.\n\n'
+        '글자수를 늘리면 짧은 조각으로 인한 결과를 줄일 수 있습니다.\n\n'
+        '예시) 등록 키워드: `안티에이징`\n\n'
+        '- O · 최소 2글자 / 입력 `안티` → 실제 일치 `안티`\n'
+        '- X · 최소 3글자 / 입력 `안티` → 미검출\n'
+        '- O · 최소 3글자 / 입력 `에이징` → 실제 일치 `에이징`\n'
+        '- X · 최소 4글자 / 입력 `에이징` → 미검출'),
+}
+
+
+def invalidate_analysis_result():
+    st.session_state['analysis_show'] = False
 
 
 def render_matching_rules_summary(config):
     with st.expander('적용 중인 규칙 요약', expanded=False):
-        st.write('검사 방식: ' + MATCH_MODE_LABELS[MATCH_MODES[config.mode]])
-        st.write('띄어쓰기·기호 차이 허용: ' + ('켜짐' if config.exact_relaxed else '꺼짐'))
-        st.caption('영문 대소문자는 기본적으로 구분하지 않습니다. 표기 차이 처리의 세부 동작은 검사 방식에 따라 다릅니다.')
-        extras = config.ko_suffixes - _KO_SUFFIX_WHITELIST
-        st.write(f'뒤에 붙는 말 허용 목록: 기본 {len(_KO_SUFFIX_WHITELIST)}개 + 관리자 추가 {len(extras)}개')
-        st.caption('단어·변형 규칙 검사에서 참조합니다. 합성어 검출 규칙은 별도로 적용됩니다.')
-        st.write('비교 시 처리할 기호: ' + (' · '.join(config.ignored_symbols) or '없음'))
-        st.caption('목록은 관리자 공통 설정입니다. 분석 실행 시 저장된 최신 규칙을 다시 불러옵니다.')
+        selected = st.session_state.get('match_mode', MATCH_MODES[config.mode])
+        st.caption('키워드 매칭 방식: ' + MATCH_MODE_LABELS.get(selected, '기존 변형 규칙 검색(API)'))
+        if config.mode == 'partial':
+            st.caption(f'최소 일치 글자수: {config.partial_min_len}글자')
+        for name, (label, _) in MATCH_NORMALIZATION_OPTIONS.items():
+            st.caption(label + ': ' + ('켜짐' if config.normalization_options()[name] else '꺼짐'))
+        st.caption('키워드 매칭 옵션은 세 방식에 공통으로 적용합니다.\n\n일부 일치는 2글자 이상, 글자 수 매칭은 설정한 글자수 이상의 연속된 조각을 찾습니다.')
+        if config.mode == 'similar':
+            extras = config.ko_suffixes - _KO_SUFFIX_WHITELIST
+            st.caption(f'뒤에 붙는 말 허용 목록: 기본 {len(_KO_SUFFIX_WHITELIST)}개 + 관리자 추가 {len(extras)}개')
+            st.caption('허용 목록 외에 합성어 규칙도 함께 적용합니다.\n\n목록에 없는 말이 붙어도 검출될 수 있습니다.')
+        else:
+            st.caption('뒤에 붙는 말 허용 목록: 이 검사 방식에는 적용하지 않음')
+        if config.normalization_options()['normalize_symbols']:
+            st.caption('비교 시 처리할 기호: ' + (' · '.join(config.ignored_symbols) or '없음'))
+        else:
+            st.caption('기호 처리가 꺼져 있어 공통 기호 목록은 적용하지 않습니다.')
+        st.caption('목록은 관리자 공통 설정입니다.\n\n분석 실행 시 저장된 최신 규칙을 다시 불러옵니다.')
 
 
 def render_common_matching_rules():
     _require_admin()
-    st.caption('저장한 규칙은 이후 분석부터 모든 사용자에게 적용됩니다. 이번 분석 옵션은 분석하기 탭에서 선택합니다.')
+    st.caption('저장한 규칙은 이후 분석부터 모든 사용자에게 적용됩니다.\n\n이번 분석 옵션은 분석하기 탭에서 선택합니다.')
     if message := st.session_state.pop('matching_rules_notice', None):
         st.success(message)
     version = st.session_state.get('matching_rules_editor_version', 0)
 
-    with st.expander('키워드 뒤에 붙는 말 허용 목록', expanded=False):
-        st.caption('예: 여드름 + 에는 → 여드름 검출. 기본 목록과 추가 목록을 합쳐 사용하며, 별도 합성어 규칙도 유지됩니다.')
+    with st.expander('기존 API용 조사·어미 허용 목록', expanded=False):
+        st.caption('기존 similar API의 변형 규칙 검사에서만 참조합니다.\n\n현재 화면의 완전 일치와 일부 일치에는 적용하지 않습니다.')
+        st.caption('기본 목록과 추가 목록을 합쳐 사용합니다.\n\n별도 합성어 규칙도 적용합니다.\n\n예시) 등록 키워드: `여드름`\n\n- O · 입력 `여드름에는` → `여드름` 검출\n- X · 입력 `뾰루지` → `여드름` 미검출')
+        st.caption('으로·로·에는은 이미 기본 목록에 포함되어 있어 추가로 저장하지 않아도 됩니다.')
         st.write('기본 목록: ' + ', '.join(sorted(_KO_SUFFIX_WHITELIST)))
         with st.form('common_suffix_rules'):
             raw = st.text_area('추가로 허용할 말 — 한 줄에 하나 또는 쉼표로 구분',
@@ -1611,9 +1705,9 @@ def render_common_matching_rules():
                 st.rerun()
             st.error('저장하지 못했습니다. 연결과 권한을 확인하세요.')
 
-    with st.expander('띄어쓰기·기호 처리 규칙', expanded=False):
-        st.caption('표기 차이 허용 옵션에서 사용하는 기호입니다. 공백 치환 외에 기호를 건너뛰어 연결 비교하는 기존 경로도 유지됩니다.')
-        st.caption('기호는 한 줄에 하나씩 입력하세요. 쉼표(,)도 한 줄에 그대로 입력합니다. 목록을 비우면 기존 기본값 / & , *가 적용됩니다.')
+    with st.expander('공백으로 처리할 기호 목록', expanded=False):
+        st.caption('분석 화면에서 기호 처리를 켜면 이 목록의 기호를 공백으로 바꿉니다.\n\n띄어쓰기 차이 허용은 별도로 선택합니다.')
+        st.caption('기호는 한 줄에 하나씩 입력하세요.\n\n쉼표(,)도 한 줄에 그대로 입력합니다.\n\n목록을 비우면 기존 기본값 / & , *가 적용됩니다.')
         with st.form('common_symbol_rules'):
             raw_symbols = st.text_area('비교 시 처리할 기호 — 한 줄에 하나',
                                        value='\n'.join(get_ignored_special_symbols()),
@@ -1637,7 +1731,7 @@ def render_common_matching_rules():
 def render_user_management():
     """Load account data only on demand and keep it in this admin's session."""
     st.subheader('사용자 관리')
-    st.caption('이 Supabase 프로젝트의 계정을 조회하고 앱 사용 역할을 변경합니다. 한 페이지에 최대 50개 계정을 표시합니다.')
+    st.caption('이 Supabase 프로젝트의 계정을 조회하고 앱 사용 역할을 변경합니다.\n\n한 페이지에 최대 50개 계정을 표시합니다.')
     token = st.session_state['auth_session']['access_token']
     repository = SupabaseRepository()
     page = st.number_input('페이지', min_value=1, max_value=100000, value=1,
@@ -1726,22 +1820,26 @@ with tab1:
             pre_risks = st.multiselect("리스크 등급", options=db_risks, key="pre_risks")
         with cf3:
             match_mode = st.radio(
-                "키워드 찾는 방식",
+                "키워드 매칭 방식",
                 list(MATCH_MODE_LABELS), index=0, key="match_mode",
                 format_func=lambda value: MATCH_MODE_LABELS[value],
+                on_change=invalidate_analysis_result,
+                help='\n\n'.join(f'**{MATCH_MODE_LABELS[mode]}**\n\n{description}'
+                                 for mode, description in MATCH_MODE_DETAILS.items()),
             )
             st.caption(MATCH_MODE_HELP[match_mode])
             if match_mode == MATCH_MODES['partial']:
-                st.number_input("일치해야 하는 최소 글자수", min_value=2, max_value=20,
+                st.number_input("최소 일치 글자수", min_value=2, max_value=20,
                                 value=int(st.session_state.get("partial_min_len", 2) or 2),
-                                step=1, key="partial_min_len")
-            st.checkbox("띄어쓰기·기호 차이 허용", value=True, key="exact_relaxed",
-                        help="등록 표현의 괄호 밖 내용, 공백·기호 차이를 고려하는 기존 규칙을 사용합니다. 영문 대소문자는 이 옵션과 관계없이 구분하지 않습니다.")
-            if match_mode == MATCH_MODES['similar']:
-                with st.expander("고급: 짧은 입력으로 관련 키워드 찾기", expanded=False):
-                    st.caption("예: spot 입력으로 dark spot을 찾습니다. 관련 없는 결과가 늘어날 수 있습니다.")
-                    st.checkbox("한 단어 입력으로 관련 키워드 찾기", value=True, key="similar_reverse_single")
-                    st.checkbox("문장 속 단어로도 관련 키워드 찾기", value=False, key="similar_reverse_any")
+                                step=1, key="partial_min_len", persist_state="session",
+                                on_change=invalidate_analysis_result,
+                                help='예시) 등록 `안티에이징` / 입력 `에이징 관리가 필요하다`\n\n- O · 최소 3글자 → `에이징` 검출\n- X · 최소 4글자 → 미검출\n\n옵션에 따라 공백·기호를 처리한 뒤의 글자수를 기준으로 합니다.\n\n등록 키워드 자체가 최소 글자수보다 짧으면 검색하지 않습니다.')
+            with st.expander('키워드 매칭 옵션', expanded=False):
+                for name, (label, description) in MATCH_NORMALIZATION_OPTIONS.items():
+                    st.checkbox(label, key=name, help=description, on_change=invalidate_analysis_result)
+                st.caption('옵션을 변경하면 이전 결과를 숨깁니다.\n\n텍스트 분석하기를 눌러 새 조건으로 검사하세요.')
+                if match_mode == MATCH_MODES['exact'] and not st.session_state.strip_bracket_notes:
+                    st.info('현재는 괄호까지 포함한 등록명을 찾습니다.\n\n안티에이징(anti-aging)을 안티에이징으로에서도 찾으려면 괄호 설명 제외를 켜세요.')
             rules_summary = st.empty()
             with rules_summary.container():
                 render_matching_rules_summary(_matching_config())
@@ -2360,7 +2458,7 @@ with tab1:
             st.checkbox(
                 "리스트 편집 모드 (관리자 전용)",
                 key="list_filter_edit_mode_tab1",
-                help="ON: 아래 표에서 직접 값을 수정할 수 있습니다. OFF: 읽기 전용 뷰어 모드입니다.",
+                help="ON: 아래 표에서 직접 값을 수정할 수 있습니다.\n\nOFF: 읽기 전용 뷰어 모드입니다.",
             )
             edit_mode_effective = bool(st.session_state.get("list_filter_edit_mode_tab1", False))
         else:

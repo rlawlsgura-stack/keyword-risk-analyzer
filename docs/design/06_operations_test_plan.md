@@ -1,6 +1,6 @@
 # Keyword Risk Analyzer 운영 배포와 검증 설계서
 
-문서 ID KRA OPS 001 · 버전 1.0 · 기준일 2026년 10월 21일
+문서 ID KRA OPS 001 · 버전 1.1 · 기준일 2026년 10월 22일
 
 ## 운영 범위
 
@@ -51,7 +51,7 @@ Copy-Item .env.example .env
 기존 `.env`가 있으면 복사로 덮어쓰지 않습니다. 필요한 값을 직접 설정하고 두 터미널에서 실행합니다.
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run keyword_app2_fixed270.py
+.\.venv\Scripts\python.exe -m streamlit run keyword_app2_fixed271.py
 .\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
@@ -103,7 +103,7 @@ render.yaml에는 keyword-risk-ui와 keyword-risk-api Web Service가 정의돼 �
 
 | 테스트 | 검증 내용 | 운영 데이터 변경 |
 |---|---|---|
-| test_service_preserves_all_engine_modes_and_post_filters | 세 모드 직접 엔진과 공통 서비스 결과 | 없음 |
+| test_service_preserves_all_engine_modes_and_pre_filters | 호환 모드 직접 엔진과 공통 서비스 결과, 사전 필터 | 없음 |
 | test_recording_is_opt_in_and_same_id_is_idempotent | record 기본값, ID 재시도와 충돌 | 메모리 가짜 저장소 |
 | test_api_auth_validation_and_private_results | 인증, 길이, mode, 조회 소유자, 페이지 범위 | 가짜 저장소 |
 | test_snapshot_keeps_more_than_1000_rows_and_extra_columns | 1,431행과 추가 컬럼 유지 | 가짜 응답 |
@@ -117,9 +117,19 @@ render.yaml에는 keyword-risk-ui와 keyword-risk-api Web Service가 정의돼 �
 | test_admin_common_rules_save_and_apply_on_next_analysis | 관리자 폼 저장, 쉼표 보존과 다음 분석 적용 | 가짜 저장소 |
 | test_captured_results_keep_positions_duplicates_and_overlap_rules | 이전 커밋에서 캡처한 27개 사례 비교 | 없음 |
 | test_common_rules_preserve_run_options_and_empty_list_fallback | 설정 스냅샷 불변성과 기존 빈 목록 처리 | 가짜 저장소 |
+| test_exact_parenthetical_name_depends_on_relaxed_option_not_suffixes | 괄호 포함 등록명의 완화 옵션과 접미사 독립성, 직접 엔진·서비스 비교 | 없음 |
+| test_exact_ui_independent_options_and_suffix_rule_scope | 괄호 옵션만 변경해 검출 전환, 개별 선택 유지·이전 결과 숨김·하이라이트와 집계 | 가짜 저장소 |
+| test_independent_options_control_each_normalization_without_bypasses | 네 옵션 16개 조합, 모드별 단일 효과, 대소문자와 원문 위치 | 없음 |
+| test_keyword_ranges_preserve_repetitions_codes_and_literal_symbols | 반복 구간·다른 코드 보존, 앞뒤 기호 OFF와 영문 다단어 위치 | 없음 |
+| test_filters_apply_before_other_keywords_can_suppress_matches | 카테고리·등급 사전 필터로 긴 제외 키워드가 짧은 허용 키워드를 가리지 않음 | 없음 |
+| test_fragment_search_uses_any_consecutive_part_and_keeps_maximal_occurrences | 문장 내 임의 위치의 중간·뒷부분, 최소 글자수, 중첩 후보 정리와 반복 보존 | 없음 |
+| test_three_mode_ui_preserves_nested_keyword_codes | 세 선택지, 중첩 코드의 표·하이라이트·집계 보존, 일부 입력의 등록 키워드 검출 | 가짜 저장소 |
+| test_api_independent_options_override_legacy_and_keep_record_fingerprints | 개별 옵션 16개 조합과 우선순위, boolean 검증, 기존 기록 지문 재시도 | 가짜 저장소 |
+| test_metrics_use_reviewed_labels_and_reject_incomplete_results | 규정 검색 평가의 승인 라벨·결과 누락 검증 | 없음 |
+| test_categories_cannot_hide_a_failed_group_and_scope_is_separate | 제품군별 평가와 범위 외 사례 분리 | 없음 |
 | test_live_reset | 실제 HTTP 누적 초기화와 원장 보존 | 실제 초기화, 명시적 opt in 필요 |
 
-기본 테스트는 14개를 실행하고 live reset 1개는 건너뜁니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.
+기본 테스트는 29개를 실행하고 live reset 1개는 건너뜁니다. 보조 분석 검증은 실제 Kiwi 활용형·단어 경계 사례, 가짜 임베딩 응답의 필터·캐시 무효화·429 오류 분리, API 인증·무기록, 화면 기존 결과·CSV 보존을 포함합니다. 실제 임베딩 검색 품질 검증은 API 429 해소 후 별도로 수행해야 합니다. tests/database.sql은 격리된 트랜잭션과 테스트 스키마에서 동작, 중복 집계, 소유자 검사와 초기화 의미를 확인한 뒤 ROLLBACK하는 용도입니다. 운영 원장에 그대로 실행하지 않습니다.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v

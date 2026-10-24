@@ -1,6 +1,6 @@
 # Keyword Risk Analyzer API 설계서
 
-문서 ID KRA API 001 · API 버전 1.0.0 · 기준일 2026년 10월 21일
+문서 ID KRA API 001 · API 버전 1.0.0 · 기준일 2026년 10월 22일
 
 ## 인터페이스 원칙
 
@@ -31,9 +31,16 @@ Content-Type: application/json
 | API 04 | GET /api/v1/analyses/{analysis_id} | 필요 | 200 | 본인 저장 결과 조회 |
 | API 05 | GET /api/v1/keywords | 필요 | 200 | 키워드 조회 검색 페이지 |
 | API 06 | GET /api/v1/reports/top-keywords | 필요 | 200 | 기간별 공유 Top N |
+| API 07 | POST /api/v1/auxiliary-analyses | 필요 | 200 | Kiwi·임베딩 보조 후보, 기록 없음 |
 | DOC 01 | GET /openapi.json | 없음 | 200 | 기본 FastAPI 명세 |
 
-업무 API 4개 작업과 상태 확인 2개 작업이 런타임 OpenAPI에 등록돼 있습니다. 기본 OpenAPI 제공 경로는 별도입니다. `/docs`는 `API_DOCS_ENABLED=true`일 때만 열리고 `/redoc`은 비활성화돼 있습니다. 기본 `/openapi.json`은 현재 설정에서 별도로 비활성화하지 않았습니다.
+업무 API 5개 작업과 상태 확인 2개 작업이 런타임 OpenAPI에 등록돼 있습니다. 기본 OpenAPI 제공 경로는 별도입니다. `/docs`는 `API_DOCS_ENABLED=true`일 때만 열리고 `/redoc`은 비활성화돼 있습니다. 기본 `/openapi.json`은 현재 설정에서 별도로 비활성화하지 않았습니다.
+
+## API 07 보조 분석
+
+`POST /api/v1/auxiliary-analyses`는 기존 분석과 별도이며 저장·조회수 증가를 하지 않습니다. 요청은 text(1~20,000자, 공백만 입력 불가), categories, risks, kiwi(boolean, 기본 true), embeddings(boolean, 기본 false), limit(1~20, 기본 10)입니다. 기존 사용자·연동 토큰 인증을 동일하게 적용합니다.
+
+응답은 kiwi와 embeddings 각각 status(ok/disabled/unavailable), candidates, 실패 시 message를 반환합니다. 후보는 kwd_no와 keyword를 포함하고 Kiwi는 원문 start/end, 임베딩은 similarity를 추가합니다. 임베딩 unavailable이어도 Kiwi 결과를 반환합니다. similarity는 위험 확률이 아닙니다. 임베딩은 입력 문장과 키워드·카테고리·심의기준을 외부 OpenAI API로 전송하며 모델 기본값은 text-embedding-3-small입니다. 이 경로는 법령 본문 검색이나 위반 판정을 제공하지 않습니다.
 
 ## API 01과 API 02 상태 확인
 
@@ -48,17 +55,29 @@ Content-Type: application/json
 | 필드 | 형식 | 필수 | 기본값 | 검증과 의미 |
 |---|---|---|---|---|
 | text | string | 예 | 없음 | 길이 1 이상 20,000 이하 |
-| mode | enum | 아니오 | similar | exact, similar, partial |
-| exact_relaxed | boolean | 아니오 | false | 완화 정규화 옵션 |
+| mode | enum | 아니오 | similar | 화면의 완전 일치는 exact, 일부 일치는 partial+최소2, 글자 수 매칭은 partial+설정길이. similar는 기존 변형 규칙 API 호환용 |
+| exact_relaxed | boolean | 아니오 | false | 기존 묶음 옵션, deprecated. 명시한 개별 옵션이 우선 |
+| strip_bracket_notes | boolean 또는 null | 아니오 | null | exact/partial의 등록명에서 괄호 설명을 제외해 비교 표현 준비 |
+| normalize_whitespace | boolean 또는 null | 아니오 | null | 띄어쓰기·줄바꿈 차이 허용 |
+| ignore_case | boolean 또는 null | 아니오 | null | 영문 대소문자 무시 |
+| normalize_symbols | boolean 또는 null | 아니오 | null | 공통 기호를 공백으로 치환 |
 | partial_min_len | integer | 아니오 | 2 | 2 이상 30 이하 |
-| similar_reverse_single | boolean | 아니오 | true | 단일 토큰 입력의 역매칭 |
-| similar_reverse_any | boolean | 아니오 | false | 토큰 수 무관 역매칭 |
-| categories | string array | 아니오 | [] | 최대 100개, 결과 카테고리 필터 |
-| risks | string array | 아니오 | [] | 최대 20개, 결과 등급 필터 |
+| similar_reverse_single | boolean | 아니오 | true | deprecated, 기존 similar 전용 단일 토큰 역매칭 |
+| similar_reverse_any | boolean | 아니오 | false | deprecated, 기존 similar 전용 문장 역매칭 |
+| categories | string array | 아니오 | [] | 최대 100개, 매칭 전 원장 카테고리 필터 |
+| risks | string array | 아니오 | [] | 최대 20개, 매칭 전 원장 등급 필터 |
 | record | boolean | 아니오 | false | 분석 결과와 집계를 DB에 기록 |
 | analysis_id | UUID 또는 null | 아니오 | null | 생략 시 서버에서 새 UUID 생성 |
 
 정의하지 않은 요청 필드는 허용하지 않아 422를 반환합니다. 공백만 있는 text를 거절하는 별도 검증은 없습니다. 필터 항목의 문자열 길이나 실제 원장 값 존재 여부도 별도 검증하지 않습니다. Pydantic의 기본 변환 규칙을 사용하며 모든 필드에 strict 모드를 지정한 것은 아닙니다.
+
+신규 연동은 네 개별 옵션을 모두 명시하는 방식을 권장합니다. boolean은 JSON true/false 또는 null만 허용하며 문자열은 422를 반환합니다. 개별 false도 기존 묶음 true보다 우선합니다. 네 필드가 전부 생략/null이면 기존 검출 경로를 유지하며, 일부만 명시한 경우 나머지는 기존 묶음 옵션과 모드에서 유도합니다. 세부 기본값은 [분석 로직 설계서](05_matching_design.md)의 개별 표기 비교 옵션을 참고합니다.
+
+`mode=exact`에서 B245 `안티에이징(anti-aging)`을 `안티에이징으로`에서도 찾으려면 strip_bracket_notes=true로 지정합니다. 공백과 대소문자 옵션은 별도로 선택합니다. 기호 치환은 공백 치환이므로 피부&보습과 피부보습을 연결하려면 기호·공백 옵션을 모두 켭니다. 조사·어미 허용 목록은 similar 모드에서만 참조하며 exact의 단어 경계를 제한하지 않습니다.
+
+응답 형식과 경로는 유지합니다. 기록 지문은 생략/null인 신규 필드를 제거하고 계산해 기존 기록의 재시도를 보존하며, 명시한 개별 옵션 값은 지문에 포함합니다.
+
+화면과 같은 검사는 mode=exact 또는 partial과 네 개별 옵션을 명시합니다. partial은 등록 표현의 어느 연속된 조각이든 partial_min_len 이상이면 문장 어디서든 찾습니다. 예를 들어 안티에이징 등록 시 에이징 관리가 필요하다는 최소 3글자 O, 4글자 X입니다. 필터는 매칭 전에 적용하고, 개별 옵션 경로에서는 다른 코드의 겹친 결과를 보존하며 같은 코드의 포함된 짧은 조각만 제거합니다. 호환을 위해 mode 생략 시 기존 similar 기본값은 유지합니다.
 
 ### 요청 예시
 
@@ -66,7 +85,10 @@ Content-Type: application/json
 {
   "text": "필러와 필러",
   "mode": "exact",
-  "exact_relaxed": true,
+  "strip_bracket_notes": true,
+  "normalize_whitespace": true,
+  "ignore_case": true,
+  "normalize_symbols": true,
   "categories": ["화장품"],
   "risks": [],
   "record": true,

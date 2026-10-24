@@ -4,7 +4,7 @@ import hashlib
 import json
 from uuid import uuid4
 
-from matching_engine import MATCH_MODES as MODES, MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
+from matching_engine import MATCH_MODES as MODES, NORMALIZATION_OPTIONS, MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
 
 def load_matching_config(repository, config):
     """Add saved common rules to a frozen per-analysis configuration."""
@@ -22,18 +22,21 @@ def load_matching_config(repository, config):
 
 def match_text(text, keywords, *, match_mode=None, exact_relaxed=None,
                config=None, categories=(), risks=(), **options):
-    matches = find_matches_nlp(text, keywords, match_mode=match_mode,
-                               exact_relaxed=exact_relaxed, config=config, **options)
-    # Preserve the original overlap behavior: filter AFTER matching.
-    if categories:
-        matches = [m for m in matches if m.category.strip() in categories]
-    if risks:
-        matches = [m for m in matches if m.risk.strip() in risks]
-    return matches
+    # Excluded keywords must never suppress eligible candidates during overlap handling.
+    for column, selected in (('상품카테고리', categories), ('리스크 등급', risks)):
+        if selected:
+            keywords = (keywords.loc[keywords[column].astype(str).str.strip().isin(selected)]
+                        if column in keywords else keywords.iloc[:0])
+    return find_matches_nlp(text, keywords, match_mode=match_mode,
+                            exact_relaxed=exact_relaxed, config=config, **options)
 
 
 def analyze(repository, request, actor):
     payload = dict(request)
+    # Preserve fingerprints of recorded legacy requests when new fields are omitted/null.
+    for name in NORMALIZATION_OPTIONS:
+        if payload.get(name) is None:
+            payload.pop(name, None)
     analysis_id = str(payload.pop('analysis_id', None) or uuid4())
     record = payload.pop('record', False)
     fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
@@ -48,7 +51,8 @@ def analyze(repository, request, actor):
         exact_relaxed=payload.get('exact_relaxed', False),
         partial_min_len=payload.get('partial_min_len', 2),
         similar_reverse_single=payload.get('similar_reverse_single', True),
-        similar_reverse_any=payload.get('similar_reverse_any', False)))
+        similar_reverse_any=payload.get('similar_reverse_any', False),
+        **{name: payload.get(name) for name in NORMALIZATION_OPTIONS}))
     matches = match_text(payload['text'], keywords, config=config,
                          categories=payload.get('categories', []), risks=payload.get('risks', []))
     result = {'analysis_id': analysis_id, 'matches': [asdict(m) for m in matches],

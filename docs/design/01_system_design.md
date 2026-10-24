@@ -60,7 +60,7 @@ Streamlit은 FastAPI를 HTTP로 호출하지 않습니다. API 프로세스 중�
 
 | 파일 | 책임 | 주요 외부 의존 |
 |---|---|---|
-| keyword_app2_fixed270.py | 화면, 로그인 세션, 편집, 하이라이트, 파일 입출력 | Streamlit, pandas |
+| keyword_app2_fixed271.py | 화면, 로그인 세션, 편집, 하이라이트, 파일 입출력 | Streamlit, pandas |
 | api.py | 요청 검증, 인증, 라우팅, 예외 응답 | FastAPI, Pydantic |
 | service.py | API 분석 흐름과 공통 후처리 필터 | 매칭 엔진, 저장소 |
 | matching_engine.py | 정규화, 후보 생성, 위치와 겹침 처리 | pandas, Python re |
@@ -73,8 +73,8 @@ Streamlit은 FastAPI를 HTTP로 호출하지 않습니다. API 프로세스 중�
 
 1. 로그인 정보와 역할을 확인합니다.
 2. 키워드 전체, 컬럼 순서와 revision을 단일 스냅샷으로 읽습니다.
-3. 매칭 옵션과 공통 설정을 구성하고 원문 위치를 보존하며 분석합니다.
-4. 카테고리와 리스크 필터를 적용합니다. 화면 명칭은 사전 필터지만 실제 처리는 매칭 후입니다.
+3. 카테고리와 리스크 필터로 분석 대상 키워드를 먼저 선택합니다.
+4. 매칭 옵션과 공통 설정을 구성하고 원문 위치를 보존하며 완전 또는 일부 일치로 분석합니다. 다른 코드의 겹친 검출은 유지하고 하이라이트에서만 표시 구간을 합칩니다.
 5. API의 `record=true` 또는 Streamlit의 검출 성공 시 저장 함수를 호출합니다.
 6. 저장 함수는 revision과 요청 중복을 검사하고 분석 기록, 고유 키워드별 이벤트와 누적 조회수를 하나의 트랜잭션에서 갱신합니다.
 7. 화면 또는 JSON 결과를 반환합니다.
@@ -105,4 +105,4 @@ Streamlit은 FastAPI를 HTTP로 호출하지 않습니다. API 프로세스 중�
 
 ## 기준 소스
 
-`api.py`, `service.py`, `repository.py`, `matching_engine.py`, `keyword_app2_fixed270.py`, `app_config.py`, `supabase/schema.sql`, `render.yaml`을 기준으로 작성했습니다. 관련 설계의 상세 규약은 같은 폴더의 API, 화면, DB와 운영 문서를 참조합니다.
+`api.py`, `service.py`, `repository.py`, `matching_engine.py`, `keyword_app2_fixed271.py`, `app_config.py`, `supabase/schema.sql`, `render.yaml`을 기준으로 작성했습니다. 관련 설계의 상세 규약은 같은 폴더의 API, 화면, DB와 운영 문서를 참조합니다.

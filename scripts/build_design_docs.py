@@ -66,7 +66,7 @@ def diagrams():
     body = svg_text(28, 38, '현재 화면의 정보 구조', 23, weight=700)
     panels = [
         (25, 75, 'UI 00 로그인', ['사내 계정 로그인', '이메일 입력', '비밀번호 마스킹 입력', '로그인 버튼', '실패 시 안내, role 확인 후 진입']),
-        (595, 75, 'UI 10과 UI 11 분석', ['일반 사용자: 분석하기 | 리포트', '원문 입력  최대 20,000자', '키워드 찾는 방식과 적용 규칙 요약', '분석 실행  고유 코드 수와 결과 표', '원문 하이라이트와 CSV 다운로드']),
+        (595, 75, 'UI 10과 UI 11 분석', ['일반 사용자: 분석하기 | 리포트', '원문 입력  최대 20,000자', '키워드 매칭 방식·옵션과 규칙 요약', '분석 실행  고유 코드 수와 결과 표', '원문 하이라이트와 CSV 다운로드']),
         (25, 395, 'UI 20과 UI 21 리포트', ['최근 7일 Top N  기본 10', '시작과 종료 기간', '키워드별 주간 조회수 표', '리포트 CSV 다운로드', '관리자용 누적 초기화와 주간 제외']),
         (595, 395, 'UI 30~32와 UI 40 관리', ['admin 전용: 키워드 관리 | 사용자 관리', '공통 분석 규칙 편집과 저장', '키워드 추가·편집·업로드·삭제', '드롭다운과 템플릿 다운로드', '계정 목록 조회와 member/admin 역할 지정'])
     ]
@@ -197,7 +197,8 @@ def contracts():
     })
     names = {('/healthz','get'):'StatusResponse',('/readyz','get'):'StatusResponse',
              ('/api/v1/analyses','post'):'AnalysisResponse',('/api/v1/analyses/{analysis_id}','get'):'AnalysisResponse',
-             ('/api/v1/keywords','get'):'KeywordPage',('/api/v1/reports/top-keywords','get'):'TopKeywordsResponse'}
+             ('/api/v1/keywords','get'):'KeywordPage',('/api/v1/reports/top-keywords','get'):'TopKeywordsResponse',
+             ('/api/v1/auxiliary-analyses','post'):'AuxiliaryResponse'}
     for (path, method), name in names.items():
         operation = design['paths'][path][method]
         operation['responses']['200']['content'] = {'application/json':{'schema':ref(name)}}
@@ -243,15 +244,17 @@ def build():
     @media print{@page{size:A4;margin:17mm 15mm}body{background:white;font-size:10pt;line-height:1.65}aside,.no-print{display:none}main{margin:0;padding:0;max-width:none}.cover,.chapter{border:0;border-radius:0;padding:0;margin:0}.cover{margin-bottom:25px}.chapter{break-before:page}h2{font-size:20pt}h3{font-size:14pt}h4{font-size:12pt}h2,h3,h4{break-after:avoid}table{font-size:8.3pt}th,td{padding:5px 7px}thead{display:table-header-group}tr{break-inside:avoid}pre{font-size:8pt}img{max-height:220mm}a{color:inherit;text-decoration:none}.table-scroll{overflow:visible}figure{break-inside:avoid}details{display:none}}
     '''
     html_doc = f'''<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Keyword Risk Analyzer 통합 설계서</title><style>{css}</style></head><body>
-    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong>{''.join(nav)}<div class="meta">버전 1.0<br>구현 기준: 2026년 10월 21일<br>규정 검색 제안 갱신: 10월 22일</div></aside>
-    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 구현 기준 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><p>규정 검색 도입 제안은 2026년 10월 22일 사용자 확정 범위를 반영했습니다.</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header>{''.join(chapters)}</main></body></html>'''
+    <aside><strong>Keyword Risk Analyzer<br>설계 문서</strong>{''.join(nav)}<div class="meta">버전 1.0<br>구현 기준: 2026년 10월 21일<br>매칭 안내 갱신: 10월 22일<br>규정 검색 제안 갱신: 10월 22일</div></aside>
+    <main><header class="cover"><div class="eyebrow">SYSTEM DESIGN DOCUMENTATION</div><h1>Keyword Risk Analyzer 통합 설계서</h1><p>시스템 구조부터 API 화면 Supabase 분석 규칙과 운영 검수까지 연결한 개발 인수인계 문서입니다.</p><p>버전 1.0 · 구현 기준 2026년 10월 21일 · Streamlit + FastAPI + Supabase</p><p>매칭 옵션 안내와 설계 검토는 2026년 10월 22일 재현 결과를 반영했습니다.</p><p>규정 검색 도입 제안은 2026년 10월 22일 사용자 확정 범위를 반영했습니다.</p><div class="links no-print"><a href="openapi.json">문서용 OpenAPI</a><a href="openapi.runtime.json">런타임 원본 OpenAPI</a><a href="README.md">개별 문서 안내</a><button onclick="window.print()">인쇄</button></div></header>{''.join(chapters)}</main></body></html>'''
     (OUT / 'design_book.html').write_text(html_doc, encoding='utf-8')
-    source_files = ['keyword_app2_fixed270.py','matching_engine.py','api.py','service.py',
+    source_files = ['keyword_app2_fixed271.py','keyword_app2_fixed270.py','CHANGELOG.md','matching_engine.py','api.py','service.py','auxiliary_analysis.py',
                     'repository.py','app_config.py','supabase/schema.sql','supabase/fix_reset_counts.sql','render.yaml',
                     'scripts/evaluate_regulation_retrieval.py','data/regulations/source_manifest.json']
     proposed_files = ['07_regulation_rag_design.md', 'reference/regulation_sources.json',
                       'reference/regulation_openapi.proposed.json', 'reference/regulation_eval_cases.jsonl']
-    manifest = {'document_version':'1.0','basis_date_kst':'2026-10-21',
+    manifest = {'document_version':'1.0','application_version':'FIXED271','previous_ui_version':'FIXED270',
+                'basis_date_kst':'2026-10-21',
+                'matching_design_updated_kst':'2026-10-22',
                 'regulation_design_updated_kst':'2026-10-22',
                 'source_hash_format':'SHA-256 of UTF-8 text without BOM, with CRLF/CR normalized to LF',
                 'runtime_openapi':runtime['openapi'],'runtime_path_count':len(runtime['paths']),

@@ -1,4 +1,5 @@
 from dataclasses import asdict
+from itertools import product
 import os
 from pathlib import Path
 import shutil
@@ -62,7 +63,7 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.repository = MemoryRepository()
 
-    def test_service_preserves_all_engine_modes_and_post_filters(self):
+    def test_service_preserves_all_engine_modes_and_pre_filters(self):
         for mode, label in MODES.items():
             request = {'text': '필러와 필러', 'mode': mode, 'exact_relaxed': True}
             result = analyze(self.repository, request, 'user-1')
@@ -115,6 +116,47 @@ class IntegrationTests(unittest.TestCase):
         finally:
             api.app.dependency_overrides.clear()
 
+    def test_api_independent_options_override_legacy_and_keep_record_fingerprints(self):
+        self.repository.df.loc[0, '키워드명'] = 'Anti Aging(note)'
+        api.app.dependency_overrides[api.get_repository] = lambda: self.repository
+        api.app.dependency_overrides[api.current_actor] = lambda: 'user-1'
+        try:
+            with TestClient(api.app) as client:
+                for bracket, whitespace, case, symbols in product((False, True), repeat=4):
+                    response = client.post('/api/v1/analyses', json={
+                        'text': 'anti&\naging', 'mode': 'exact', 'exact_relaxed': True,
+                        'strip_bracket_notes': bracket, 'normalize_whitespace': whitespace,
+                        'ignore_case': case, 'normalize_symbols': symbols})
+                    self.assertEqual(response.status_code, 200, response.text)
+                    self.assertEqual(bool(response.json()['matches']), all((bracket, whitespace, case, symbols)))
+                self.assertEqual(client.post('/api/v1/analyses', json={
+                    'text': 'x', 'ignore_case': 'false'}).status_code, 422)
+                for minimum, expected in ((5, True), (6, False)):
+                    response = client.post('/api/v1/analyses', json={
+                        'text': 'aging care', 'mode': 'partial', 'partial_min_len': minimum,
+                        'strip_bracket_notes': True, 'normalize_whitespace': True,
+                        'ignore_case': True, 'normalize_symbols': True})
+                    self.assertEqual(response.status_code, 200, response.text)
+                    self.assertEqual(bool(response.json()['matches']), expected)
+                    if expected:
+                        self.assertEqual([(m['start'], m['end']) for m in response.json()['matches']], [(0, 5)])
+
+                # Existing saved requests must remain replayable after nullable fields are added.
+                body = {'text': 'Anti Aging(note)', 'mode': 'exact', 'record': True,
+                        'analysis_id': str(uuid4())}
+                legacy = api.AnalysisRequest(**body).model_dump(mode='json')
+                for name in ('strip_bracket_notes', 'normalize_whitespace', 'ignore_case', 'normalize_symbols'):
+                    legacy.pop(name)
+                old_result = analyze(self.repository, legacy, 'user-1')
+                replay = client.post('/api/v1/analyses', json=body)
+                self.assertEqual(replay.status_code, 200, replay.text)
+                self.assertEqual(replay.json(), old_result)
+                self.assertEqual(self.repository.records, 1)
+                body['ignore_case'] = False
+                self.assertEqual(client.post('/api/v1/analyses', json=body).status_code, 409)
+        finally:
+            api.app.dependency_overrides.clear()
+
     def test_snapshot_keeps_more_than_1000_rows_and_extra_columns(self):
         rows = [{'kwd_no': f'A{i:04}', '키워드명': '필러', '비고': '보존'}
                 for i in range(1431)]
@@ -143,12 +185,12 @@ class IntegrationTests(unittest.TestCase):
     def test_existing_streamlit_csv_screen_and_member_analysis(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory)
-            for name in ('keyword_app2_fixed270.py', 'matching_engine.py',
-                         'app_config.py', 'repository.py', 'service.py'):
+            for name in ('keyword_app2_fixed271.py', 'matching_engine.py',
+                         'app_config.py', 'repository.py', 'service.py', 'auxiliary_analysis.py'):
                 shutil.copy2(ROOT / name, target / name)
             self.repository.df.to_csv(target / 'keywords_db.csv', index=False, encoding='utf-8-sig')
             with patch.dict(os.environ, {'STORAGE_BACKEND': 'csv'}):
-                app = AppTest.from_file(str(target / 'keyword_app2_fixed270.py')).run(timeout=30)
+                app = AppTest.from_file(str(target / 'keyword_app2_fixed271.py')).run(timeout=30)
                 self.assertEqual(len(app.exception), 0)
                 app.button(key='btn_analyze').click().run(timeout=30)
                 self.assertEqual(len(app.exception), 0)
@@ -175,10 +217,153 @@ class IntegrationTests(unittest.TestCase):
                                     'SUPABASE_URL': 'https://example.supabase.co',
                                     'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
              patch('repository.SupabaseRepository.load_keywords') as load:
-            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py')).run(timeout=30)
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py')).run(timeout=30)
             self.assertEqual(len(app.exception), 0)
             load.assert_not_called()
             self.assertFalse(any(b.key == 'btn_analyze' for b in app.button))
+
+    def test_exact_ui_independent_options_and_suffix_rule_scope(self):
+        self.repository.df.loc[0, 'kwd_no'] = 'B245'
+        self.repository.df.loc[0, '키워드명'] = '안티에이징(anti-aging)'
+        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
+                                    'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.SupabaseRepository.user', return_value=self.repository.user('valid-user-token')), \
+             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
+             patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
+             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
+             patch('repository.SupabaseRepository.record_analysis') as record:
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
+            app.session_state['auth_session'] = {'access_token': 'valid-user-token', 'expires_at': 9999999999}
+            app.run(timeout=30)
+            app.text_area[0].input('이제 깊이가 다른 안티에이징으로 지워냅니다.')
+            self.assertFalse(any(box.key == 'exact_relaxed' for box in app.checkbox))
+            app.checkbox(key='strip_bracket_notes').uncheck().run(timeout=30)
+            self.assertEqual(app.checkbox(key='strip_bracket_notes').label, '등록 키워드의 괄호 설명 제외')
+            self.assertTrue(app.checkbox(key='normalize_whitespace').value)
+            self.assertTrue(app.checkbox(key='ignore_case').value)
+            self.assertTrue(app.checkbox(key='normalize_symbols').value)
+            self.assertTrue(any('현재는 괄호까지' in message.value for message in app.info))
+            self.assertTrue(any('허용 목록: 이 검사 방식에는 적용하지 않음' in message.value for message in app.caption))
+            app.button(key='btn_analyze').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertFalse(app.session_state['analysis_show'])
+            record.assert_not_called()
+            app.checkbox(key='strip_bracket_notes').check().run(timeout=30)
+            app.button(key='btn_analyze').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertEqual(app.session_state['analysis_count'], 1)
+            self.assertIn('B245', app.session_state['analysis_highlight_html'])
+            record.assert_called_once()
+            app.checkbox(key='ignore_case').uncheck().run(timeout=30)
+            self.assertFalse(app.session_state['analysis_show'])
+            record.assert_called_once()  # Changing an option does not reanalyze or record.
+            app.radio(key='match_mode').set_value(MODES['partial']).run(timeout=30)
+            self.assertFalse(app.checkbox(key='ignore_case').value)
+            self.assertTrue(app.checkbox(key='strip_bracket_notes').value)
+            self.assertEqual(len(app.radio(key='match_mode').options), 3)
+            self.assertFalse(any(box.key in {'similar_reverse_single', 'similar_reverse_any'} for box in app.checkbox))
+            app.number_input(key='partial_min_len').set_value(3).run(timeout=30)
+            app.text_area[0].input('에이징 관리가 필요하다.')
+            app.button(key='btn_analyze').click().run(timeout=30)
+            self.assertEqual(app.session_state['analysis_count'], 1)
+            self.assertIn('B245', app.session_state['analysis_highlight_html'])
+            app.number_input(key='partial_min_len').set_value(4).run(timeout=30)
+            self.assertFalse(app.session_state['analysis_show'])
+            app.button(key='btn_analyze').click().run(timeout=30)
+            self.assertFalse(app.session_state['analysis_show'])
+            app.radio(key='match_mode').set_value(MODES['exact']).run(timeout=30)
+            self.assertFalse(app.checkbox(key='ignore_case').value)
+            app.radio(key='match_mode').set_value(MODES['partial']).run(timeout=30)
+            self.assertEqual(app.number_input(key='partial_min_len').value, 4)
+            app.radio(key='match_mode').set_value(MODES['similar']).run(timeout=30)
+            self.assertFalse(any(item.key == 'partial_min_len' for item in app.number_input))
+            for fragment in ('안티', '에이징', '티에이'):
+                app.text_area[0].input(fragment + ' 관리')
+                app.button(key='btn_analyze').click().run(timeout=30)
+                self.assertEqual(len(app.exception), 0)
+                self.assertEqual(app.session_state['analysis_count'], 1)
+                result = app.session_state['analysis_df_display_unique'].iloc[0]
+                self.assertEqual(result['키워드명'], self.repository.df.iloc[0]['키워드명'])
+                self.assertNotIn('실제 일치 문구', app.session_state['analysis_df_full'].columns)
+                self.assertFalse(any('실제 일치 문구' in table.value.columns for table in app.dataframe))
+                self.assertNotIn('실제 일치 문구', app.session_state['analysis_csv_bytes'].decode('utf-8-sig'))
+            app.radio(key='match_mode').set_value(MODES['partial']).run(timeout=30)
+            self.assertEqual(app.number_input(key='partial_min_len').value, 4)
+
+    def test_three_mode_ui_preserves_nested_keyword_codes(self):
+        self.repository.df.loc[1] = self.repository.df.iloc[0].copy()
+        self.repository.df.loc[0, ['kwd_no', '키워드명']] = ['S001', '피부']
+        self.repository.df.loc[1, ['kwd_no', '키워드명']] = ['L002', '피부보습']
+        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
+                                    'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.SupabaseRepository.user', return_value=self.repository.user('valid-user-token')), \
+             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
+             patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
+             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
+             patch('repository.SupabaseRepository.record_analysis') as record:
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
+            app.session_state['auth_session'] = {'access_token': 'valid-user-token', 'expires_at': 9999999999}
+            app.session_state['match_mode'] = MODES['similar']
+            app.run(timeout=30)
+            self.assertEqual(app.radio(key='match_mode').value, MODES['similar'])
+            self.assertEqual(len(app.radio(key='match_mode').options), 3)
+            app.text_area[0].input('피부보습')
+            for mode in (MODES['exact'], MODES['similar'], MODES['partial']):
+                app.radio(key='match_mode').set_value(mode).run(timeout=30)
+                app.button(key='btn_analyze').click().run(timeout=30)
+                self.assertEqual(len(app.exception), 0)
+                self.assertEqual(app.session_state['analysis_count'], 2)
+                self.assertEqual(len(app.session_state['analysis_df_full']), 2)
+                self.assertIn('S001', app.session_state['analysis_highlight_html'])
+                self.assertIn('L002', app.session_state['analysis_highlight_html'])
+                self.assertEqual(set(record.call_args.args[-1]['unique_keywords']), {'S001', 'L002'})
+            self.repository.df.loc[0, ['kwd_no', '키워드명']] = ['B245', '안티에이징']
+            self.repository.df.loc[1, ['kwd_no', '키워드명']] = ['B246', '올인원']
+            for mode in (MODES['exact'], MODES['similar'], MODES['partial']):
+                app.radio(key='match_mode').set_value(mode).run(timeout=30)
+                for fragment in ('안티에이징', '안티', '에이징', '티에이'):
+                    app.text_area[0].input('올인원 ' + fragment)
+                    app.button(key='btn_analyze').click().run(timeout=30)
+                    self.assertEqual(len(app.exception), 0)
+                    rows = app.session_state['analysis_df_display_unique']
+                    expected = {'B245', 'B246'} if mode != MODES['exact'] or fragment == '안티에이징' else {'B246'}
+                    self.assertEqual(set(rows['kwd_no']), expected)
+                    if 'B245' in expected:
+                        row = rows.loc[rows['kwd_no'] == 'B245'].iloc[0]
+                        self.assertEqual(row['키워드명'], '안티에이징')
+                        positions = app.session_state['analysis_df_full']
+                        position = positions.loc[positions['kwd_no'] == 'B245'].iloc[0]
+                        self.assertEqual(('올인원 ' + fragment)[position['start']:position['end']], fragment)
+
+    def test_auxiliary_ui_leaves_primary_results_and_recording_unchanged(self):
+        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
+                                    'SUPABASE_URL': 'https://example.supabase.co',
+                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
+             patch('repository.SupabaseRepository.user', return_value=self.repository.user('valid-user-token')), \
+             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
+             patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
+             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
+             patch('repository.SupabaseRepository.record_analysis') as record:
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
+            app.session_state['auth_session'] = {'access_token': 'valid-user-token', 'expires_at': 9999999999}
+            app.run(timeout=30)
+            app.button(key='btn_analyze').click().run(timeout=30)
+            record.assert_called_once()
+            csv_before = app.session_state['analysis_csv_bytes']
+            highlight_before = app.session_state['analysis_highlight_html']
+            self.assertFalse(app.checkbox(key='auxiliary_embeddings').value)
+            app.button(key='btn_auxiliary').click().run(timeout=30)
+            self.assertEqual(len(app.exception), 0)
+            self.assertEqual(app.session_state['auxiliary_result']['kiwi']['status'], 'ok')
+            self.assertEqual(app.session_state['auxiliary_result']['embeddings']['status'], 'disabled')
+            self.assertEqual(app.session_state['analysis_csv_bytes'], csv_before)
+            self.assertEqual(app.session_state['analysis_highlight_html'], highlight_before)
+            self.assertEqual(app.session_state['analysis_count'], 1)
+            record.assert_called_once()
+            app.text_area[0].input('changed input').run(timeout=30)
+            self.assertFalse(any(item.value == '**Kiwi 보조 후보**' for item in app.markdown))
 
     def test_cloud_member_uses_transaction_and_cannot_reset(self):
         with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
@@ -189,7 +374,7 @@ class IntegrationTests(unittest.TestCase):
              patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
              patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
              patch('repository.SupabaseRepository.record_analysis') as record:
-            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py'))
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
             app.session_state['auth_session'] = {'access_token': 'valid-user-token',
                                                 'expires_at': 9999999999}
             app.run(timeout=30)
@@ -281,7 +466,7 @@ class IntegrationTests(unittest.TestCase):
              patch('repository.SupabaseRepository.list_users', return_value=users) as load, \
              patch('repository.SupabaseRepository.set_user_role', return_value={
                  **users[1], 'role': 'member'}) as save:
-            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py'))
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
             app.session_state['auth_session'] = {'access_token': 'admin-token', 'expires_at': 9999999999}
             app.run(timeout=30)
             self.assertEqual(len(app.exception), 0)
@@ -321,7 +506,7 @@ class IntegrationTests(unittest.TestCase):
              patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
              patch('repository.SupabaseRepository.record_analysis'), \
              patch('service.match_text', wraps=match_text) as match:
-            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed270.py'))
+            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
             app.session_state['auth_session'] = {'access_token': 'admin-token', 'expires_at': 9999999999}
             app.run(timeout=30)
             self.assertEqual(len(app.exception), 0)
@@ -346,6 +531,10 @@ class IntegrationTests(unittest.TestCase):
             config = match.call_args.kwargs['config']
             self.assertEqual(config.mode, 'exact')
             self.assertTrue(config.exact_relaxed)
+            self.assertTrue(config.strip_bracket_notes)
+            self.assertTrue(config.normalize_whitespace)
+            self.assertTrue(config.ignore_case)
+            self.assertTrue(config.normalize_symbols)
             self.assertIn('테스트말', config.ko_suffixes)
             self.assertIn(',', config.ignored_symbols)
 

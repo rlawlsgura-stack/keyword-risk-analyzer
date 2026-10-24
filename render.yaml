@@ -4,7 +4,7 @@ services:
     runtime: python
     plan: starter
     buildCommand: pip install -r requirements.lock.txt
-    startCommand: python -m streamlit run keyword_app2_fixed270.py --server.address=0.0.0.0 --server.port=$PORT --server.headless=true
+    startCommand: python -m streamlit run keyword_app2_fixed271.py --server.address=0.0.0.0 --server.port=$PORT --server.headless=true
     healthCheckPath: /_stcore/health
     envVars:
       - key: PYTHON_VERSION

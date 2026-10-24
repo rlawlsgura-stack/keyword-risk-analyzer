@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app_config import configure, cloud_enabled
 from repository import ConflictError, StorageError, SupabaseRepository
 from service import analyze
+from auxiliary_analysis import analyze_auxiliary
 
 configure()
 app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
@@ -45,15 +46,55 @@ def current_actor(credentials: HTTPAuthorizationCredentials | None = Depends(bea
 class AnalysisRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     text: str = Field(min_length=1, max_length=20000)
-    mode: Literal['exact', 'similar', 'partial'] = 'similar'
-    exact_relaxed: bool = False
-    partial_min_len: int = Field(default=2, ge=2, le=30)
-    similar_reverse_single: bool = True
-    similar_reverse_any: bool = False
+    mode: Literal['exact', 'similar', 'partial'] = Field(default='similar',
+        description='exact: full expression; partial: consecutive keyword fragments; similar: legacy token/variant rules. Use exact or partial with explicit normalization options for the current UI behavior.')
+    exact_relaxed: bool = Field(default=False, deprecated=True,
+                                description='Legacy bundled option. Independent options take precedence when provided.')
+    strip_bracket_notes: bool | None = Field(default=None, strict=True,
+        description='Exclude parenthetical notes from the keyword used for exact/partial comparison.')
+    normalize_whitespace: bool | None = Field(default=None, strict=True,
+        description='Ignore spaces, line breaks and invisible whitespace while comparing.')
+    ignore_case: bool | None = Field(default=None, strict=True,
+        description='Ignore English letter case.')
+    normalize_symbols: bool | None = Field(default=None, strict=True,
+        description='Replace configured symbols with spaces independently of whitespace normalization.')
+    partial_min_len: int = Field(default=2, ge=2, le=30,
+        description='Minimum consecutive fragment length for partial mode, after selected normalization.')
+    similar_reverse_single: bool = Field(default=True, deprecated=True, description='Legacy similar mode only.')
+    similar_reverse_any: bool = Field(default=False, deprecated=True, description='Legacy similar mode only.')
     categories: list[str] = Field(default_factory=list, max_length=100)
     risks: list[str] = Field(default_factory=list, max_length=20)
     record: bool = False
     analysis_id: UUID | None = None
+
+
+class AuxiliaryRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    text: str = Field(min_length=1, max_length=20000)
+    categories: list[str] = Field(default_factory=list, max_length=100)
+    risks: list[str] = Field(default_factory=list, max_length=20)
+    kiwi: bool = Field(default=True, strict=True)
+    embeddings: bool = Field(default=False, strict=True)
+    limit: int = Field(default=10, ge=1, le=20)
+
+
+class AuxiliaryCandidate(BaseModel):
+    kwd_no: str
+    keyword: str
+    start: int | None = None
+    end: int | None = None
+    similarity: float | None = None
+
+
+class AuxiliaryBranch(BaseModel):
+    status: Literal['ok', 'disabled', 'unavailable']
+    candidates: list[AuxiliaryCandidate]
+    message: str | None = None
+
+
+class AuxiliaryResponse(BaseModel):
+    kiwi: AuxiliaryBranch
+    embeddings: AuxiliaryBranch
 
 
 @app.exception_handler(StorageError)
@@ -82,6 +123,15 @@ def ready(repository=Depends(get_repository)):
 def create_analysis(body: AnalysisRequest, actor=Depends(current_actor),
                     repository=Depends(get_repository)):
     return analyze(repository, body.model_dump(mode='json'), actor)
+
+
+@app.post('/api/v1/auxiliary-analyses', response_model=AuxiliaryResponse,
+          response_model_exclude_none=True)
+def create_auxiliary_analysis(body: AuxiliaryRequest, actor=Depends(current_actor),
+                              repository=Depends(get_repository)):
+    if not body.text.strip():
+        raise HTTPException(422, 'Text must not be blank')
+    return analyze_auxiliary(keywords=repository.load_keywords(), **body.model_dump())
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
