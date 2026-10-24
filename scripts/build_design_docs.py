@@ -198,7 +198,7 @@ def contracts():
     names = {('/healthz','get'):'StatusResponse',('/readyz','get'):'StatusResponse',
              ('/api/v1/analyses','post'):'AnalysisResponse',('/api/v1/analyses/{analysis_id}','get'):'AnalysisResponse',
              ('/api/v1/keywords','get'):'KeywordPage',('/api/v1/reports/top-keywords','get'):'TopKeywordsResponse',
-             ('/api/v1/auxiliary-analyses','post'):'AuxiliaryResponse'}
+}
     for (path, method), name in names.items():
         operation = design['paths'][path][method]
         operation['responses']['200']['content'] = {'application/json':{'schema':ref(name)}}

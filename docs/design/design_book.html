@@ -159,13 +159,9 @@ Content-Type: application/json</code></pre>
 <tr><td>API 04</td><td>GET /api/v1/analyses/{analysis_id}</td><td>필요</td><td>200</td><td>본인 저장 결과 조회</td></tr>
 <tr><td>API 05</td><td>GET /api/v1/keywords</td><td>필요</td><td>200</td><td>키워드 조회 검색 페이지</td></tr>
 <tr><td>API 06</td><td>GET /api/v1/reports/top-keywords</td><td>필요</td><td>200</td><td>기간별 공유 Top N</td></tr>
-<tr><td>API 07</td><td>POST /api/v1/auxiliary-analyses</td><td>필요</td><td>200</td><td>Kiwi·임베딩 보조 후보, 기록 없음</td></tr>
 <tr><td>DOC 01</td><td>GET /openapi.json</td><td>없음</td><td>200</td><td>기본 FastAPI 명세</td></tr>
 </tbody></table></div>
 <p>업무 API 5개 작업과 상태 확인 2개 작업이 런타임 OpenAPI에 등록돼 있습니다. 기본 OpenAPI 제공 경로는 별도입니다. <code>/docs</code>는 <code>API_DOCS_ENABLED=true</code>일 때만 열리고 <code>/redoc</code>은 비활성화돼 있습니다. 기본 <code>/openapi.json</code>은 현재 설정에서 별도로 비활성화하지 않았습니다.</p>
-<h3>API 07 보조 분석</h3>
-<p><code>POST /api/v1/auxiliary-analyses</code>는 기존 분석과 별도이며 저장·조회수 증가를 하지 않습니다. 요청은 text(1~20,000자, 공백만 입력 불가), categories, risks, kiwi(boolean, 기본 true), embeddings(boolean, 기본 false), limit(1~20, 기본 10)입니다. 기존 사용자·연동 토큰 인증을 동일하게 적용합니다.</p>
-<p>응답은 kiwi와 embeddings 각각 status(ok/disabled/unavailable), candidates, 실패 시 message를 반환합니다. 후보는 kwd_no와 keyword를 포함하고 Kiwi는 원문 start/end, 임베딩은 similarity를 추가합니다. 임베딩 unavailable이어도 Kiwi 결과를 반환합니다. similarity는 위험 확률이 아닙니다. 임베딩은 입력 문장과 키워드·카테고리·심의기준을 외부 OpenAI API로 전송하며 모델 기본값은 text-embedding-3-small입니다. 이 경로는 법령 본문 검색이나 위반 판정을 제공하지 않습니다.</p>
 <h3>API 01과 API 02 상태 확인</h3>
 <p><code>GET /healthz</code>는 <code>{&quot;status&quot;:&quot;ok&quot;}</code>를 반환합니다. DB 장애나 잘못된 서버 키가 있어도 프로세스가 실행 중이면 성공할 수 있습니다.</p>
 <p><code>GET /readyz</code>는 인증 후 <code>kra_snapshot</code>을 호출하고 <code>{&quot;status&quot;:&quot;ready&quot;}</code>를 반환합니다. 이 호출은 읽기 경로만 검사합니다. 쓰기 권한, Auth 이메일 로그인, SMTP까지 모두 정상임을 보장하는 검사는 아닙니다.</p>

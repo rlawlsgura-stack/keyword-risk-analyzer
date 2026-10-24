@@ -12,7 +12,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from app_config import configure, cloud_enabled
 from repository import ConflictError, StorageError, SupabaseRepository
 from service import analyze
-from auxiliary_analysis import analyze_auxiliary
 
 configure()
 app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
@@ -68,35 +67,6 @@ class AnalysisRequest(BaseModel):
     analysis_id: UUID | None = None
 
 
-class AuxiliaryRequest(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    text: str = Field(min_length=1, max_length=20000)
-    categories: list[str] = Field(default_factory=list, max_length=100)
-    risks: list[str] = Field(default_factory=list, max_length=20)
-    kiwi: bool = Field(default=True, strict=True)
-    embeddings: bool = Field(default=False, strict=True)
-    limit: int = Field(default=10, ge=1, le=20)
-
-
-class AuxiliaryCandidate(BaseModel):
-    kwd_no: str
-    keyword: str
-    start: int | None = None
-    end: int | None = None
-    similarity: float | None = None
-
-
-class AuxiliaryBranch(BaseModel):
-    status: Literal['ok', 'disabled', 'unavailable']
-    candidates: list[AuxiliaryCandidate]
-    message: str | None = None
-
-
-class AuxiliaryResponse(BaseModel):
-    kiwi: AuxiliaryBranch
-    embeddings: AuxiliaryBranch
-
-
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -123,15 +93,6 @@ def ready(repository=Depends(get_repository)):
 def create_analysis(body: AnalysisRequest, actor=Depends(current_actor),
                     repository=Depends(get_repository)):
     return analyze(repository, body.model_dump(mode='json'), actor)
-
-
-@app.post('/api/v1/auxiliary-analyses', response_model=AuxiliaryResponse,
-          response_model_exclude_none=True)
-def create_auxiliary_analysis(body: AuxiliaryRequest, actor=Depends(current_actor),
-                              repository=Depends(get_repository)):
-    if not body.text.strip():
-        raise HTTPException(422, 'Text must not be blank')
-    return analyze_auxiliary(keywords=repository.load_keywords(), **body.model_dump())
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

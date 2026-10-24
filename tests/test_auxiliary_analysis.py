@@ -56,21 +56,10 @@ class AuxiliaryTests(unittest.TestCase):
             with self.assertRaises(AuxiliaryUnavailable):
                 _embed(['test'], 'test', 'test-key')
 
-    def test_api_requires_auth_and_never_records_auxiliary_results(self):
-        repo = Mock()
-        repo.load_keywords.return_value = self.df
-        api.app.dependency_overrides[api.get_repository] = lambda: repo
-        try:
-            with TestClient(api.app) as client:
-                self.assertEqual(client.post('/api/v1/auxiliary-analyses', json={'text': '개선했어요'}).status_code, 401)
-                api.app.dependency_overrides[api.current_actor] = lambda: 'member'
-                response = client.post('/api/v1/auxiliary-analyses', json={'text': '개선했어요'})
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()['kiwi']['candidates'][0]['kwd_no'], 'K1')
-                self.assertEqual(client.post('/api/v1/auxiliary-analyses', json={'text': '   '}).status_code, 422)
-                repo.record_analysis.assert_not_called()
-        finally:
-            api.app.dependency_overrides.clear()
+    def test_auxiliary_endpoint_is_retired(self):
+        with TestClient(api.app) as client:
+            response = client.post('/api/v1/auxiliary-analyses', json={'text': 'test'})
+            self.assertEqual(response.status_code, 404)
 
 
 if __name__ == '__main__':

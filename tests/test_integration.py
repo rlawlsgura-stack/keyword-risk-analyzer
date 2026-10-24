@@ -337,34 +337,6 @@ class IntegrationTests(unittest.TestCase):
                         position = positions.loc[positions['kwd_no'] == 'B245'].iloc[0]
                         self.assertEqual(('올인원 ' + fragment)[position['start']:position['end']], fragment)
 
-    def test_auxiliary_ui_leaves_primary_results_and_recording_unchanged(self):
-        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
-                                    'SUPABASE_URL': 'https://example.supabase.co',
-                                    'SUPABASE_SECRET_KEY': 'sb_secret_test'}), \
-             patch('repository.SupabaseRepository.user', return_value=self.repository.user('valid-user-token')), \
-             patch('repository.SupabaseRepository.load_keywords', side_effect=self.repository.load_keywords), \
-             patch('repository.SupabaseRepository.load_setting', side_effect=self.repository.load_setting), \
-             patch('repository.SupabaseRepository.load_hits', side_effect=self.repository.load_hits), \
-             patch('repository.SupabaseRepository.record_analysis') as record:
-            app = AppTest.from_file(str(ROOT / 'keyword_app2_fixed271.py'))
-            app.session_state['auth_session'] = {'access_token': 'valid-user-token', 'expires_at': 9999999999}
-            app.run(timeout=30)
-            app.button(key='btn_analyze').click().run(timeout=30)
-            record.assert_called_once()
-            csv_before = app.session_state['analysis_csv_bytes']
-            highlight_before = app.session_state['analysis_highlight_html']
-            self.assertFalse(app.checkbox(key='auxiliary_embeddings').value)
-            app.button(key='btn_auxiliary').click().run(timeout=30)
-            self.assertEqual(len(app.exception), 0)
-            self.assertEqual(app.session_state['auxiliary_result']['kiwi']['status'], 'ok')
-            self.assertEqual(app.session_state['auxiliary_result']['embeddings']['status'], 'disabled')
-            self.assertEqual(app.session_state['analysis_csv_bytes'], csv_before)
-            self.assertEqual(app.session_state['analysis_highlight_html'], highlight_before)
-            self.assertEqual(app.session_state['analysis_count'], 1)
-            record.assert_called_once()
-            app.text_area[0].input('changed input').run(timeout=30)
-            self.assertFalse(any(item.value == '**Kiwi 보조 후보**' for item in app.markdown))
-
     def test_cloud_member_uses_transaction_and_cannot_reset(self):
         with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
                                     'SUPABASE_URL': 'https://example.supabase.co',

@@ -1,4 +1,10 @@
-# 버전 변경 이력
+## FIXED273 — Auxiliary analysis removed
+
+- Updated the matching and preview help to use numbered, sentence-separated explanations, including the risk-grade color legend.
+- Sorted keyword selection lists by their displayed keyword number and other dropdown lists in ascending order.
+- Removed the separate Kiwi/embedding candidate-analysis UI and `POST /api/v1/auxiliary-analyses` endpoint from the current app/API.
+- Regular partial matching still uses Kiwi through `approved_matching.py`.
+- FIXED272 and earlier application files remain as backups; their auxiliary-analysis module is retained for compatibility.
 
 ## FIXED272 — 2026-10-23 · 개발 중, 미배포
 

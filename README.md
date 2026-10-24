@@ -1,9 +1,9 @@
 # Keyword Risk Analyzer
 
-현재 최신 로컬 개발 버전은 **FIXED272**이며 실행 파일은 `keyword_app2_fixed272.py`입니다.
-`run_latest.ps1`은 가장 높은 FIXED 버전을 선택해 로컬에서 실행합니다. 기본 포트가 사용 중이면 Streamlit이 다른 포트를 선택합니다. FIXED271과 FIXED270은 이전 버전으로 보존합니다.
-버전별 변경 범위와 복원 한계는 [CHANGELOG.md](CHANGELOG.md)에 기록합니다.
-Render와 Streamlit Community Cloud의 기존 배포 대상은 별도 변경 전까지 FIXED271입니다. FIXED272는 아직 외부 배포 설정에 반영되지 않았습니다.
+Current local development version: **FIXED273** (`keyword_app2_fixed273.py`).
+`run_latest.ps1` selects and runs the highest numbered FIXED application file. FIXED272 is preserved as the backup version; FIXED271 and FIXED270 are also retained.
+See [CHANGELOG.md](CHANGELOG.md) for version history.
+Render and Streamlit Community Cloud remain configured for FIXED271 until their deployment settings are changed. FIXED273 is not deployed externally.
 
 ## 설계 문서
 
@@ -263,46 +263,6 @@ Invoke-RestMethod -Uri 'http://localhost:8000/api/v1/analyses' `
 배포 후 `/healthz`, 인증이 필요한 `/readyz`, 일반 계정 분석, 관리자 저장, 로그아웃을 확인합니다.
 통계와 원장 원본은 Supabase에 있으므로 앱 서버의 로컬 파일 보존에 의존하지 않습니다.
 
-### Kiwi·임베딩 보조 분석
+### Auxiliary analysis retired in FIXED273
 
-기존 문자 매칭과 결과 표·CSV는 그대로 유지합니다. 분석하기 탭의 **보조 분석 — Kiwi·의미 검색**을 열고 **보조 분석 실행**을 누르면 별도로 실행합니다. 기존 분석 버튼이나 화면 재실행만으로 임베딩 API를 호출하지 않습니다.
-
-- Kiwi는 로컬 형태소 분석으로 활용형 후보를 찾습니다. `개선하다` 등록 시 `개선했어요`를 후보로 반환하며 `마사지 방법`의 공백을 연결해 `지방`을 만들지 않습니다. 기존 문자 검출을 취소하지 않습니다.
-- 의미 검색은 `OPENAI_API_KEY`를 사용합니다. 기본 모델은 `text-embedding-3-small`이며 `EMBEDDING_MODEL`로 지정할 수 있습니다. 입력 원문과 선택된 원장의 키워드·카테고리·심의기준을 외부 API로 전송합니다. 첫 실행에는 선택된 키워드들의 벡터 생성 비용이 발생합니다.
-- 상품카테고리·리스크 필터를 먼저 적용합니다. 등록 자료 벡터만 제한된 메모리 캐시에 보관하며, 원문 질의 벡터는 캐시에 저장하지 않습니다. 서버 재시작 또는 자료·모델 변경 시 다시 생성합니다.
-- 보조 결과는 최대 10개 후보이며 위험 확률이나 법령 위반 판정이 아닙니다. 원문 부정 표현을 유지하고, 관련 법령 본문을 검색하는 기존 RAG 제안 기능과 구분합니다.
-- 보조 결과는 조회수·기록·하이라이트·CSV에 반영하지 않습니다. 임베딩 잔액·통신 오류는 해당 기능에만 표시하고 Kiwi와 기존 문자 매칭은 유지합니다.
-
-별도 API는 인증된 `POST /api/v1/auxiliary-analyses`입니다. 입력은 `text`, `categories`, `risks`, `kiwi`(기본 true), `embeddings`(기본 false), `limit`(기본 10, 최대 20)입니다. 저장이나 조회수 증가 옵션은 없습니다. 응답은 `kiwi`와 `embeddings` 각각의 `status`, `candidates`, 실패 시 `message`를 포함합니다.
-
-키 설정 예시(실제 키는 로컬 .env 또는 배포 Secrets에만 입력):
-
-```toml
-OPENAI_API_KEY = "실제 API 키"
-EMBEDDING_MODEL = "text-embedding-3-small"
-```
-
-## 검증
-
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv\Scripts\python.exe -m pip check
-```
-
-`tests/test_integration.py`는 세 매칭 모드의 엔진 결과 보존, API 인증·입력 제한·소유자 검사,
-집계 재시도, 1,431행 조회, 서버 키 헤더, CSV 화면 분석, 클라우드 로그인과 일반 사용자 분석을 확인합니다.
-사용자 관리의 일반 사용자 접근 차단, 저장 시 관리자 재검증, 자신의 권한 해제 차단,
-미지정 계정의 GUI 역할 부여와 Auth Admin 요청 형식도 검증합니다.
-화면 테스트는 임시 CSV 또는 가짜 저장소를 사용합니다. 실제 CSV 조회수와 로그를 변경하지 않습니다.
-
-`tests/test_matching_regression.py`는 리팩터링 전 커밋 `2d17555`에서 캡처한 27개 사례를
-`tests/fixtures/matching_baseline.json`과 비교합니다. 기존 인수 방식과 설정 스냅샷 방식 모두에서
-검출 위치, 중복과 겹침 결과를 보존하는지 검사합니다. 관리자 규칙 저장·다음 분석 적용,
-일반 사용자의 편집 기능 미노출, 쉼표 저장과 여러 글자 기호 저장 차단도 검증합니다.
-
-`tests/database.sql`은 새 스키마와 함께 트랜잭션 안에서 실행한 뒤 ROLLBACK하는 DB 검증입니다.
-설치된 운영 데이터에 직접 실행하지 않습니다. 클라이언트 권한 차단, 버전 충돌,
-조회수 보존, 중복 집계 방지, 초기화 의미, 1,000행 초과 스냅샷을 검증했습니다.
-
-`tests/test_live_reset.py`는 실제 HTTP 경로로 초기화를 검증합니다. 일반 테스트에서는 건너뛰며,
-`KRA_TEST_LIVE_RESET=1`을 지정할 때만 실행합니다. 실행하면 실제 DB 누적 조회수와 마지막 출력일자가 초기화됩니다.
+FIXED273 removes the separate Kiwi and embedding candidate-analysis UI and FastAPI endpoint. Kiwi token analysis remains active in the regular partial-match mode.

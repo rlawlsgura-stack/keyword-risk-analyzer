@@ -31,16 +31,9 @@ Content-Type: application/json
 | API 04 | GET /api/v1/analyses/{analysis_id} | 필요 | 200 | 본인 저장 결과 조회 |
 | API 05 | GET /api/v1/keywords | 필요 | 200 | 키워드 조회 검색 페이지 |
 | API 06 | GET /api/v1/reports/top-keywords | 필요 | 200 | 기간별 공유 Top N |
-| API 07 | POST /api/v1/auxiliary-analyses | 필요 | 200 | Kiwi·임베딩 보조 후보, 기록 없음 |
 | DOC 01 | GET /openapi.json | 없음 | 200 | 기본 FastAPI 명세 |
 
 업무 API 5개 작업과 상태 확인 2개 작업이 런타임 OpenAPI에 등록돼 있습니다. 기본 OpenAPI 제공 경로는 별도입니다. `/docs`는 `API_DOCS_ENABLED=true`일 때만 열리고 `/redoc`은 비활성화돼 있습니다. 기본 `/openapi.json`은 현재 설정에서 별도로 비활성화하지 않았습니다.
-
-## API 07 보조 분석
-
-`POST /api/v1/auxiliary-analyses`는 기존 분석과 별도이며 저장·조회수 증가를 하지 않습니다. 요청은 text(1~20,000자, 공백만 입력 불가), categories, risks, kiwi(boolean, 기본 true), embeddings(boolean, 기본 false), limit(1~20, 기본 10)입니다. 기존 사용자·연동 토큰 인증을 동일하게 적용합니다.
-
-응답은 kiwi와 embeddings 각각 status(ok/disabled/unavailable), candidates, 실패 시 message를 반환합니다. 후보는 kwd_no와 keyword를 포함하고 Kiwi는 원문 start/end, 임베딩은 similarity를 추가합니다. 임베딩 unavailable이어도 Kiwi 결과를 반환합니다. similarity는 위험 확률이 아닙니다. 임베딩은 입력 문장과 키워드·카테고리·심의기준을 외부 OpenAI API로 전송하며 모델 기본값은 text-embedding-3-small입니다. 이 경로는 법령 본문 검색이나 위반 판정을 제공하지 않습니다.
 
 ## API 01과 API 02 상태 확인
 
