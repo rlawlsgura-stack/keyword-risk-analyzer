@@ -2610,6 +2610,8 @@ def _load_korean_ocr():
     return PaddleOCR(
         lang="korean",
         ocr_version="PP-OCRv5",
+        text_detection_model_name="PP-OCRv5_mobile_det",
+        text_recognition_model_name="korean_PP-OCRv5_mobile_rec",
         device="cpu",
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
