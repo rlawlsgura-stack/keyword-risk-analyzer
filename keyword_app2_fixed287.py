@@ -7,12 +7,18 @@ Keyword Risk Analyzer (FIXED287 - OCR session persistence and navigation labels)
 """
 from __future__ import annotations
 import os
+import sys
 
 # PaddleX reads this flag while its package is imported. Set it before loading
 # Streamlit, pandas, or application modules so reruns cannot trigger a second
 # eager repository initialization.
 os.environ["PADDLE_PDX_EAGER_INIT"] = "False"
 os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "False"
+# Streamlit reruns keep imported modules in sys.modules. If PaddleX's flags
+# module was loaded earlier, update its cached value as well as the environment.
+_paddlex_flags = sys.modules.get("paddlex.utils.flags")
+if _paddlex_flags is not None:
+    _paddlex_flags.EAGER_INITIALIZATION = False
 
 from typing import List, Tuple, Set, Optional
 import pandas as pd
