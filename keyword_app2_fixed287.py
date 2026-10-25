@@ -55,6 +55,7 @@ div.stButton > button {
 # --- End Custom CSS ---
 import streamlit.components.v1 as components
 import html, io, re, zipfile, os, json
+import logging
 from difflib import SequenceMatcher
 import hashlib
 import time
@@ -2773,6 +2774,7 @@ def render_image_ocr_tab():
                 else:
                     st.error("PaddleOCR\uac00 \uc124\uce58\ub418\uc5b4 \uc788\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. Python 3.13 \uc774\ud558 \ud658\uacbd\uc5d0\uc11c requirements-ocr.txt\ub97c \uc124\uce58\ud558\uc138\uc694.")
             except Exception as exc:
+                logging.exception("OCR engine initialization failed")
                 st.error(f"OCR \uc900\ube44 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4: {exc}")
             else:
                 unique_rows = {}
