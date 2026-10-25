@@ -2347,7 +2347,10 @@ if is_admin():
     tab_specs.append(('keyword_admin', '키워드 관리'))
 if show_user_management:
     tab_specs.append(('user_admin', '사용자 관리'))
-tabs = dict(zip((key for key, _ in tab_specs), st.tabs([label for _, label in tab_specs])))
+tabs = dict(zip(
+    (key for key, _ in tab_specs),
+    st.tabs([label for _, label in tab_specs], on_change="rerun", key="main_app_tabs"),
+))
 
 with tabs['analysis']:
     # ① 텍스트 입력
@@ -3294,7 +3297,11 @@ with tabs['analysis']:
 
 if cloud_enabled():
     with tabs['requests']:
-        render_keyword_requests_tab()
+        # Streamlit runs every tab body on normal reruns. Keep a stale
+        # selection in the requests table from reopening its dialog while
+        # the user is working in another tab.
+        if tabs['requests'].open:
+            render_keyword_requests_tab()
 
 if is_admin():
     with tabs['keyword_admin']:

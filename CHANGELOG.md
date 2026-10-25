@@ -1,3 +1,60 @@
+## FIXED284 - Optional keyword selection for new keyword requests
+
+- Allow `????? ????` submissions without selecting an existing keyword.
+- Continue requiring an existing keyword selection for the other request types.
+- Permit a blank `kwd_no` in Supabase only for new keyword registration requests.
+
+## FIXED283 - New keyword request type
+
+- Add `????? ????` to the keyword inquiry type list.
+- Extend the Supabase request type constraint so submissions with the new type are accepted.
+
+## FIXED282 - Per-inquiry feedback and status
+
+- Place one administrator feedback and status form on the selected unanswered inquiry inside its thread card.
+- Persist status per user inquiry message and update the request-wide summary together with the reply.
+- Save the status, request summary, and administrator reply atomically through an authenticated RLS-enforced RPC.
+
+## FIXED281 - Single-card inquiry threads
+
+- Render each original user inquiry and its replies inside one bordered card.
+- Label conversation entries sequentially as Q01, Q01_A1, Q01-R1, Q01_A2; a new inquiry starts a separate card.
+- Keep follow-up forms and administrator response targeting attached to the relevant thread.
+
+## FIXED280 - User follow-up inquiry threads
+
+- Users can reply directly to an administrator response within the same numbered inquiry thread.
+- Administrators can respond to each user follow-up, with one reply per message enforced by the database.
+- Migrated legacy request-row answers into the message history and marked their unknown authorship/time accurately.
+- Added requester/admin-specific RLS validation for each reply target.
+
+## FIXED279 ? Admin reply RLS recursion fix
+
+- Supabase logs identified a self-referencing RLS policy as the cause of HTTP 500 on administrator replies.
+- Moved reply-target validation into a private, restricted SECURITY DEFINER helper to prevent policy recursion.
+
+## FIXED278 ? Numbered inquiries and one feedback form
+
+- Each user inquiry in a conversation displays a chronological inquiry number.
+- The administrator feedback input appears only after selecting an unanswered inquiry number.
+- Preserved one-to-one inquiry/reply pairing and request status handling.
+
+## FIXED277 — 문의와 관리자 답변 1:1 연결
+
+- FIXED276을 보존하고 최신 앱 파일을 `keyword_app2_fixed277.py`로 분리했습니다.
+- 각 사용자 문의를 개별 항목으로 표시하고, 관리자는 답변할 문의를 지정하도록 변경했습니다.
+- 관리자 답변은 대상 사용자 문의 ID에 연결되며 하나의 문의에는 관리자 답변을 하나만 등록할 수 있습니다.
+- 사용자의 재문의/댓글은 별도 문의 항목으로 쌓이고 각 항목별로 답변이 표시됩니다.
+- 기존 메시지를 사용자 문의와 관리자 답변으로 정리하고, 최초 요청을 대화의 첫 항목으로 추가하는 RLS 마이그레이션을 준비했습니다.
+
+## FIXED276 — 문의 대화 히스토리
+
+- FIXED275를 보존하고 최신 앱 파일을 `keyword_app2_fixed276.py`로 분리했습니다.
+- 문의 상세 팝업에 최초 문의, 기존 관리자 답변, 이후의 사용자 댓글과 관리자 피드백을 시간순으로 표시합니다.
+- 사용자는 본인 문의에 재문의/댓글을 추가하고, 관리자는 모든 문의에 피드백을 추가할 수 있습니다.
+- 새 대화는 별도 append-only 테이블에 저장하고, 소유자/관리자 RLS로 조회·등록을 제한합니다. 기존 문의 상태, 관리자 답변, 삭제 흐름은 유지합니다.
+- 기존 Supabase 프로젝트에는 `supabase/keyword_request_messages_setup.sql`을 한 번 적용해야 합니다.
+
 ## FIXED275 — 2026-10-25
 
 - FIXED274의 완료 상태를 보존하고 최신 작업 파일을 `keyword_app2_fixed275.py`로 분기했습니다.

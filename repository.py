@@ -134,6 +134,54 @@ class SupabaseRepository:
             raise StorageError('문의 처리 내용이 저장되지 않았습니다. 관리자 권한과 DB 정책을 확인하세요.')
         return rows[0]
 
+    def load_keyword_request_messages(self, request_id, access_token, limit=1000):
+        request_id = str(UUID(str(request_id)))
+        limit = max(1, min(int(limit), 1000))
+        path = ('/rest/v1/kra_keyword_request_messages?select=id,request_id,author_id,'
+                'author_email,author_role,is_initial,is_legacy,reply_to_id,body,status,created_at'
+                '&request_id=eq.' + request_id
+                + '&order=created_at.asc,id.asc&limit=' + str(limit))
+        return self.request('GET', path, token=access_token) or []
+
+    def respond_to_keyword_inquiry(self, request_id, inquiry_id, body, status, access_token):
+        request_id = str(UUID(str(request_id)))
+        inquiry_id = str(UUID(str(inquiry_id)))
+        body = str(body).strip()
+        if not body or len(body) > 4000:
+            raise ValueError('피드백 내용을 1~4,000자 이내로 입력하세요.')
+        if status not in {'대기', '검토중', '처리완료'}:
+            raise ValueError('처리상태 값이 올바르지 않습니다.')
+        return self.request(
+            'POST', '/rest/v1/rpc/kra_admin_respond_to_keyword_inquiry',
+            {'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+             'p_body': body, 'p_status': status},
+            token=access_token,
+        )
+
+    def add_keyword_request_message(self, request_id, author_id, author_email,
+                                    body, access_token, author_role='user', reply_to_id=None):
+        request_id = str(UUID(str(request_id)))
+        author_id = str(UUID(str(author_id)))
+        if author_role not in {'user', 'admin'}:
+            raise ValueError('작성자 유형이 올바르지 않습니다.')
+        if reply_to_id is not None:
+            reply_to_id = str(UUID(str(reply_to_id)))
+        if author_role == 'admin' and reply_to_id is None:
+            raise ValueError('관리자 답변은 답변 대상 문의를 지정해야 합니다.')
+        body = str(body).strip()
+        if not body or len(body) > 4000:
+            raise ValueError('메시지는 1~4,000자 이내로 입력하세요.')
+        rows = self.request(
+            'POST', '/rest/v1/kra_keyword_request_messages',
+            {'request_id': request_id, 'author_id': author_id,
+             'author_email': str(author_email).strip(), 'author_role': author_role,
+             'reply_to_id': reply_to_id, 'body': body},
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('메시지가 저장되었는지 확인할 수 없습니다.')
+        return rows[0]
+
     def delete_keyword_request(self, request_id, access_token):
         path = '/rest/v1/kra_keyword_requests?id=eq.' + str(request_id)
         rows = self.request(

@@ -5,10 +5,10 @@ create table if not exists public.kra_keyword_requests (
     id uuid primary key default gen_random_uuid(),
     requester_id uuid not null,
     requester_email text not null check (length(btrim(requester_email)) > 0),
-    kwd_no text not null check (length(btrim(kwd_no)) > 0),
+    kwd_no text not null,
     keyword_name text not null check (length(btrim(keyword_name)) > 0),
     request_type text not null check (request_type in (
-        'risk_grade_adjustment', 'review_criteria_change'
+        'risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration'
     )),
     request_detail text not null default '' check (char_length(request_detail) <= 4000),
     status text not null default '대기',
@@ -16,6 +16,21 @@ create table if not exists public.kra_keyword_requests (
     created_at timestamptz not null default now()
 );
 
+alter table public.kra_keyword_requests
+    drop constraint if exists kra_keyword_requests_request_type_check;
+alter table public.kra_keyword_requests
+    add constraint kra_keyword_requests_request_type_check
+    check (request_type in (
+        'risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration'
+    ));
+alter table public.kra_keyword_requests
+    drop constraint if exists kra_keyword_requests_kwd_no_check;
+alter table public.kra_keyword_requests
+    add constraint kra_keyword_requests_kwd_no_check
+    check (
+        request_type = 'new_keyword_registration'
+        or length(btrim(kwd_no)) > 0
+    );
 alter table public.kra_keyword_requests
     add column if not exists status text not null default '대기';
 alter table public.kra_keyword_requests
@@ -114,3 +129,416 @@ create policy kra_keyword_request_config_admin_update
     on public.kra_keyword_request_config for update to authenticated
     using ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
     with check ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+-- Add an append-only conversation history for existing keyword requests.
+-- Safe to run repeatedly on an existing project.
+
+create table if not exists public.kra_keyword_request_messages (
+    id uuid primary key default gen_random_uuid(),
+    request_id uuid not null references public.kra_keyword_requests(id) on delete cascade,
+    author_id uuid not null references auth.users(id),
+    author_email text not null check (length(btrim(author_email)) > 0),
+    body text not null check (char_length(btrim(body)) between 1 and 4000),
+    created_at timestamptz not null default now()
+);
+
+create index if not exists kra_keyword_request_messages_request_created_idx
+    on public.kra_keyword_request_messages (request_id, created_at, id);
+
+alter table public.kra_keyword_request_messages enable row level security;
+revoke all on public.kra_keyword_request_messages from anon, authenticated;
+grant select, insert on public.kra_keyword_request_messages to authenticated;
+
+drop policy if exists kra_keyword_request_messages_read_owner_or_admin
+    on public.kra_keyword_request_messages;
+create policy kra_keyword_request_messages_read_owner_or_admin
+    on public.kra_keyword_request_messages for select to authenticated
+    using (
+        exists (
+            select 1
+            from public.kra_keyword_requests r
+            where r.id = kra_keyword_request_messages.request_id
+              and (
+                  r.requester_id = (select auth.uid())
+                  or (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+              )
+        )
+    );
+
+drop policy if exists kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages;
+create policy kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages for insert to authenticated
+    with check (
+        author_id = (select auth.uid())
+        and lower(author_email) = lower((select auth.jwt() ->> 'email'))
+        and exists (
+            select 1
+            from public.kra_keyword_requests r
+            where r.id = kra_keyword_request_messages.request_id
+              and (
+                  r.requester_id = (select auth.uid())
+                  or (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+              )
+        )
+    );\n\n\n-- Bind each administrator reply to exactly one user inquiry message.
+-- Safe to run repeatedly on a project with the message-history table installed.
+
+alter table public.kra_keyword_request_messages
+    add column if not exists author_role text not null default 'user';
+alter table public.kra_keyword_request_messages
+    add column if not exists is_initial boolean not null default false;
+alter table public.kra_keyword_request_messages
+    add column if not exists reply_to_id uuid;
+
+do $$
+begin
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'kra_keyword_request_messages_author_role_check'
+          and conrelid = 'public.kra_keyword_request_messages'::regclass
+    ) then
+        alter table public.kra_keyword_request_messages
+            add constraint kra_keyword_request_messages_author_role_check
+            check (author_role in ('user', 'admin'));
+    end if;
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'kra_keyword_request_messages_reply_to_fkey'
+          and conrelid = 'public.kra_keyword_request_messages'::regclass
+    ) then
+        alter table public.kra_keyword_request_messages
+            add constraint kra_keyword_request_messages_reply_to_fkey
+            foreign key (reply_to_id)
+            references public.kra_keyword_request_messages(id) on delete cascade;
+    end if;
+end $$;
+
+update public.kra_keyword_request_messages m
+set author_role = 'admin'
+from public.kra_keyword_requests r
+where r.id = m.request_id
+  and m.author_role = 'user'
+  and m.author_id <> r.requester_id;
+
+create unique index if not exists kra_keyword_request_messages_one_reply_per_inquiry_idx
+    on public.kra_keyword_request_messages (reply_to_id)
+    where reply_to_id is not null;
+create unique index if not exists kra_keyword_request_messages_one_initial_per_request_idx
+    on public.kra_keyword_request_messages (request_id)
+    where is_initial;
+
+insert into public.kra_keyword_request_messages
+    (request_id, author_id, author_email, body, created_at, author_role, is_initial)
+select r.id, r.requester_id, r.requester_email,
+       coalesce(nullif(btrim(r.request_detail), ''), '최초 문의 등록'),
+       r.created_at, 'user', true
+from public.kra_keyword_requests r
+where not exists (
+    select 1 from public.kra_keyword_request_messages m
+    where m.request_id = r.id and m.is_initial
+);
+
+-- Pair any existing admin messages with the nearest earlier unanswered user message.
+do $$
+declare
+    admin_message record;
+    inquiry_message_id uuid;
+begin
+    for admin_message in
+        select id, request_id, created_at
+        from public.kra_keyword_request_messages
+        where author_role = 'admin' and reply_to_id is null
+        order by created_at, id
+    loop
+        select u.id into inquiry_message_id
+        from public.kra_keyword_request_messages u
+        where u.request_id = admin_message.request_id
+          and u.author_role = 'user'
+          and u.reply_to_id is null
+          and u.created_at <= admin_message.created_at
+          and not exists (
+              select 1 from public.kra_keyword_request_messages a
+              where a.reply_to_id = u.id
+          )
+        order by u.created_at desc, u.id desc
+        limit 1;
+
+        if inquiry_message_id is not null then
+            update public.kra_keyword_request_messages
+            set reply_to_id = inquiry_message_id
+            where id = admin_message.id;
+        end if;
+        inquiry_message_id := null;
+    end loop;
+end $$;
+
+drop policy if exists kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages;
+create policy kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages for insert to authenticated
+    with check (
+        author_id = (select auth.uid())
+        and lower(author_email) = lower((select auth.jwt() ->> 'email'))
+        and (
+            (
+                author_role = 'user'
+                and reply_to_id is null
+                and exists (
+                    select 1 from public.kra_keyword_requests r
+                    where r.id = kra_keyword_request_messages.request_id
+                      and r.requester_id = (select auth.uid())
+                )
+            )
+            or
+            (
+                author_role = 'admin'
+                and reply_to_id is not null
+                and (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+                and (select private.kra_can_reply_to_keyword_inquiry(
+                    kra_keyword_request_messages.request_id,
+                    kra_keyword_request_messages.reply_to_id
+                ))
+            )
+        )
+    );
+
+-- Latest conversation follow-up and legacy answer migration.
+-- Allow a requester to continue the same numbered inquiry after an admin reply.
+-- Safe to apply repeatedly after the request message history setup.
+
+alter table public.kra_keyword_request_messages
+    alter column author_id drop not null;
+
+alter table public.kra_keyword_request_messages
+    add column if not exists is_legacy boolean not null default false;
+
+create unique index if not exists kra_keyword_request_messages_one_reply_per_inquiry_idx
+    on public.kra_keyword_request_messages (reply_to_id)
+    where reply_to_id is not null;
+
+-- Preserve answers stored in the original request row as replyable history entries.
+-- The old column did not store an author or timestamp, so the UI labels these as legacy.
+insert into public.kra_keyword_request_messages
+    (request_id, author_id, author_email, body, created_at, author_role,
+     is_initial, is_legacy, reply_to_id)
+select r.id, null, 'legacy-admin', btrim(r.admin_reply), r.created_at,
+       'admin', false, true, initial.id
+from public.kra_keyword_requests r
+join public.kra_keyword_request_messages initial
+  on initial.request_id = r.id
+ and initial.author_role = 'user'
+ and initial.is_initial
+where nullif(btrim(r.admin_reply), '') is not null
+  and not exists (
+      select 1
+      from public.kra_keyword_request_messages response
+      where response.reply_to_id = initial.id
+  );
+
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
+create or replace function private.kra_can_reply_to_keyword_inquiry(
+    p_request_id uuid,
+    p_inquiry_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+    select case
+        when (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' then
+            exists (
+                select 1
+                from public.kra_keyword_request_messages parent
+                where parent.id = p_inquiry_id
+                  and parent.request_id = p_request_id
+                  and parent.author_role = 'user'
+                  and not exists (
+                      select 1
+                      from public.kra_keyword_request_messages response
+                      where response.reply_to_id = parent.id
+                  )
+            )
+        else
+            exists (
+                select 1
+                from public.kra_keyword_requests r
+                join public.kra_keyword_request_messages parent
+                  on parent.request_id = r.id
+                where r.id = p_request_id
+                  and r.requester_id = (select auth.uid())
+                  and parent.id = p_inquiry_id
+                  and parent.author_role = 'admin'
+                  and not exists (
+                      select 1
+                      from public.kra_keyword_request_messages response
+                      where response.reply_to_id = parent.id
+                  )
+            )
+    end;
+$function$;
+
+revoke all on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
+    from public, anon, authenticated;
+grant execute on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
+    to authenticated;
+
+drop policy if exists kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages;
+create policy kra_keyword_request_messages_insert_owner_or_admin
+    on public.kra_keyword_request_messages for insert to authenticated
+    with check (
+        author_id = (select auth.uid())
+        and lower(author_email) = lower((select auth.jwt() ->> 'email'))
+        and (
+            (
+                author_role = 'user'
+                and (
+                    (reply_to_id is null and exists (
+                        select 1
+                        from public.kra_keyword_requests r
+                        where r.id = kra_keyword_request_messages.request_id
+                          and r.requester_id = (select auth.uid())
+                    ))
+                    or
+                    (reply_to_id is not null and (select
+                        private.kra_can_reply_to_keyword_inquiry(
+                            kra_keyword_request_messages.request_id,
+                            kra_keyword_request_messages.reply_to_id
+                        )
+                    ))
+                )
+            )
+            or
+            (
+                author_role = 'admin'
+                and reply_to_id is not null
+                and (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+                and (select private.kra_can_reply_to_keyword_inquiry(
+                    kra_keyword_request_messages.request_id,
+                    kra_keyword_request_messages.reply_to_id
+                ))
+            )
+        )
+    );
+
+-- Per-inquiry status and atomic administrator feedback workflow.
+-- Save an administrator reply and the selected inquiry's status as one unit.
+-- Apply after keyword_request_user_followup_setup.sql.
+
+do $migration$
+begin
+    if not exists (
+        select 1
+        from information_schema.columns
+        where table_schema = 'public'
+          and table_name = 'kra_keyword_request_messages'
+          and column_name = 'status'
+    ) then
+        alter table public.kra_keyword_request_messages
+            add column status text not null default '대기';
+
+        -- Carry the previous request-wide status into its original question once.
+        update public.kra_keyword_request_messages m
+        set status = r.status
+        from public.kra_keyword_requests r
+        where r.id = m.request_id
+          and m.author_role = 'user'
+          and m.is_initial
+          and r.status in ('대기', '검토중', '처리완료');
+    end if;
+
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'kra_keyword_request_messages_status_check'
+          and conrelid = 'public.kra_keyword_request_messages'::regclass
+    ) then
+        alter table public.kra_keyword_request_messages
+            add constraint kra_keyword_request_messages_status_check
+            check (status in ('대기', '검토중', '처리완료'));
+    end if;
+end
+$migration$;
+
+grant update (status) on public.kra_keyword_request_messages to authenticated;
+
+drop policy if exists kra_keyword_request_messages_update_admin_status
+    on public.kra_keyword_request_messages;
+create policy kra_keyword_request_messages_update_admin_status
+    on public.kra_keyword_request_messages for update to authenticated
+    using (
+        (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+        and author_role = 'user'
+    )
+    with check (
+        (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+        and author_role = 'user'
+        and status in ('대기', '검토중', '처리완료')
+    );
+
+create or replace function public.kra_admin_respond_to_keyword_inquiry(
+    p_request_id uuid,
+    p_inquiry_id uuid,
+    p_body text,
+    p_status text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $function$
+declare
+    v_reply_id uuid;
+    v_body text := btrim(p_body);
+begin
+    if (select auth.jwt() -> 'app_metadata' ->> 'role') is distinct from 'admin'
+       or (select auth.uid()) is null then
+        raise exception 'administrator access required' using errcode = '42501';
+    end if;
+    if v_body is null or char_length(v_body) not between 1 and 4000 then
+        raise exception 'feedback must contain 1 to 4000 characters' using errcode = '22023';
+    end if;
+    if p_status is null or p_status not in ('대기', '검토중', '처리완료') then
+        raise exception 'invalid inquiry status' using errcode = '22023';
+    end if;
+
+    update public.kra_keyword_request_messages
+    set status = p_status
+    where id = p_inquiry_id
+      and request_id = p_request_id
+      and author_role = 'user';
+    if not found then
+        raise exception 'inquiry was not found or is not editable' using errcode = 'P0002';
+    end if;
+
+    update public.kra_keyword_requests
+    set status = p_status, admin_reply = v_body
+    where id = p_request_id;
+    if not found then
+        raise exception 'request was not found' using errcode = 'P0002';
+    end if;
+
+    insert into public.kra_keyword_request_messages
+        (request_id, author_id, author_email, author_role, reply_to_id, body)
+    values (
+        p_request_id,
+        (select auth.uid()),
+        (select auth.jwt() ->> 'email'),
+        'admin',
+        p_inquiry_id,
+        v_body
+    )
+    returning id into v_reply_id;
+
+    return v_reply_id;
+end;
+$function$;
+
+revoke all on function public.kra_admin_respond_to_keyword_inquiry(uuid, uuid, text, text)
+    from public, anon, authenticated;
+grant execute on function public.kra_admin_respond_to_keyword_inquiry(uuid, uuid, text, text)
+    to authenticated;
