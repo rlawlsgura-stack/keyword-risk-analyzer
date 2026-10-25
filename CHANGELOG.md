@@ -1,3 +1,8 @@
+## FIXED287 - OCR state persistence and navigation labels
+
+- Preserve uploaded OCR images, extracted candidates, table edits, and approval selections across main-tab navigation until reset or save.
+- Rename the app title and tab labels, and align the visible tabs in the requested order.
+
 ## FIXED284 - Optional keyword selection for new keyword requests
 
 - Allow `????? ????` submissions without selecting an existing keyword.
