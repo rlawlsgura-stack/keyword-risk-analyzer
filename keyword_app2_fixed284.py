@@ -1383,6 +1383,18 @@ div.stButton > button {
     padding-bottom: 0rem;
     min-height: 1.2rem;
 }
+/* Override the main content's large default top inset. */
+section.main > div.block-container,
+div[data-testid="stMainBlockContainer"],
+.main .block-container {
+    padding-top: 0.75rem !important;
+}
+/* Make the main tab navigation easier to scan. */
+div[data-testid="stTabs"] [role="tab"],
+.st-key-main_app_tabs [role="tab"] {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 st.title("🔎 광고심의 자동화 솔루션(가칭)")
