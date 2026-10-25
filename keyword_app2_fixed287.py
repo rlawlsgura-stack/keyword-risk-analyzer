@@ -2582,7 +2582,25 @@ import unicodedata
 import sys
 import os
 
-from ocr_keyword_import import extract_text_lines, load_korean_ocr
+from ocr_keyword_import import extract_text_lines
+
+
+@st.cache_resource(show_spinner="Loading the Korean OCR model…")
+def _load_korean_ocr():
+    """Initialize PaddleOCR once per Streamlit process and reuse the pipeline."""
+    # Avoid repeated PaddleX repository initialization during Streamlit reruns.
+    os.environ["PADDLE_PDX_EAGER_INIT"] = "False"
+    os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "False"
+    from paddleocr import PaddleOCR
+
+    return PaddleOCR(
+        lang="korean",
+        ocr_version="PP-OCRv5",
+        device="cpu",
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+    )
 
 
 def _ocr_normalize(value):
@@ -2751,8 +2769,7 @@ def render_image_ocr_tab():
                     st.write(f"\u2022 {image_file.name} ({image_file.size / (1024 * 1024):.1f}MB)")
         if st.button("\ud55c\uad6d\uc5b4 OCR \uc2e4\ud589", type="primary", key="ocr_keyword_run", disabled=not upload_is_valid):
             try:
-                with st.spinner("Loading the Korean OCR model…"):
-                    ocr_engine = load_korean_ocr()
+                ocr_engine = _load_korean_ocr()
             except ImportError:
                 if sys.version_info >= (3, 14):
                     st.error("\ud604\uc7ac Python 3.14\uc5d0\uc11c\ub294 PaddlePaddle\uc744 \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4. Python 3.13 \uc774\ud558 \uac00\uc0c1\ud658\uacbd\uc5d0\uc11c \uae30\ubcf8 requirements.txt\uc640 requirements-ocr.txt\ub97c \uc124\uce58\ud574\uc57c \ud569\ub2c8\ub2e4.")
