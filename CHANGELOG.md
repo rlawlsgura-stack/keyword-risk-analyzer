@@ -1,3 +1,9 @@
+## FIXED288 - Cloud OCR runtime stabilization
+
+- Build on FIXED287 and point the Community Cloud entrypoint to FIXED288.
+- Use lightweight PaddleOCR models on Cloud to reduce startup resource use.
+- Install required GL runtime libraries from packages.txt.
+
 ## FIXED287 - OCR state persistence and navigation labels
 
 - Preserve uploaded OCR images, extracted candidates, table edits, and approval selections across main-tab navigation until reset or save.

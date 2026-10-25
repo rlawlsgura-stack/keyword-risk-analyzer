@@ -6,4 +6,4 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-runpy.run_path(str(ROOT / "keyword_app2_fixed287.py"), run_name="__main__")
+runpy.run_path(str(ROOT / "keyword_app2_fixed288.py"), run_name="__main__")
