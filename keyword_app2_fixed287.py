@@ -2784,11 +2784,12 @@ def render_image_ocr_tab():
         if st.button("\ud55c\uad6d\uc5b4 OCR \uc2e4\ud589", type="primary", key="ocr_keyword_run", disabled=not upload_is_valid):
             try:
                 ocr_engine = _load_korean_ocr()
-            except ImportError:
+            except ImportError as exc:
+                logging.exception("PaddleOCR import failed")
                 if sys.version_info >= (3, 14):
                     st.error("\ud604\uc7ac Python 3.14\uc5d0\uc11c\ub294 PaddlePaddle\uc744 \uc0ac\uc6a9\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4. Python 3.13 \uc774\ud558 \uac00\uc0c1\ud658\uacbd\uc5d0\uc11c \uae30\ubcf8 requirements.txt\uc640 requirements-ocr.txt\ub97c \uc124\uce58\ud574\uc57c \ud569\ub2c8\ub2e4.")
                 else:
-                    st.error("PaddleOCR\uac00 \uc124\uce58\ub418\uc5b4 \uc788\uc9c0 \uc54a\uc2b5\ub2c8\ub2e4. Python 3.13 \uc774\ud558 \ud658\uacbd\uc5d0\uc11c requirements-ocr.txt\ub97c \uc124\uce58\ud558\uc138\uc694.")
+                    st.error(f"PaddleOCR \ub610\ub294 \ub0b4\ubd80 \uc758\uc874\uc131\uc744 \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
             except Exception as exc:
                 logging.exception("OCR engine initialization failed")
                 st.error(f"OCR \uc900\ube44 \uc911 \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4: {exc}")
