@@ -4,10 +4,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$python = Join-Path $projectRoot '.venv\Scripts\python.exe'
+$pythonCandidates = @(
+    (Join-Path $projectRoot '.venv-ocr313\Scripts\python.exe'),
+    (Join-Path $projectRoot '.venv\Scripts\python.exe')
+)
+$python = $pythonCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 
 if (-not (Test-Path -LiteralPath $python)) {
-    throw "Project virtual environment not found: $python"
+    throw 'Project virtual environment not found. Create .venv-ocr313 or .venv first.'
 }
 
 $preflight = Join-Path $projectRoot 'scripts\check_supabase_connectivity.py'
