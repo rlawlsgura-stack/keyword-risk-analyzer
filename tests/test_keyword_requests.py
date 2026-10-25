@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import Mock, patch
 
-from repository import SupabaseRepository
+from repository import StorageError, SupabaseRepository
 
 
 class KeywordRequestRepositoryTests(unittest.TestCase):
@@ -44,6 +44,52 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
         self.assertEqual(request.call_count, 2)
         for call in request.call_args_list:
             self.assertEqual(call.kwargs['headers']['Authorization'], 'Bearer user-access-token')
+
+    def test_request_list_selects_workflow_fields(self):
+        with patch('repository.requests.request', return_value=self.response([])) as request:
+            SupabaseRepository().load_keyword_requests('user-access-token')
+
+        self.assertIn('status,admin_reply,created_at', request.call_args.args[1])
+
+    def test_admin_request_update_uses_user_jwt_and_only_workflow_fields(self):
+        row = {'id': 'request-1', 'status': '검토중', 'admin_reply': '확인 중입니다.'}
+        with patch('repository.requests.request', return_value=self.response([row])) as request:
+            saved = SupabaseRepository().update_keyword_request(
+                'request-1', '검토중', '확인 중입니다.', 'admin-access-token')
+
+        self.assertEqual(saved, row)
+        self.assertEqual(request.call_args.args[:2], (
+            'PATCH',
+            'https://project.example.supabase.co/rest/v1/kra_keyword_requests'
+            '?id=eq.request-1&select=id,status,admin_reply',
+        ))
+        self.assertEqual(request.call_args.kwargs['json'], {
+            'status': '검토중', 'admin_reply': '확인 중입니다.',
+        })
+        self.assertEqual(request.call_args.kwargs['headers']['Authorization'],
+                         'Bearer admin-access-token')
+
+    def test_admin_request_delete_uses_user_jwt_and_delete_method(self):
+        row = {'id': 'request-1'}
+        with patch('repository.requests.request', return_value=self.response([row])) as request:
+            deleted = SupabaseRepository().delete_keyword_request(
+                'request-1', 'admin-access-token')
+
+        self.assertEqual(deleted, row)
+        self.assertEqual(request.call_args.args[:2], (
+            'DELETE',
+            'https://project.example.supabase.co/rest/v1/kra_keyword_requests?id=eq.request-1',
+        ))
+        self.assertEqual(request.call_args.kwargs['headers']['Authorization'],
+                         'Bearer admin-access-token')
+
+    def test_login_reports_safe_supabase_auth_diagnostic(self):
+        response = self.response({'code': 'invalid_credentials',
+                                  'msg': 'Invalid login credentials'})
+        response.status_code = 400
+        with patch('repository.requests.request', return_value=response):
+            with self.assertRaisesRegex(StorageError, 'invalid_credentials'):
+                SupabaseRepository().login('user@example.com', 'never-log-this')
 
     def test_notification_toggle_update_uses_user_jwt(self):
         response = self.response([{'email_notifications_enabled': False}])

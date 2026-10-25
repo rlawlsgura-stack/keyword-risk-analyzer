@@ -11,8 +11,36 @@ create table if not exists public.kra_keyword_requests (
         'risk_grade_adjustment', 'review_criteria_change'
     )),
     request_detail text not null default '' check (char_length(request_detail) <= 4000),
+    status text not null default '대기',
+    admin_reply text not null default '',
     created_at timestamptz not null default now()
 );
+
+alter table public.kra_keyword_requests
+    add column if not exists status text not null default '대기';
+alter table public.kra_keyword_requests
+    add column if not exists admin_reply text not null default '';
+do $$
+begin
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'kra_keyword_requests_status_check'
+          and conrelid = 'public.kra_keyword_requests'::regclass
+    ) then
+        alter table public.kra_keyword_requests
+            add constraint kra_keyword_requests_status_check
+            check (status in ('대기', '검토중', '처리완료'));
+    end if;
+    if not exists (
+        select 1 from pg_constraint
+        where conname = 'kra_keyword_requests_admin_reply_length_check'
+          and conrelid = 'public.kra_keyword_requests'::regclass
+    ) then
+        alter table public.kra_keyword_requests
+            add constraint kra_keyword_requests_admin_reply_length_check
+            check (char_length(admin_reply) <= 4000);
+    end if;
+end $$;
 
 create index if not exists kra_keyword_requests_owner_created_idx
     on public.kra_keyword_requests (requester_id, created_at desc);
@@ -36,6 +64,9 @@ grant select on public.kra_keyword_requests to authenticated;
 grant insert (requester_id, requester_email, kwd_no, keyword_name,
               request_type, request_detail)
     on public.kra_keyword_requests to authenticated;
+grant update (status, admin_reply)
+    on public.kra_keyword_requests to authenticated;
+grant delete on public.kra_keyword_requests to authenticated;
 grant select on public.kra_keyword_request_config to authenticated;
 grant update (email_notifications_enabled)
     on public.kra_keyword_request_config to authenticated;
@@ -57,6 +88,19 @@ create policy kra_keyword_requests_insert_own
         requester_id = (select auth.uid())
         and lower(requester_email) = lower((select auth.jwt() ->> 'email'))
     );
+
+drop policy if exists kra_keyword_requests_update_admin
+    on public.kra_keyword_requests;
+create policy kra_keyword_requests_update_admin
+    on public.kra_keyword_requests for update to authenticated
+    using ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
+    with check ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+drop policy if exists kra_keyword_requests_delete_admin
+    on public.kra_keyword_requests;
+create policy kra_keyword_requests_delete_admin
+    on public.kra_keyword_requests for delete to authenticated
+    using ((select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 drop policy if exists kra_keyword_request_config_admin_read
     on public.kra_keyword_request_config;

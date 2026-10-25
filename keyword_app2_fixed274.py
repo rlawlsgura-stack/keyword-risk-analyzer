@@ -435,8 +435,16 @@ def _ensure_counter_columns(df: pd.DataFrame) -> pd.DataFrame:
         df["키워드 조회 수(누적카운트)"] = "0"
     if "마지막 출력일자" not in df.columns:
         df["마지막 출력일자"] = ""
-    if "키워드 등록일자" not in df.columns:
-        df["키워드 등록일자"] = ""
+    registration_col = "키워드 등록일자"
+    legacy_registration_col = "키워드등록일자"
+    if registration_col not in df.columns:
+        df[registration_col] = ""
+    if legacy_registration_col in df.columns:
+        current_dates = df[registration_col].fillna("").astype(str).str.strip()
+        legacy_dates = df[legacy_registration_col].fillna("").astype(str).str.strip()
+        missing_current = current_dates.eq("")
+        df.loc[missing_current, registration_col] = legacy_dates[missing_current]
+        df = df.drop(columns=[legacy_registration_col])
     return df
 
 def load_db(path: Path) -> pd.DataFrame:
@@ -579,11 +587,9 @@ def init_state():
         st.session_state.storage_path = str(default_storage_path())
     if "kw_df" not in st.session_state:
         st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
-        # Record DB column order as loaded
-        try:
-            st.session_state.db_cols_order = list(st.session_state.kw_df.columns)
-        except Exception:
-            st.session_state.db_cols_order = list(DB_COLS)
+    # Keep legacy and canonical registration-date labels merged in existing sessions too.
+    st.session_state.kw_df = _ensure_counter_columns(st.session_state.kw_df)
+    st.session_state.db_cols_order = list(st.session_state.kw_df.columns)
 
     # 드롭다운 설정을 JSON 파일에서 불러오기
     if "opt_categories" not in st.session_state:
@@ -1672,8 +1678,9 @@ def render_cloud_login():
                         st.session_state.auth_session = repository.login(email, password)
                         st.session_state.pop('auth_view', None)
                         st.rerun()
-                    except (StorageError, PermissionError):
+                    except (StorageError, PermissionError) as exc:
                         st.error('로그인에 실패했습니다. 계정과 비밀번호를 확인하세요.')
+                        st.caption(f'Supabase response: {exc}')
                 if st.button('비밀번호를 잊으셨나요?', key='cloud_forgot_password'):
                     st.session_state.auth_view = 'password_reset_request'
                     st.rerun()
@@ -1726,9 +1733,30 @@ def render_keyword_request_form():
     """Render the authenticated Supabase-only request form in the sidebar."""
     if not cloud_enabled():
         return
+    keyword_options = {}
+    keywords = st.session_state.get('kw_df')
+    if keywords is not None and {'kwd_no', '키워드명'}.issubset(keywords.columns):
+        keyword_rows = keywords[['kwd_no', '키워드명']].fillna('').astype(str)
+        keyword_rows = keyword_rows.sort_values(
+            ['kwd_no', '키워드명'], key=lambda values: values.str.casefold(), kind='mergesort'
+        )
+        for _, row in keyword_rows.iterrows():
+            keyword_code = row['kwd_no'].strip().upper()
+            keyword_name = row['키워드명'].strip()
+            if keyword_code:
+                keyword_options[f'{keyword_code} | {keyword_name}'] = keyword_code
+
     with st.sidebar.expander('키워드 문의', expanded=False):
         with st.form('keyword_request_form', clear_on_submit=True):
-            kwd_no = st.text_input('kwd_no', max_chars=30, key='keyword_request_kwd_no')
+            selected_keyword = st.selectbox(
+                '키워드 검색 (kwd_no / 키워드명)',
+                options=list(keyword_options),
+                index=None,
+                placeholder='번호 또는 키워드명을 입력하세요.',
+                filter_mode='contains',
+                disabled=not keyword_options,
+                key='keyword_request_kwd_select',
+            )
             request_type = st.selectbox(
                 '문의 유형',
                 options=sorted(KEYWORD_REQUEST_TYPE_LABELS,
@@ -1745,9 +1773,9 @@ def render_keyword_request_form():
 
         if not submitted:
             return
-        keyword_code = kwd_no.strip().upper()
+        keyword_code = keyword_options.get(selected_keyword, '')
         if not keyword_code:
-            st.error('kwd_no를 입력하세요.')
+            st.error('목록에서 키워드 번호 또는 키워드명을 검색해 선택하세요.')
             return
 
         repository = SupabaseRepository()
@@ -1855,9 +1883,89 @@ def is_admin() -> bool:
     return bool(st.session_state.get("is_admin", False))
 
 
+KEYWORD_REQUEST_STATUSES = ('대기', '검토중', '처리완료')
+
+
+def format_keyword_request_time(value):
+    parsed = pd.to_datetime(value, utc=True, errors='coerce')
+    if pd.isna(parsed):
+        return str(value or '')
+    return parsed.tz_convert('Asia/Seoul').strftime('%Y-%m-%d %H:%M')
+
+
+@st.dialog('문의 상세 및 처리', width='large')
+def render_keyword_request_dialog(row, access_token):
+    request_id = str(row.get('id', '')).strip()
+    receipt_no = f"KR-{request_id[:8].upper()}"
+    st.markdown(f"### {receipt_no} · {row.get('kwd_no', '')} · {row.get('keyword_name', '')}")
+    st.caption(f"접수 시각: {format_keyword_request_time(row.get('created_at', ''))}")
+    st.write(f"**문의 유형:** {KEYWORD_REQUEST_TYPE_LABELS.get(row.get('request_type'), row.get('request_type', ''))}")
+    st.write(f"**요청 상세 내용:** {row.get('request_detail') or '내용 없음'}")
+    st.write(f"**요청자 이메일:** {row.get('requester_email', '')}")
+
+    current_status = row.get('status') or '대기'
+    if current_status not in KEYWORD_REQUEST_STATUSES:
+        current_status = '대기'
+    with st.form(f'keyword_request_manage_{request_id}'):
+        updated_status = st.selectbox(
+            '처리상태', KEYWORD_REQUEST_STATUSES,
+            index=KEYWORD_REQUEST_STATUSES.index(current_status),
+            key=f'keyword_request_status_{request_id}',
+        )
+        updated_reply = st.text_area(
+            '관리자 답변', value=row.get('admin_reply', ''), max_chars=4000,
+            key=f'keyword_request_reply_{request_id}',
+        )
+        save_request = st.form_submit_button('처리 내용 저장', type='primary')
+
+    repository = SupabaseRepository()
+    if save_request:
+        try:
+            repository.update_keyword_request(
+                request_id, updated_status, updated_reply.strip(), access_token,
+            )
+            st.session_state['keyword_request_update_saved'] = True
+            st.session_state['keyword_request_history_epoch'] = st.session_state.get('keyword_request_history_epoch', 0) + 1
+            st.rerun()
+        except (StorageError, PermissionError) as exc:
+            st.error('문의 처리 내용을 저장하지 못했습니다. 관리자 권한과 DB 정책을 확인하세요.')
+            st.caption(str(exc))
+    confirm_key = f'keyword_request_delete_confirm_{request_id}'
+    if st.button('문의 삭제', key=f'keyword_request_delete_{request_id}'):
+        st.session_state[confirm_key] = True
+
+    if st.session_state.get(confirm_key):
+        st.warning('이 문의를 영구 삭제할까요? 삭제한 문의는 복구할 수 없습니다.')
+        cancel_col, delete_col = st.columns(2)
+        with cancel_col:
+            cancel_delete = st.button('취소', key=f'keyword_request_cancel_delete_{request_id}')
+        with delete_col:
+            confirm_delete = st.button(
+                '영구 삭제 확인', type='primary', key=f'keyword_request_confirm_delete_{request_id}',
+            )
+        if cancel_delete:
+            st.session_state.pop(confirm_key, None)
+            st.rerun()
+        if confirm_delete:
+            try:
+                repository.delete_keyword_request(request_id, access_token)
+                st.session_state.pop(confirm_key, None)
+                st.session_state['keyword_request_delete_saved'] = True
+                st.session_state['keyword_request_history_epoch'] = st.session_state.get('keyword_request_history_epoch', 0) + 1
+                st.rerun()
+            except (StorageError, PermissionError) as exc:
+                st.error('문의를 삭제하지 못했습니다. 관리자 권한과 DB 정책을 확인하세요.')
+                st.caption(str(exc))
+
+
 def render_keyword_requests_tab():
     repository = SupabaseRepository()
     access_token = st.session_state.auth_session['access_token']
+
+    if st.session_state.pop('keyword_request_update_saved', False):
+        st.success('문의 처리 상태와 관리자 답변을 저장했습니다.')
+    if st.session_state.pop('keyword_request_delete_saved', False):
+        st.success('문의를 삭제했습니다.')
 
     if is_admin():
         setting_key = 'request_email_notifications_enabled'
@@ -1900,23 +2008,41 @@ def render_keyword_requests_tab():
     if not requests:
         st.info('등록된 키워드 문의가 없습니다.')
         return
-    labels = KEYWORD_REQUEST_TYPE_LABELS
     display_rows = []
     for row in requests:
+        request_id = str(row.get('id', '')).strip()
         display = {
-            '접수 시각': row.get('created_at', ''),
+            '접수번호': f"KR-{request_id[:8].upper()}",
             'kwd_no': row.get('kwd_no', ''),
             '키워드명': row.get('keyword_name', ''),
-            '문의 유형': labels.get(row.get('request_type'), row.get('request_type', '')),
+            '문의 유형': KEYWORD_REQUEST_TYPE_LABELS.get(row.get('request_type'), row.get('request_type', '')),
             '요청 상세 내용': row.get('request_detail', ''),
+            '처리상태': row.get('status', '대기'),
+            '관리자 답변': row.get('admin_reply', ''),
         }
         if is_admin():
             display['요청자 이메일'] = row.get('requester_email', '')
+        display['접수 시각'] = format_keyword_request_time(row.get('created_at', ''))
         display_rows.append(display)
-    st.dataframe(pd.DataFrame(display_rows), hide_index=True, width='stretch')
+
+    if is_admin():
+        epoch = st.session_state.setdefault('keyword_request_history_epoch', 0)
+        table_state = st.dataframe(
+            pd.DataFrame(display_rows), hide_index=True, width='stretch',
+            on_select='rerun', selection_mode='single-row',
+            key=f'keyword_request_history_{epoch}',
+        )
+        st.caption('접수번호가 있는 행을 선택하면 상세 내용과 처리 팝업이 열립니다.')
+        selected_rows = table_state.selection.rows
+        if selected_rows:
+            selected_index = selected_rows[0]
+            if 0 <= selected_index < len(requests):
+                render_keyword_request_dialog(requests[selected_index], access_token)
+    else:
+        st.dataframe(pd.DataFrame(display_rows), hide_index=True, width='stretch')
+
     if len(requests) >= 1000:
         st.caption('최근 1,000건만 표시했습니다. 더 오래된 요청은 관리자에게 문의하세요.')
-
 
 render_admin_login()
 
@@ -2536,6 +2662,16 @@ with tabs['analysis']:
           var hoverTimer = null;
           var hiddenKeywords = new Set();
           var selectedGroupKey = null;
+          var compactFrameHeight = Number('{_preview_content_height}') || 70;
+
+          function resizePreviewFrame(height, popupOpen){
+            try {
+              if(!window.frameElement) return;
+              window.frameElement.style.height = Math.ceil(height) + 'px';
+              window.frameElement.style.position = popupOpen ? 'relative' : '';
+              window.frameElement.style.zIndex = popupOpen ? '2147483646' : '';
+            } catch(e) {}
+          }
 
           function renderNumberGroup(group){{
             var entries = Array.from(group.querySelectorAll('.kwdno-entry'));
@@ -2570,6 +2706,13 @@ with tabs['analysis']:
             }});
           }}
 
+          function clearKeywordNumberSelection(){{
+            selectedGroupKey = null;
+            document.querySelectorAll('.kwdno-link.group-selected').forEach(function(link){{
+              link.classList.remove('group-selected');
+            }});
+          }}
+
           function hide(immediate){{
             if(hideTimer) clearTimeout(hideTimer);
             if(hoverTimer) clearTimeout(hoverTimer);
@@ -2580,6 +2723,7 @@ with tabs['analysis']:
               if(activeTarget) activeTarget.setAttribute('aria-expanded', 'false');
               activeTarget = null;
               hideTimer = null;
+              resizePreviewFrame(compactFrameHeight, false);
             }}
             if(immediate) close();
             else hideTimer = setTimeout(close, 180);
@@ -2611,6 +2755,11 @@ with tabs['analysis']:
 
             tt.style.display = 'block';
             tt.setAttribute('aria-hidden', 'false');
+            // Expand the iframe only while the floating detail popup is open.
+            // This gives the popup its own viewport without leaving a large
+            // empty gap below a short preview after the popup closes.
+            resizePreviewFrame(Math.min(540, Math.max(compactFrameHeight, tt.scrollHeight + 32)), true);
+            void document.documentElement.offsetHeight;
 
             // Treat the whole number group as the protected anchor, not only the hovered code.
             var row = target.closest('.kwdno-group') || target;
@@ -2671,6 +2820,14 @@ with tabs['analysis']:
           function bind(){{
             var box = document.querySelector('.hl-box');
             if(!box) return false;
+            if(!box.__kwd_selection_clear_bound){{
+              box.__kwd_selection_clear_bound = true;
+              box.addEventListener('click', function(ev){{
+                var target = ev.target && ev.target.nodeType === 1 ? ev.target : ev.target.parentElement;
+                if(target && (target.closest('.kwdno-link') || target.closest('.hl-mark'))) return;
+                clearKeywordNumberSelection();
+              }});
+            }}
             box.querySelectorAll('.hl-mark').forEach(function(mark){{
               if(mark.__kwd_toggle_bound) return;
               mark.__kwd_toggle_bound = true;
@@ -2739,10 +2896,7 @@ with tabs['analysis']:
             }});
             document.addEventListener('keydown', function(ev){{
               if(ev.key === 'Escape') {{
-                selectedGroupKey = null;
-                document.querySelectorAll('.kwdno-link.group-selected').forEach(function(link){{
-                  link.classList.remove('group-selected');
-                }});
+                clearKeywordNumberSelection();
                 var target = activeTarget;
                 hide();
                 if(target) target.focus();
@@ -2773,9 +2927,22 @@ with tabs['analysis']:
     # (재구성) HTML 템플릿에 실제 값을 주입하고, f-string 이스케이프용 중괄호를 원복
     _component_html = _component_html.replace('{_persist_highlight_html}', _persist_highlight_html)
     _component_html = _component_html.replace('{_tt_json}', _tt_json)
+    if _persist_highlight_html:
+        preview_text = html.unescape(re.sub(r'<[^>]+>', '', _persist_highlight_html))
+        preview_lines = sum(
+            max(1, (len(line) + 51) // 52)
+            for line in (preview_text.splitlines() or [preview_text])
+        )
+        preview_content_height = min(540, max(70, 38 + preview_lines * 26))
+    else:
+        preview_content_height = 70
+    _component_html = _component_html.replace('{_preview_content_height}', str(preview_content_height))
     _component_html = _component_html.replace('{{', '{').replace('}}', '}')
 
-    components.html(_component_html, height=540, scrolling=True)
+    # Keep the document flow proportional to preview content. The frame expands
+    # temporarily in JavaScript while its floating detail popup is visible.
+    if _persist_highlight_html:
+        components.html(_component_html, height=preview_content_height, scrolling=True)
 
 
     # 새 창/네비게이션 없이 값만 주입: 하이라이트 HTML에서 kwd_no 수집 후 버튼으로 제공
@@ -3135,12 +3302,79 @@ if is_admin():
         with st.expander('공통 분석 규칙 — 모든 사용자에게 적용', expanded=False):
             render_common_matching_rules()
 
-        st.markdown("### 📂 키워드 업로드 (.csv / .xlsx)")
-        col_u1, col_u2 = st.columns([2, 2])
-        with col_u1:
-            upload_mode = st.radio("업로드 모드", ["기존 유지 + 새로 추가", "완전 덮어쓰기"], horizontal=False, key="upload_mode")
-        with col_u2:
-            uploaded_file = st.file_uploader("키워드 템플릿 업로드", type=["csv", "xlsx"], key="uploader")
+        upload_col, delete_col = st.columns([1.15, 1])
+        with upload_col:
+            st.markdown("### \U0001F4C2 \ud0a4\uc6cc\ub4dc \uc5c5\ub85c\ub4dc (.csv / .xlsx)")
+            upload_mode = st.radio("\uc5c5\ub85c\ub4dc \ubaa8\ub4dc", ["\uae30\uc874 \uc720\uc9c0 + \uc0c8\ub85c \ucd94\uac00", "\uc644\uc804 \ub36e\uc5b4\uc4f0\uae30"], horizontal=False, key="upload_mode")
+            st.markdown("""
+            <style>
+            div[data-testid="stFileUploader"] {
+                width: 50% !important;
+                max-width: 50% !important;
+            }
+            div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                gap: 0.5rem !important;
+                min-height: 0 !important;
+                padding: 0.35rem 0.65rem !important;
+            }
+            div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {
+                order: 1 !important;
+                flex: 0 1 auto !important;
+                white-space: nowrap !important;
+                font-size: 0.72rem !important;
+            }
+            div[data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] button {
+                order: 0 !important;
+                width: auto !important;
+                min-width: 6.5rem !important;
+                max-width: none !important;
+                height: 2rem !important;
+                min-height: 2rem !important;
+                padding: 0.25rem 0.65rem !important;
+                font-size: 0.875rem !important;
+                white-space: nowrap !important;
+            }
+            div.st-key-btn_delete_rows button {
+                width: 80px !important;
+                min-width: 80px !important;
+                padding-left: 6px !important;
+                padding-right: 6px !important;
+                font-size: 0.8rem !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("\ud0a4\uc6cc\ub4dc \ud15c\ud50c\ub9bf \uc5c5\ub85c\ub4dc", type=["csv", "xlsx"], key="uploader")
+            st.markdown("**업로드 템플릿 다운로드**")
+            tmpl_csv_buf = io.BytesIO()
+            pd.DataFrame(columns=DB_COLS).to_csv(tmpl_csv_buf, index=False, encoding="utf-8-sig")
+            st.download_button("CSV 템플릿 다운로드", data=tmpl_csv_buf.getvalue(), file_name="keyword_template.csv", mime="text/csv", key="dl_tmpl_csv")
+            try:
+                tmpl_xlsx_buf = io.BytesIO()
+                with pd.ExcelWriter(tmpl_xlsx_buf) as writer:
+                    pd.DataFrame(columns=DB_COLS).to_excel(writer, sheet_name="keywords_template", index=False)
+                st.download_button("엑셀 템플릿 다운로드", data=tmpl_xlsx_buf.getvalue(), file_name="keyword_template.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_tmpl_xlsx")
+            except Exception as e:
+                st.info(f"엑셀 템플릿은 현재 환경에 openpyxl/xlsxwriter가 없어 CSV 템플릿으로 대체합니다. (세부: {e})")
+
+
+        with delete_col:
+            st.markdown("### \ud0a4\uc6cc\ub4dc \uc0ad\uc81c")
+            del_targets = st.multiselect(
+                "삭제할 항목 선택 (kwd_no 기준)",
+                options=sorted(st.session_state.kw_df["kwd_no"].tolist(), key=lambda value: str(value).casefold()),
+                key="del_targets"
+            )
+            if st.button("선택 삭제", type="secondary", key="btn_delete_rows"):
+                if not del_targets:
+                    st.warning("삭제할 항목을 선택하세요.")
+                else:
+                    st.session_state.kw_df = st.session_state.kw_df[~st.session_state.kw_df["kwd_no"].isin(del_targets)].reset_index(drop=True)
+                    save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
+                    st.success(f"{len(del_targets)}건 삭제 완료")
 
         if uploaded_file is not None:
             try:
@@ -3179,26 +3413,26 @@ if is_admin():
 
         st.subheader("키워드 입력/관리")
 
-        c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+        c1, c2, c3 = st.columns(3)
         with c1:
-            term_in = st.text_input("키워드명 *", placeholder="예: 필러")
+            term_in = st.text_input("\ud0a4\uc6cc\ub4dc\uba85 *", placeholder="\uc608: \ud544\ub7ec")
         with c2:
-            db_cat_opts = unique_values_from_db("상품카테고리")
-            cat_choice = st.selectbox("상품카테고리", _ko_sorted(db_cat_opts) + ["(직접 입력)"])
+            db_cat_opts = unique_values_from_db("\uc0c1\ud488\uce74\ud14c\uace0\ub9ac")
+            cat_choice = st.selectbox("\uc0c1\ud488\uce74\ud14c\uace0\ub9ac", _ko_sorted(db_cat_opts) + ["(\uc9c1\uc811 \uc785\ub825)"])
         with c3:
-            db_risk_opts = unique_values_from_db("리스크 등급")
-            risk_choice = st.selectbox("리스크 등급", db_risk_opts)
-        with c4:
-            add_click = st.button("추가", type="primary", key="btn_add_row")
+            db_risk_opts = unique_values_from_db("\ub9ac\uc2a4\ud06c \ub4f1\uae09")
+            risk_choice = st.selectbox("\ub9ac\uc2a4\ud06c \ub4f1\uae09", _ko_sorted(db_risk_opts))
 
-        c5, c6, c7 = st.columns([3, 3, 3])
+        c4, c5, c6 = st.columns(3)
+        with c4:
+            detail_choice = st.selectbox("\ub9ac\uc2a4\ud06c \ub4f1\uae09\ubcc4 \uc138\ubd80 \uc2ec\uc758\uae30\uc900", _dropdown_with_input_option(st.session_state.opt_details))
         with c5:
-            detail_choice = st.selectbox("리스크 등급별 세부 심의기준", _dropdown_with_input_option(st.session_state.opt_details))
+            db_evid_opts = unique_values_from_db("\uc99d\ube59\uc790\ub8cc\uc720\ud615")
+            evidence_choice = st.selectbox("\uc99d\ube59\uc790\ub8cc\uc720\ud615", _dropdown_with_input_option(db_evid_opts))
         with c6:
-            db_evid_opts = unique_values_from_db("증빙자료유형")
-            evidence_choice = st.selectbox("증빙자료유형", _dropdown_with_input_option(db_evid_opts))
-        with c7:
-            alt_choice = st.selectbox("대체키워드", _dropdown_with_input_option(st.session_state.opt_alt_terms))
+            alt_choice = st.selectbox("\ub300\uccb4\ud0a4\uc6cc\ub4dc", _dropdown_with_input_option(st.session_state.opt_alt_terms))
+
+        add_click = st.button("\ucd94\uac00", type="primary", key="btn_add_row")
 
         new_cat = new_detail = new_evid = new_alt = ""
         new_kwd = ""
@@ -3353,7 +3587,7 @@ if is_admin():
                 num_rows="fixed" if cloud_enabled() else "dynamic", key="editor_free",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [])
 
-        csave, cdel, ctmpl = st.columns([1, 1, 2])
+        csave, _, _ = st.columns([1, 1, 2])
         with csave:
             if st.button("변경사항 저장", type="primary", key="btn_save_edits"):
                 edited_df = edited_df.fillna("").rename(
@@ -3369,33 +3603,6 @@ if is_admin():
 
                 save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
                 st.success("수정 내용 저장 완료")
-
-        with cdel:
-            del_targets = st.multiselect(
-                "삭제할 항목 선택 (kwd_no 기준)",
-                options=sorted(st.session_state.kw_df["kwd_no"].tolist(), key=lambda value: str(value).casefold()),
-                key="del_targets"
-            )
-            if st.button("선택 삭제", type="secondary", key="btn_delete_rows"):
-                if not del_targets:
-                    st.warning("삭제할 항목을 선택하세요.")
-                else:
-                    st.session_state.kw_df = st.session_state.kw_df[~st.session_state.kw_df["kwd_no"].isin(del_targets)].reset_index(drop=True)
-                    save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
-                    st.success(f"{len(del_targets)}건 삭제 완료")
-
-        with ctmpl:
-            st.markdown("**업로드 템플릿 다운로드**")
-            tmpl_csv_buf = io.BytesIO()
-            pd.DataFrame(columns=DB_COLS).to_csv(tmpl_csv_buf, index=False, encoding="utf-8-sig")
-            st.download_button("CSV 템플릿 다운로드", data=tmpl_csv_buf.getvalue(), file_name="keyword_template.csv", mime="text/csv", key="dl_tmpl_csv")
-            try:
-                tmpl_xlsx_buf = io.BytesIO()
-                with pd.ExcelWriter(tmpl_xlsx_buf) as writer:
-                    pd.DataFrame(columns=DB_COLS).to_excel(writer, sheet_name="keywords_template", index=False)
-                st.download_button("엑셀 템플릿 다운로드", data=tmpl_xlsx_buf.getvalue(), file_name="keyword_template.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_tmpl_xlsx")
-            except Exception as e:
-                st.info(f"엑셀 템플릿은 현재 환경에 openpyxl/xlsxwriter가 없어 CSV 템플릿으로 대체합니다. (세부: {e})")
 
         st.caption(f"현재 저장된 항목: {len(st.session_state.kw_df)}")
         st.dataframe(_rename_fcol(sort_for_display(st.session_state.kw_df[get_db_cols()])), width="stretch")

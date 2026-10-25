@@ -53,6 +53,13 @@ class SupabaseRepository:
                 body = response.json()
             except ValueError:
                 body = {}
+            if path.startswith('/auth/v1/token?grant_type=password'):
+                detail = body.get('msg') or body.get('message') or body.get('error_description')
+                code = body.get('code') or body.get('error_code')
+                diagnostic = ': '.join(str(value) for value in (code, detail) if value)
+                if diagnostic:
+                    diagnostic = ' '.join(diagnostic.split())[:240]
+                    raise StorageError(f'Supabase Auth: {diagnostic}')
             if path.split('?', 1)[0] == '/auth/v1/signup':
                 detail = body.get('msg') or body.get('message') or body.get('error_description')
                 code = body.get('code') or body.get('error_code')
@@ -111,9 +118,30 @@ class SupabaseRepository:
     def load_keyword_requests(self, access_token, limit=1000):
         limit = max(1, min(int(limit), 1000))
         path = ('/rest/v1/kra_keyword_requests?select=id,requester_id,requester_email,'
-                'kwd_no,keyword_name,request_type,request_detail,created_at'
+                'kwd_no,keyword_name,request_type,request_detail,status,admin_reply,created_at'
                 '&order=created_at.desc&limit=' + str(limit))
         return self.request('GET', path, token=access_token) or []
+
+    def update_keyword_request(self, request_id, status, admin_reply, access_token):
+        path = ('/rest/v1/kra_keyword_requests?id=eq.' + str(request_id)
+                + '&select=id,status,admin_reply')
+        rows = self.request(
+            'PATCH', path,
+            {'status': status, 'admin_reply': admin_reply},
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('문의 처리 내용이 저장되지 않았습니다. 관리자 권한과 DB 정책을 확인하세요.')
+        return rows[0]
+
+    def delete_keyword_request(self, request_id, access_token):
+        path = '/rest/v1/kra_keyword_requests?id=eq.' + str(request_id)
+        rows = self.request(
+            'DELETE', path, token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('Request deletion failed; verify administrator role and database policy.')
+        return rows[0]
 
     def load_request_email_notifications(self, access_token=None):
         rows = self.request(

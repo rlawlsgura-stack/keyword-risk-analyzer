@@ -1,10 +1,20 @@
-## FIXED274 — 개발 중
+## FIXED275 — 2026-10-25
+
+- FIXED274의 완료 상태를 보존하고 최신 작업 파일을 `keyword_app2_fixed275.py`로 분기했습니다.
+- 문의 내역에 처리 상태와 관리자 답변을 관리하고, 접수 상세 팝업에서 수정·삭제할 수 있습니다.
+- 하이라이트 미리보기는 내용에 맞는 높이를 유지하고 상세 팝업이 열릴 때만 필요한 공간을 확보합니다.
+- 키워드 업로드·삭제 영역과 키워드 입력/관리 레이아웃을 정리하고, 선택 목록 정렬과 컨트롤 크기를 통일했습니다.
+
+## FIXED274 — 백업
 
 - FIXED273을 보존하고 최신 작업 파일을 keyword_app2_fixed274.py로 분기했습니다.
 
 - Added keyword inquiry registration with type and detail fields plus an explicitly named inquiry-history tab.
 - Added owner/admin Supabase RLS access and an administrator toggle for optional Resend email alerts. Approval and keyword DB writeback are not implemented.
 - Applied the inquiry and notification tables with RLS to the connected Supabase project; deployments remain unchanged.
+- Added admin-managed inquiry statuses (`대기`, `검토중`, `처리완료`) and reply text, with owner read-only access and admin-only database updates.
+- Display inquiry receipt time as Korean local time in the last column; add status/reply fields to inquiry history. Marking a request complete does not automatically modify keyword records.
+- Added a receipt number to the inquiry list and moved status/reply editing into a per-request dialog; administrators can delete requests after explicit confirmation.
 
 ## FIXED273 — Auxiliary analysis removed
 
