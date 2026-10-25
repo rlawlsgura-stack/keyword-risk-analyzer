@@ -6,6 +6,14 @@ Keyword Risk Analyzer (FIXED287 - OCR session persistence and navigation labels)
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
 """
 from __future__ import annotations
+import os
+
+# PaddleX reads this flag while its package is imported. Set it before loading
+# Streamlit, pandas, or application modules so reruns cannot trigger a second
+# eager repository initialization.
+os.environ["PADDLE_PDX_EAGER_INIT"] = "False"
+os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "False"
+
 from typing import List, Tuple, Set, Optional
 import pandas as pd
 from matching_engine import (
