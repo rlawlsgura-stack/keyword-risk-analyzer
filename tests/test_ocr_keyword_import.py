@@ -1,9 +1,11 @@
 import io
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
 
+import ocr_keyword_import
 from ocr_keyword_import import extract_text_lines, make_image_preview_data
 
 
@@ -49,6 +51,28 @@ class OCRTextGeometryTests(unittest.TestCase):
 
         with Image.open(io.BytesIO(base64.b64decode(encoded))) as preview:
             self.assertEqual(preview.size, (50, 25))
+
+    def test_selectable_text_boxes_are_clipped_to_image_bounds(self):
+        captured = {}
+
+        def capture_component(**kwargs):
+            captured.update(kwargs)
+
+        with patch.object(ocr_keyword_import, "_get_text_selectable_image_component",
+                          return_value=capture_component):
+            rendered = ocr_keyword_import.render_text_selectable_image(
+                "data:image/jpeg;base64,", 200, 100,
+                [
+                    {"text": "clipped", "bbox": [-10, -5, 250, 120]},
+                    {"text": "outside", "bbox": [210, 10, 250, 30]},
+                ],
+                alt="test", key="test-image",
+            )
+
+        self.assertTrue(rendered)
+        self.assertEqual(captured["data"]["lines"], [
+            {"text": "clipped", "bbox": [0.0, 0.0, 200.0, 100.0]}
+        ])
 
 
 if __name__ == "__main__":

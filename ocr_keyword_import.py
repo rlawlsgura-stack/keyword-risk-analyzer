@@ -15,12 +15,13 @@ _ocr_engine_lock = Lock()
 _TEXT_SELECTABLE_IMAGE = None
 _TEXT_SELECTABLE_IMAGE_ERROR = ""
 _TEXT_SELECTABLE_IMAGE_CSS = """
-.ocr-image-root { width: 100%; }
-.ocr-image-stage { position: relative; width: 100%; line-height: 0; container-type: inline-size; }
-.ocr-image-stage img { display: block; width: 100%; height: auto; }
-.ocr-text-layer { position: absolute; inset: 0; }
+.ocr-image-root { width: 100%; min-width: 0; }
+.ocr-image-stage { position: relative; width: fit-content; max-width: 100%; line-height: 0; container-type: inline-size; }
+.ocr-image-stage img { display: block; width: auto; max-width: 100%; height: auto; }
+.ocr-text-layer { position: absolute; inset: 0; overflow: hidden; }
 .ocr-text-line {
-  position: absolute; display: block; overflow: visible; white-space: pre;
+  position: absolute; display: block; width: max-content; max-width: 100%;
+  overflow: visible; white-space: pre;
   color: transparent; cursor: text; user-select: text; -webkit-user-select: text;
   line-height: 1; font-family: Arial, sans-serif;
 }
@@ -45,16 +46,20 @@ export default function (component) {
   for (const line of data.lines || []) {
     const box = line.bbox;
     if (!box || box.length !== 4) continue;
-    const [left, top, right, bottom] = box;
+    const imageWidth = Math.max(1, Number(data.width) || 1);
+    const imageHeight = Math.max(1, Number(data.height) || 1);
+    const left = Math.max(0, Math.min(imageWidth, Number(box[0])));
+    const top = Math.max(0, Math.min(imageHeight, Number(box[1])));
+    const right = Math.max(0, Math.min(imageWidth, Number(box[2])));
+    const bottom = Math.max(0, Math.min(imageHeight, Number(box[3])));
+    if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) continue;
     const span = document.createElement('span');
     span.className = 'ocr-text-line';
     span.textContent = line.text || '';
     span.title = line.text || '';
-    span.style.left = `${100 * left / data.width}%`;
-    span.style.top = `${100 * top / data.height}%`;
-    span.style.width = `${100 * Math.max(1, right - left) / data.width}%`;
-    span.style.height = `${100 * Math.max(1, bottom - top) / data.height}%`;
-    const fontScale = 100 * Math.max(8, (bottom - top) * 0.78) / data.width;
+    span.style.left = `${100 * left / imageWidth}%`;
+    span.style.top = `${100 * top / imageHeight}%`;
+    const fontScale = 100 * Math.max(8, (bottom - top) * 0.78) / imageWidth;
     span.style.fontSize = `max(7px, ${fontScale}cqw)`;
     layer.appendChild(span);
   }
@@ -103,6 +108,8 @@ def make_image_preview_data(image_bytes: bytes, max_side: int = 1600) -> tuple[s
 def render_text_selectable_image(image_data: str, width: int, height: int,
                                 lines: list[dict[str, object]], *, alt: str, key: str):
     """Show an image with a transparent, browser-selectable OCR text layer."""
+    image_width = max(1, int(width))
+    image_height = max(1, int(height))
     safe_lines = []
     for line in lines:
         text = str(line.get("text", "")).strip()
@@ -115,6 +122,14 @@ def render_text_selectable_image(image_data: str, width: int, height: int,
             continue
         if not all(math.isfinite(value) for value in coords):
             continue
+        coords = [
+            max(0.0, min(float(image_width), coords[0])),
+            max(0.0, min(float(image_height), coords[1])),
+            max(0.0, min(float(image_width), coords[2])),
+            max(0.0, min(float(image_height), coords[3])),
+        ]
+        if coords[2] <= coords[0] or coords[3] <= coords[1]:
+            continue
         safe_lines.append({"text": text, "bbox": coords})
     component = _get_text_selectable_image_component()
     if component is None:
@@ -122,8 +137,8 @@ def render_text_selectable_image(image_data: str, width: int, height: int,
     try:
         component(
             key=key,
-            data={"image": image_data, "width": max(1, int(width)),
-                  "height": max(1, int(height)), "lines": safe_lines, "alt": alt},
+            data={"image": image_data, "width": image_width,
+                  "height": image_height, "lines": safe_lines, "alt": alt},
             width="stretch",
             height="content",
         )
