@@ -78,6 +78,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
+APP_VERSION = Path(__file__).stem.rsplit('_', 1)[-1].upper()
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
@@ -2307,6 +2308,8 @@ if not cloud_enabled() and is_admin():
         st.session_state.kw_df = load_db(Path(new_path))
         scan_existing_counters()
 
+st.sidebar.caption(f'앱 버전 · {APP_VERSION}')
+
 MATCH_MODE_LABELS = {
     MATCH_MODES['exact']: '키워드 완전 일치',
     MATCH_MODES['similar']: '키워드 일부 일치',
@@ -4438,46 +4441,57 @@ with tabs['report']:
     if log_df.empty:
         st.info("조회 로그가 아직 없습니다. 분석을 몇 번 실행하면 리포트가 생성됩니다.")
     else:
-        col_r1, col_r2 = st.columns([1,1])
+        col_r1, col_r2 = st.columns([1, 1], gap="small", vertical_alignment="bottom")
         with col_r1:
             top_n = st.number_input("Top N", min_value=1, max_value=100, value=10, step=1, key="report_topn")
         with col_r2:
-            end_dt = now_kst()
-            start_dt = end_dt - timedelta(days=7)
-            st.write(f"기간: {start_dt.strftime('%Y-%m-%d %H:%M:%S')} ~ {end_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            today = now_kst().date()
+            default_period = (today - timedelta(days=6), today)
+            selected_period = st.date_input(
+                "기간",
+                value=default_period,
+                max_value=today,
+                key="report_date_range",
+            )
+            if not isinstance(selected_period, (tuple, list)) or not selected_period:
+                selected_period = default_period
+            start_date = selected_period[0]
+            end_date = selected_period[1] if len(selected_period) > 1 and selected_period[1] else start_date
+            start_dt = datetime.combine(start_date, datetime.min.time())
+            end_dt_exclusive = datetime.combine(end_date + timedelta(days=1), datetime.min.time())
 
         try:
             _tmp = log_df.copy()
             _tmp["ts_dt"] = pd.to_datetime(_tmp["ts"], errors="coerce")
-            mask = (_tmp["ts_dt"] >= start_dt) & (_tmp["ts_dt"] <= end_dt)
+            mask = (_tmp["ts_dt"] >= start_dt) & (_tmp["ts_dt"] < end_dt_exclusive)
             week_df = _tmp.loc[mask]
-            agg = week_df.groupby("kwd_no").size().reset_index(name="최근7일_조회수")
-            agg = agg.sort_values("최근7일_조회수", ascending=False).head(top_n)
+            agg = week_df.groupby("kwd_no").size().reset_index(name="기간내_조회수")
+            agg = agg.sort_values("기간내_조회수", ascending=False).head(top_n)
 
             report = agg.merge(st.session_state.kw_df[get_db_cols()], on="kwd_no", how="left")
-            report = report.sort_values(["최근7일_조회수","kwd_no"], ascending=[False, True], kind="mergesort")
+            report = report.sort_values(["기간내_조회수","kwd_no"], ascending=[False, True], kind="mergesort")
             report = report.reset_index(drop=True)
             report.insert(0, "검색순위", range(1, len(report) + 1))
 
-            # ---- Column order tweak: place '최근7일_조회수' right after '대체키워드' ----
+            # ---- Column order tweak: place '기간내_조회수' right after '대체키워드' ----
             try:
                 cols = list(report.columns)
-                if "최근7일_조회수" in cols:
-                    cols.remove("최근7일_조회수")
+                if "기간내_조회수" in cols:
+                    cols.remove("기간내_조회수")
                     if "대체키워드" in cols:
                         idx = cols.index("대체키워드") + 1
                     elif "증빙자료유형" in cols:
                         idx = cols.index("증빙자료유형") + 1
                     else:
                         idx = len(cols)
-                    cols.insert(idx, "최근7일_조회수")
+                    cols.insert(idx, "기간내_조회수")
                     report = report[cols]
             except Exception:
                 pass
             # ----------------------------------------------------------------------
 
             # ---- Right align numeric columns ----
-            align_cols = [c for c in ["최근7일_조회수", "키워드 조회 수(누적카운트)"] if c in report.columns]
+            align_cols = [c for c in ["기간내_조회수", "키워드 조회 수(누적카운트)"] if c in report.columns]
             styled = report.style.set_properties(**{"text-align": "right"}, subset=align_cols)
 
             st.dataframe(_rename_fcol(styled), width="stretch", hide_index=True)
@@ -4485,7 +4499,7 @@ with tabs['report']:
             report.rename(columns={LAST_HIT_COL: LAST_SEARCH_LABEL}).to_csv(
                 rep_buf, index=False, encoding="utf-8-sig"
             )
-            st.download_button("리포트 CSV 다운로드 (최근 7일 Top N)", data=rep_buf.getvalue(), file_name="weekly_topN_report.csv", mime="text/csv", key="dl_week_report")
+            st.download_button("리포트 CSV 다운로드 (선택 기간 Top N)", data=rep_buf.getvalue(), file_name="period_topN_report.csv", mime="text/csv", key="dl_week_report")
         except Exception as e:
             st.error(f"리포트 생성 중 오류: {e}")
 
