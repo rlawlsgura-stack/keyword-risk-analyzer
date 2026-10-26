@@ -1,3 +1,9 @@
+## FIXED291 - OCR upload layout alignment
+
+- Match the OCR upload dropzone and empty-state panel widths and heights for admin and user accounts.
+- Keep the uploader button at its standard size and use a compact responsive 62px panel layout.
+- Point local and Community Cloud entrypoints to FIXED291.
+
 ## FIXED290 - OCR approval and unmatched-term review
 
 - Analyze only OCR rows checked in the approval column when opening highlight preview.
