@@ -2778,7 +2778,7 @@ def render_image_ocr_tab():
             preview_data = result.get("preview_data")
             caption = f"{image_file.name} ({image_index + 1}/{len(uploaded_files)})"
             if preview_data and selectable_lines:
-                render_text_selectable_image(
+                overlay_rendered = render_text_selectable_image(
                     preview_data,
                     result.get("image_width", 1),
                     result.get("image_height", 1),
@@ -2786,7 +2786,10 @@ def render_image_ocr_tab():
                     alt=caption,
                     key=f"ocr_selectable_image_{image_version}_{image_index}",
                 )
-                if len(selectable_lines) < len(lines):
+                if not overlay_rendered:
+                    st.image(image_file.getvalue(), caption=caption, width="stretch")
+                    st.caption("이미지 텍스트 선택 레이어를 불러오지 못해 기본 미리보기를 표시합니다.")
+                elif len(selectable_lines) < len(lines):
                     st.caption("일부 인식 문장은 위치 정보를 얻지 못해 이미지에서 선택할 수 없습니다.")
             else:
                 st.image(image_file.getvalue(), caption=caption, width="stretch")

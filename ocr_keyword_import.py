@@ -2,21 +2,19 @@
 from __future__ import annotations
 
 import io
+import logging
 import math
 import os
 from threading import Lock
-
-import streamlit as st
 
 
 _ocr_engine = None
 _ocr_engine_lock = Lock()
 
 
-_TEXT_SELECTABLE_IMAGE = st.components.v2.component(
-    "kra_ocr_text_selectable_image",
-    html="<div class='ocr-image-root'><div class='ocr-image-stage'></div></div>",
-    css="""
+_TEXT_SELECTABLE_IMAGE = None
+_TEXT_SELECTABLE_IMAGE_ERROR = ""
+_TEXT_SELECTABLE_IMAGE_CSS = """
 .ocr-image-root { width: 100%; }
 .ocr-image-stage { position: relative; width: 100%; line-height: 0; container-type: inline-size; }
 .ocr-image-stage img { display: block; width: 100%; height: auto; }
@@ -28,8 +26,8 @@ _TEXT_SELECTABLE_IMAGE = st.components.v2.component(
 }
 .ocr-text-line:hover { background: rgba(55, 115, 255, 0.16); outline: 1px solid rgba(55, 115, 255, 0.38); }
 .ocr-text-line::selection { color: #111; background: rgba(80, 145, 255, 0.72); }
-""",
-    js="""
+"""
+_TEXT_SELECTABLE_IMAGE_JS = """
 export default function (component) {
   const { data, parentElement } = component;
   const stage = parentElement.querySelector('.ocr-image-stage');
@@ -62,8 +60,29 @@ export default function (component) {
   }
   stage.appendChild(layer);
 }
-""",
-)
+"""
+
+
+def _get_text_selectable_image_component():
+    """Register the optional UI component only when the OCR preview is opened."""
+    global _TEXT_SELECTABLE_IMAGE, _TEXT_SELECTABLE_IMAGE_ERROR
+    if _TEXT_SELECTABLE_IMAGE is not None:
+        return _TEXT_SELECTABLE_IMAGE
+    try:
+        import streamlit as st
+
+        _TEXT_SELECTABLE_IMAGE = st.components.v2.component(
+            "kra_ocr_text_selectable_image",
+            html="<div class='ocr-image-root'><div class='ocr-image-stage'></div></div>",
+            css=_TEXT_SELECTABLE_IMAGE_CSS,
+            js=_TEXT_SELECTABLE_IMAGE_JS,
+        )
+        _TEXT_SELECTABLE_IMAGE_ERROR = ""
+        return _TEXT_SELECTABLE_IMAGE
+    except Exception as exc:
+        _TEXT_SELECTABLE_IMAGE_ERROR = f"{type(exc).__name__}: {exc}"
+        logging.exception("Could not register the selectable OCR image component")
+        return None
 
 
 def make_image_preview_data(image_bytes: bytes, max_side: int = 1600) -> tuple[str, int, int]:
@@ -97,13 +116,21 @@ def render_text_selectable_image(image_data: str, width: int, height: int,
         if not all(math.isfinite(value) for value in coords):
             continue
         safe_lines.append({"text": text, "bbox": coords})
-    _TEXT_SELECTABLE_IMAGE(
-        key=key,
-        data={"image": image_data, "width": max(1, int(width)),
-              "height": max(1, int(height)), "lines": safe_lines, "alt": alt},
-        width="stretch",
-        height="content",
-    )
+    component = _get_text_selectable_image_component()
+    if component is None:
+        return False
+    try:
+        component(
+            key=key,
+            data={"image": image_data, "width": max(1, int(width)),
+                  "height": max(1, int(height)), "lines": safe_lines, "alt": alt},
+            width="stretch",
+            height="content",
+        )
+        return True
+    except Exception:
+        logging.exception("Could not render the selectable OCR image component")
+        return False
 
 
 def load_korean_ocr():
