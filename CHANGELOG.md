@@ -1,3 +1,8 @@
+## FIXED289 - OCR text selection bounds
+
+- Normalize OCR text bounding-box width and height by the source image dimensions so browser text selection stays within recognized text.
+- Preserve FIXED288 and point the Streamlit Community Cloud entrypoint to FIXED289.
+
 ## FIXED288 - Cloud OCR runtime stabilization
 
 - Build on FIXED287 and point the Community Cloud entrypoint to FIXED288.

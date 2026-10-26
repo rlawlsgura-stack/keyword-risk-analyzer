@@ -52,8 +52,8 @@ export default function (component) {
     span.title = line.text || '';
     span.style.left = `${100 * left / data.width}%`;
     span.style.top = `${100 * top / data.height}%`;
-    span.style.width = `${100 * Math.max(1, right - left)}%`;
-    span.style.height = `${100 * Math.max(1, bottom - top)}%`;
+    span.style.width = `${100 * Math.max(1, right - left) / data.width}%`;
+    span.style.height = `${100 * Math.max(1, bottom - top) / data.height}%`;
     const fontScale = 100 * Math.max(8, (bottom - top) * 0.78) / data.width;
     span.style.fontSize = `max(7px, ${fontScale}cqw)`;
     layer.appendChild(span);

@@ -1,10 +1,10 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED284** (`keyword_app2_fixed284.py`).
+Current local development version: **FIXED289** (`keyword_app2_fixed289.py`).
 `run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Render and Streamlit Community Cloud remain configured for FIXED271 until their deployment settings are changed. FIXED284 is not deployed externally.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) now targets FIXED289. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
 
 ## 설계 문서
 
