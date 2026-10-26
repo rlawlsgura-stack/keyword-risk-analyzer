@@ -1,3 +1,10 @@
+## FIXED290 - OCR approval and unmatched-term review
+
+- Analyze only OCR rows checked in the approval column when opening highlight preview.
+- Collect unmatched terms in a temporary session list, normalize on request, and register selected recommendations only after administrator approval.
+- Add a dedicated unmatched-candidate tab and align keyword-management typography.
+- Point local and Community Cloud entrypoints to FIXED290.
+
 ## FIXED289 - OCR text selection bounds
 
 - Normalize OCR text bounding-box width and height by the source image dimensions so browser text selection stays within recognized text.

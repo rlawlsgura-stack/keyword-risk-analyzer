@@ -1,9 +1,12 @@
 """Read-only morphology and semantic candidates; never alters keyword matches."""
 from functools import lru_cache
+from collections import Counter
 import math
 import os
+import re
 from threading import Lock
 import time
+import unicodedata
 
 import requests
 
@@ -30,6 +33,76 @@ def _tokens(text, kiwi):
     # Keep negation/content words; remove grammatical endings/particles only.
     return [token for token in kiwi.tokenize(text)
             if token.tag.startswith(('N', 'V', 'M', 'X', 'SL', 'SH', 'SN'))]
+
+
+_POOL_LATIN = re.compile(r"[a-z]")
+_POOL_HANGUL = re.compile(r"[가-힣]")
+_POOL_STOPWORDS = {"a", "an", "and", "are", "as", "at", "be", "by", "for",
+                   "from", "in", "is", "it", "of", "on", "or", "that",
+                   "the", "this", "to", "was", "were", "with"}
+
+
+def extract_unmatched_term_surfaces(text, matches, kiwi=None, limit=1000):
+    """Count unnormalized Kiwi surface forms outside matched spans."""
+    text = str(text or "")
+    if not text:
+        return []
+
+    uncovered = list(text)
+    for match in matches or ():
+        for index in range(max(0, int(match.start)), min(len(text), int(match.end))):
+            uncovered[index] = " "
+
+    counts = Counter()
+    surfaces = {}
+    with _kiwi_lock:
+        for token in (kiwi or _kiwi()).tokenize("".join(uncovered)):
+            if not token.tag.startswith(("N", "V", "M", "X", "SL", "SH")):
+                continue
+            surface = text[token.start:token.start + token.len].strip()
+            key = unicodedata.normalize("NFKC", surface).casefold().strip()
+            if (not key or len(key) > 100 or key.isdecimal()
+                    or key in _POOL_STOPWORDS):
+                continue
+            if len(_POOL_HANGUL.findall(key)) < 2 and len(_POOL_LATIN.findall(key)) < 3:
+                continue
+            if len(surface) > 150:
+                continue
+            surfaces.setdefault(key, surface)
+            counts[key] += 1
+
+    return [
+        {"surface_key": term, "surface": surfaces[term], "occurrences": count}
+        for term, count in counts.most_common(max(1, min(int(limit), 1000)))
+    ]
+
+
+def normalize_unmatched_term_candidates(surface_rows, kiwi=None):
+    """Suggest Kiwi lemma forms from temporary raw candidates."""
+    grouped = {}
+    with _kiwi_lock:
+        kiwi = kiwi or _kiwi()
+        for row in surface_rows:
+            surface = str(row.get("surface", "")).strip()
+            if not surface:
+                continue
+            tokens = [token for token in kiwi.tokenize(surface)
+                      if token.tag.startswith(("N", "V", "M", "X", "SL", "SH"))]
+            forms = [unicodedata.normalize("NFKC", token.form).casefold().strip()
+                     for token in tokens]
+            forms = [form for form in forms if form]
+            term = " ".join(forms) or unicodedata.normalize("NFKC", surface).casefold()
+            if (len(term) > 100 or term.isdecimal()
+                    or term in _POOL_STOPWORDS
+                    or (len(_POOL_HANGUL.findall(term)) < 2 and len(_POOL_LATIN.findall(term)) < 3)):
+                continue
+            candidate = grouped.setdefault(term, {"term": term, "occurrences": 0,
+                                                    "source_terms": set()})
+            candidate["occurrences"] += int(row.get("occurrences", 0) or 0)
+            candidate["source_terms"].add(surface)
+
+    return [{**row, "source_terms": " | ".join(sorted(row["source_terms"]))}
+            for row in sorted(grouped.values(), key=lambda item: (-item["occurrences"], item["term"]))]
 
 
 @lru_cache(maxsize=4096)

@@ -2596,6 +2596,19 @@ import unicodedata
 import sys
 import os
 import importlib
+import auxiliary_analysis as _auxiliary_analysis
+
+
+def _get_auxiliary_analysis_function(name):
+    """Reload a stale helper module retained across Streamlit reruns."""
+    function = getattr(_auxiliary_analysis, name, None)
+    if not callable(function):
+        importlib.invalidate_caches()
+        importlib.reload(_auxiliary_analysis)
+        function = getattr(_auxiliary_analysis, name, None)
+    if not callable(function):
+        raise ImportError(f"auxiliary_analysis.py에 {name} 함수가 없습니다.")
+    return function
 
 import ocr_keyword_import as _ocr_keyword_import
 
@@ -2719,17 +2732,21 @@ def _reset_ocr_analysis(candidates_key, editor_version_key, image_version_key, f
     st.session_state[stored_uploads_key] = []
 
 
-def _prepare_ocr_candidate_analysis(editor_key, candidates, analysis_tab_label):
+def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label):
     widget_state = st.session_state.get(editor_key) or {}
     edited_rows = widget_state.get("edited_rows", {})
     terms = []
+    candidates = st.session_state.get(candidates_key, [])
     for index, row in enumerate(candidates):
-        term = str(edited_rows.get(index, {}).get("term", row.get("term", ""))).strip()
+        changes = edited_rows.get(index, {})
+        if not bool(changes.get("approved", row.get("approved", False))):
+            continue
+        term = str(changes.get("term", row.get("term", ""))).strip()
         if term:
             terms.append(term)
     text = "\n".join(terms)
     if not text:
-        st.session_state["ocr_analysis_error"] = "OCR 후보에 텍스트가 없어 분석할 수 없습니다."
+        st.session_state["ocr_analysis_error"] = "승인 체크된 OCR 후보가 없어 분석할 수 없습니다."
         return
     if len(text) > 20000:
         st.session_state["ocr_analysis_error"] = "분석 입력은 20,000자까지 가능합니다. OCR 후보를 줄이거나 나누어서 테스트하세요."
@@ -2973,16 +2990,16 @@ def render_image_ocr_tab():
         st.warning("기존 DB 또는 후보끼리 중복된 항목: " + ", ".join(dict.fromkeys(duplicate_names)))
     st.caption("신뢰도가 60% 미만인 후보는 기본 선택 해제 상태입니다. 모든 후보를 직접 검토하세요.")
     approved = edited[edited["approved"].fillna(False).astype(bool)].copy()
-    analysis_terms = edited["term"].fillna("").astype(str).str.strip()
+    analysis_terms = approved["term"].fillna("").astype(str).str.strip()
     analysis_text = "\n".join(term for term in analysis_terms.tolist() if term)
     analysis_tab_label = next(label for key, label in tab_specs if key == "analysis")
     st.button(
         "OCR 후보 텍스트 분석 및 하이라이트 미리보기",
         key="ocr_keyword_preview_analysis",
         on_click=_prepare_ocr_candidate_analysis,
-        args=(editor_key, candidates, analysis_tab_label),
+        args=(editor_key, "ocr_keyword_candidates", analysis_tab_label),
         disabled=not analysis_text or len(analysis_text) > 20000,
-        help="현재 OCR 후보 키워드를 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.",
+        help="승인 체크된 OCR 후보만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.",
     )
     if st.button("선택 후보 승인 및 DB 저장", type="primary", key="ocr_keyword_save", disabled=approved.empty):
         approved["term"] = approved["term"].fillna("").astype(str).str.strip()
@@ -3030,6 +3047,7 @@ if is_admin() or (
     and ((st.session_state.get('cloud_user') or {}).get('app_metadata') or {}).get('role') == 'member'
 ):
     tab_specs.append(('ocr_import', '이미지 OCR분석'))
+tab_specs.append(('candidate_pool', '미매칭 후보군'))
 if cloud_enabled():
     tab_specs.append(('requests', '키워드 문의내역'))
 tab_specs.append(('report', '분석리포트'))
@@ -3045,7 +3063,7 @@ tabs = dict(zip(
 
 with tabs['analysis']:
     # ① 텍스트 입력
-    st.subheader("① 텍스트 입력")
+    st.subheader("텍스트 입력")
     sample = "\uc774 \ubb38\uc7a5\uc5d0\ub294 \ud544\ub7ec\uc640 \uc548\ud2f0\uc5d0\uc774\uc9d5\uc774\ub77c\ub294 \ud0a4\uc6cc\ub4dc\uac00 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4."
     if "analysis_input_text" not in st.session_state:
         st.session_state.analysis_input_text = sample
@@ -3053,7 +3071,7 @@ with tabs['analysis']:
 
     st.markdown("---")
     # ②) 분석 실행
-    st.subheader("② 분석 실행")
+    st.subheader("분석 실행")
     with st.expander("사전 필터 (선택)", expanded=True):
         cf1, cf2, cf3 = st.columns([1,1,1])
         with cf1:
@@ -3085,6 +3103,12 @@ with tabs['analysis']:
             with rules_summary.container():
                 render_matching_rules_summary(_matching_config())
 
+    collect_unmatched_pool = st.checkbox(
+        "분석 후 미매칭 키워드 후보를 임시 목록에 추가",
+        value=True,
+        key="collect_unmatched_pool",
+        help="후보와 빈도는 현재 로그인 세션에만 보관합니다. 분석 원문이나 후보 단어는 DB에 저장하지 않습니다.",
+    )
     analyze_clicked = st.button("텍스트 분석하기", type="primary", key="btn_analyze")
     auto_analyze = bool(st.session_state.pop("analysis_auto_run_pending", False))
     if analyze_clicked or auto_analyze:
@@ -3111,6 +3135,35 @@ with tabs['analysis']:
                     risks=st.session_state.get('pre_risks', []),
                     approved_partials=approved_partials,
                 )
+                analysis_id = str(uuid4())
+                if collect_unmatched_pool and analyze_clicked:
+                    try:
+                        coverage_matches = matches
+                        if st.session_state.get('pre_cats') or st.session_state.get('pre_risks'):
+                            coverage_matches = match_text(
+                                text, st.session_state.kw_df, config=config,
+                                approved_partials=approved_partials,
+                            )
+                        extract_surfaces = _get_auxiliary_analysis_function(
+                            "extract_unmatched_term_surfaces"
+                        )
+                        candidates = extract_surfaces(text, coverage_matches)
+                        pool = st.session_state.setdefault("unmatched_candidate_pool", {})
+                        for candidate in candidates:
+                            key = candidate["surface_key"]
+                            existing = pool.get(key)
+                            if existing:
+                                existing["occurrences"] += candidate["occurrences"]
+                            else:
+                                pool[key] = dict(candidate)
+                        if candidates:
+                            st.session_state["unmatched_candidate_recommendations"] = []
+                            st.session_state["unmatched_recommendation_version"] = int(
+                                st.session_state.get("unmatched_recommendation_version", 0)
+                            ) + 1
+                            st.caption(f"미매칭 후보 {len(candidates)}종을 임시 목록에 추가했습니다.")
+                    except Exception as pool_error:
+                        st.warning(f"미매칭 후보 집계에 실패했지만 텍스트 분석은 계속합니다: {pool_error}")
                 st.session_state.suffix_suggestions = {}
 
                 if matches:
@@ -3136,7 +3189,7 @@ with tabs['analysis']:
                     now_str = now_kst().strftime("%Y-%m-%d %H:%M:%S")
                     unique_kwds = display_unique["kwd_no"].dropna().astype(str).str.strip().tolist()
                     if unique_kwds and cloud_enabled():
-                        result = {'analysis_id': str(uuid4()),
+                        result = {'analysis_id': analysis_id,
                                   'matches': [asdict(m) for m in matches],
                                   'unique_keywords': unique_kwds,
                                   'keyword_revision': st.session_state.cloud_revision,
@@ -3869,6 +3922,112 @@ if cloud_enabled():
         if tabs['requests'].open:
             render_keyword_requests_tab()
 
+with tabs['candidate_pool']:
+    st.subheader("미매칭 후보군 분석 및 검토")
+    st.caption("후보는 현재 로그인 세션에 임시 보관됩니다. 분석 원문은 저장하지 않으며, 관리자가 승인해 등록하기 전까지 키워드 DB는 변경되지 않습니다.")
+    pool = st.session_state.setdefault("unmatched_candidate_pool", {})
+    surface_rows = list(pool.values())
+    if surface_rows:
+        st.dataframe(pd.DataFrame(surface_rows).rename(columns={
+            "surface": "미매칭 표현", "occurrences": "출현 횟수",
+        })[["미매칭 표현", "출현 횟수"]], width="stretch", hide_index=True)
+        pool_csv = pd.DataFrame(surface_rows).to_csv(index=False).encode("utf-8-sig")
+        st.download_button("임시 후보 CSV 다운로드", pool_csv, "unmatched_candidate_surfaces.csv", "text/csv", key="download_unmatched_surfaces")
+        analyze_pool = st.button("미매칭 후보군 분석", type="primary", key="analyze_unmatched_candidate_pool")
+        if analyze_pool:
+            try:
+                normalize_candidates = _get_auxiliary_analysis_function(
+                    "normalize_unmatched_term_candidates"
+                )
+                recommendations = normalize_candidates(surface_rows)
+                st.session_state["unmatched_candidate_recommendations"] = recommendations
+                st.session_state["unmatched_recommendation_version"] = int(
+                    st.session_state.get("unmatched_recommendation_version", 0)
+                ) + 1
+                st.success(f"정규화 추천 {len(recommendations)}건을 만들었습니다. 검토 후 승인하세요.")
+            except Exception as pool_error:
+                st.error(f"미매칭 후보군 분석에 실패했습니다: {pool_error}")
+        if st.button("임시 후보 목록 초기화", key="clear_unmatched_candidate_pool"):
+            st.session_state["unmatched_candidate_pool"] = {}
+            st.session_state["unmatched_candidate_recommendations"] = []
+            st.session_state["unmatched_recommendation_version"] = int(
+                st.session_state.get("unmatched_recommendation_version", 0)
+            ) + 1
+            st.rerun()
+    else:
+        st.info("아직 후보가 없습니다. 스크립트 분석 탭에서 분석을 실행하면 여기에 임시 후보가 쌓입니다.")
+
+    recommendations = st.session_state.get("unmatched_candidate_recommendations", [])
+    if recommendations:
+        st.markdown("#### 정규화 추천 및 분류 입력")
+        recommendation_df = pd.DataFrame(recommendations)
+        recommendation_df.insert(0, "승인", False)
+        recommendation_df["상품카테고리"] = ""
+        recommendation_df["리스크 등급"] = ""
+        recommendation_df["리스크 등급별 세부 심의기준"] = ""
+        recommendation_df["증빙자료유형"] = ""
+        recommendation_df["대체키워드"] = "-"
+        edited_recommendations = st.data_editor(
+            recommendation_df,
+            hide_index=True,
+            width="stretch",
+            num_rows="fixed",
+            column_config={
+                "승인": st.column_config.CheckboxColumn("승인"),
+                "term": st.column_config.TextColumn("추천 키워드", required=True),
+                "source_terms": st.column_config.TextColumn("원본 표현"),
+                "occurrences": st.column_config.NumberColumn("출현 횟수", disabled=True),
+                "상품카테고리": st.column_config.SelectboxColumn("상품카테고리", options=[""] + list(st.session_state.opt_categories), required=True),
+                "리스크 등급": st.column_config.SelectboxColumn("리스크 등급", options=[""] + list(st.session_state.opt_risks), required=True),
+                "리스크 등급별 세부 심의기준": st.column_config.SelectboxColumn("세부 심의기준", options=[""] + list(st.session_state.opt_details), required=True),
+                "증빙자료유형": st.column_config.SelectboxColumn("증빙자료유형", options=[""] + list(st.session_state.opt_evidences), required=True),
+                "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=list(st.session_state.opt_alt_terms), required=False),
+            },
+            key=f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}",
+        )
+        if is_admin():
+            if st.button("선택 후보 승인 및 DB 등록", type="primary", key="approve_unmatched_recommendations"):
+                selected = edited_recommendations[edited_recommendations["승인"].fillna(False)].copy()
+                required = ["term", "상품카테고리", "리스크 등급", "리스크 등급별 세부 심의기준", "증빙자료유형"]
+                if selected.empty:
+                    st.warning("먼저 등록할 후보의 승인 상자를 선택하세요.")
+                elif selected[required].fillna("").astype(str).apply(lambda col: col.str.strip().eq("")).any().any():
+                    st.warning("선택한 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.")
+                else:
+                    existing_keys = {
+                        (str(row.get("키워드명", "")).strip().casefold(), str(row.get("상품카테고리", "")).strip())
+                        for _, row in st.session_state.kw_df.iterrows()
+                    }
+                    additions = []
+                    for _, item in selected.iterrows():
+                        term = str(item["term"]).strip()
+                        category = str(item["상품카테고리"]).strip()
+                        key = (term.casefold(), category)
+                        if key in existing_keys:
+                            continue
+                        existing_keys.add(key)
+                        additions.append({
+                            "kwd_no": next_kwd_no(category), "키워드명": term,
+                            "상품카테고리": category, "리스크 등급": str(item["리스크 등급"]).strip(),
+                            "리스크 등급별 세부 심의기준": str(item["리스크 등급별 세부 심의기준"]).strip(),
+                            "증빙자료유형": str(item["증빙자료유형"]).strip(),
+                            "대체키워드": str(item.get("대체키워드", "-") or "-").strip(),
+                            "키워드 조회 수(누적카운트)": "0", "마지막 출력일자": "", "키워드 등록일자": "",
+                        })
+                    if additions:
+                        st.session_state.kw_df = pd.concat([st.session_state.kw_df, pd.DataFrame(additions)], ignore_index=True)
+                        save_db(st.session_state.kw_df[get_db_cols()], Path(st.session_state.storage_path))
+                        st.session_state["unmatched_candidate_recommendations"] = []
+                        st.session_state["unmatched_recommendation_version"] = int(
+                            st.session_state.get("unmatched_recommendation_version", 0)
+                        ) + 1
+                        st.success(f"승인된 키워드 {len(additions)}건을 DB에 등록했습니다.")
+                        st.rerun()
+                    else:
+                        st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
+        else:
+            st.info("정규화 결과는 검토할 수 있지만, DB 등록은 관리자 승인 후 진행됩니다.")
+
 if is_admin():
     with tabs['keyword_admin']:
         st.subheader("키워드 관리 (편집/삭제/템플릿/업로드)")
@@ -3877,10 +4036,22 @@ if is_admin():
 
         upload_col, delete_col = st.columns([1.15, 1])
         with upload_col:
-            st.markdown("### \U0001F4C2 \ud0a4\uc6cc\ub4dc \uc5c5\ub85c\ub4dc (.csv / .xlsx)")
+            st.markdown('<div class="kw-admin-section-title">📂 키워드 업로드 (.csv / .xlsx)</div>', unsafe_allow_html=True)
             upload_mode = st.radio("\uc5c5\ub85c\ub4dc \ubaa8\ub4dc", ["\uae30\uc874 \uc720\uc9c0 + \uc0c8\ub85c \ucd94\uac00", "\uc644\uc804 \ub36e\uc5b4\uc4f0\uae30"], horizontal=False, key="upload_mode")
             st.markdown("""
             <style>
+            .kw-admin-section-title {
+                font-size: 1.75rem !important;
+                font-weight: 600 !important;
+                line-height: 1.3 !important;
+                margin: 0 0 0.5rem 0 !important;
+            }
+            .kw-template-widget-label,
+            div[data-testid="stFileUploader"] [data-testid="stWidgetLabel"] {
+                font-size: 0.875rem !important;
+                font-weight: 400 !important;
+                line-height: 1.5 !important;
+            }
             div[data-testid="stFileUploader"] {
                 width: 50% !important;
                 max-width: 50% !important;
@@ -3921,7 +4092,7 @@ if is_admin():
             </style>
             """, unsafe_allow_html=True)
             uploaded_file = st.file_uploader("\ud0a4\uc6cc\ub4dc \ud15c\ud50c\ub9bf \uc5c5\ub85c\ub4dc", type=["csv", "xlsx"], key="uploader")
-            st.markdown("**업로드 템플릿 다운로드**")
+            st.markdown('<div class="kw-template-widget-label">업로드 템플릿 다운로드</div>', unsafe_allow_html=True)
             tmpl_csv_buf = io.BytesIO()
             pd.DataFrame(columns=DB_COLS).to_csv(tmpl_csv_buf, index=False, encoding="utf-8-sig")
             st.download_button("CSV 템플릿 다운로드", data=tmpl_csv_buf.getvalue(), file_name="keyword_template.csv", mime="text/csv", key="dl_tmpl_csv")
@@ -3935,7 +4106,7 @@ if is_admin():
 
 
         with delete_col:
-            st.markdown("### \ud0a4\uc6cc\ub4dc \uc0ad\uc81c")
+            st.markdown('<div class="kw-admin-section-title">키워드 삭제</div>', unsafe_allow_html=True)
             del_targets = st.multiselect(
                 "삭제할 항목 선택 (kwd_no 기준)",
                 options=sorted(st.session_state.kw_df["kwd_no"].tolist(), key=lambda value: str(value).casefold()),
