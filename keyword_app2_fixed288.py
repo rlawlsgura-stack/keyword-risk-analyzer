@@ -2596,7 +2596,11 @@ import unicodedata
 import sys
 import os
 
-from ocr_keyword_import import extract_text_lines
+from ocr_keyword_import import (
+    extract_text_lines,
+    make_image_preview_data,
+    render_text_selectable_image,
+)
 
 
 @st.cache_resource(show_spinner="Loading the Korean OCR model…")
@@ -2755,6 +2759,42 @@ def render_image_ocr_tab():
             st.error(f"\uc774\ubbf8\uc9c0\ub294 \ud55c \ubc88\uc5d0 \ucd5c\ub300 {max_ocr_images}\uc7a5\uae4c\uc9c0 \uc5c5\ub85c\ub4dc\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.")
         if total_upload_bytes > max_ocr_total_bytes:
             st.error("\uc5c5\ub85c\ub4dc \uc804\uccb4 \uc6a9\ub7c9\uc740 50MB\uae4c\uc9c0 \uac00\ub2a5\ud569\ub2c8\ub2e4. \ud30c\uc77c \uc218\ub97c \uc904\uc774\uac70\ub098 \uc774\ubbf8\uc9c0\ub97c \uc555\ucd95\ud574\uc11c \uc62c\ub824\uc8fc\uc138\uc694.")
+        file_results_by_index = {
+            int(result.get("index", index)): result
+            for index, result in enumerate(st.session_state.get("ocr_keyword_file_results", []))
+            if str(result.get("index", index)).isdigit()
+        }
+        has_selectable_ocr = any(
+            result.get("preview_data") and any(line.get("bbox") for line in result.get("lines", []))
+            for result in file_results_by_index.values()
+        )
+        if has_selectable_ocr:
+            st.caption("이미지 위 인식 글자를 드래그해 선택한 뒤 Ctrl+C로 복사할 수 있습니다.")
+
+        def render_ocr_preview(image_file, image_index):
+            result = file_results_by_index.get(image_index, {})
+            lines = result.get("lines", [])
+            selectable_lines = [line for line in lines if line.get("bbox")]
+            preview_data = result.get("preview_data")
+            caption = f"{image_file.name} ({image_index + 1}/{len(uploaded_files)})"
+            if preview_data and selectable_lines:
+                render_text_selectable_image(
+                    preview_data,
+                    result.get("image_width", 1),
+                    result.get("image_height", 1),
+                    selectable_lines,
+                    alt=caption,
+                    key=f"ocr_selectable_image_{image_version}_{image_index}",
+                )
+                if len(selectable_lines) < len(lines):
+                    st.caption("일부 인식 문장은 위치 정보를 얻지 못해 이미지에서 선택할 수 없습니다.")
+            else:
+                st.image(image_file.getvalue(), caption=caption, width="stretch")
+                if lines and not selectable_lines:
+                    st.caption("인식 결과의 위치 정보가 없어 이미지 위에서 선택할 수 없습니다.")
+                elif result.get("preview_error"):
+                    st.caption("선택 레이어 미리보기를 만들지 못했습니다. OCR 후보는 유지됩니다.")
+
         image_column, _ = st.columns([0.6, 0.4])
         with image_column:
             page_size = 2
@@ -2773,12 +2813,12 @@ def render_image_ocr_tab():
             preview_files = uploaded_files[first_image_index:first_image_index + page_size]
             if len(preview_files) == 1:
                 image_file = preview_files[0]
-                st.image(image_file.getvalue(), caption=f"{image_file.name} ({first_image_index + 1}/{len(uploaded_files)})", width="stretch")
+                render_ocr_preview(image_file, first_image_index)
             else:
                 preview_columns = st.columns(2)
                 for offset, image_file in enumerate(preview_files):
                     with preview_columns[offset]:
-                        st.image(image_file.getvalue(), caption=f"{image_file.name} ({first_image_index + offset + 1}/{len(uploaded_files)})", width="stretch")
+                        render_ocr_preview(image_file, first_image_index + offset)
         if len(uploaded_files) > 1:
             with st.expander(f"\ucca8\ubd80 \uc774\ubbf8\uc9c0 \ud30c\uc77c\uba85 {len(uploaded_files)}\uac1c \ud655\uc778"):
                 for image_file in uploaded_files:
@@ -2799,10 +2839,28 @@ def render_image_ocr_tab():
                 unique_rows = {}
                 file_results = []
                 with st.spinner(f"{len(uploaded_files)}\uc7a5\uc758 \uc774\ubbf8\uc9c0\ub97c \uc21c\ucc28\ub85c OCR \ucc98\ub9ac\ud558\uace0 \uc788\uc2b5\ub2c8\ub2e4..."):
-                    for image_file in uploaded_files:
+                    for image_index, image_file in enumerate(uploaded_files):
                         try:
                             ocr_rows = extract_text_lines(image_file.getvalue(), ocr_engine)
-                            file_results.append({"name": image_file.name, "count": len(ocr_rows), "error": ""})
+                            preview_data = None
+                            image_width = image_height = 1
+                            preview_error = ""
+                            try:
+                                preview_data, image_width, image_height = make_image_preview_data(image_file.getvalue())
+                            except Exception as exc:
+                                preview_error = str(exc)
+                                logging.exception("OCR selectable-image preview generation failed")
+                            file_results.append({
+                                "index": image_index,
+                                "name": image_file.name,
+                                "count": len(ocr_rows),
+                                "error": "",
+                                "lines": ocr_rows,
+                                "preview_data": preview_data,
+                                "image_width": image_width,
+                                "image_height": image_height,
+                                "preview_error": preview_error,
+                            })
                             for row in ocr_rows:
                                 text = unicodedata.normalize("NFKC", str(row["text"])).strip()
                                 normalized = _ocr_normalize(text)
@@ -2810,7 +2868,7 @@ def render_image_ocr_tab():
                                 if normalized and (normalized not in unique_rows or confidence > unique_rows[normalized]["confidence"]):
                                     unique_rows[normalized] = {"term": text, "confidence": confidence}
                         except Exception as exc:
-                            file_results.append({"name": image_file.name, "count": 0, "error": str(exc)})
+                            file_results.append({"index": image_index, "name": image_file.name, "count": 0, "error": str(exc)})
                 st.session_state.ocr_keyword_file_results = file_results
                 st.session_state.ocr_keyword_candidates = [
                     {
