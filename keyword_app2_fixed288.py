@@ -2595,12 +2595,28 @@ def render_user_management():
 import unicodedata
 import sys
 import os
+import importlib
 
-from ocr_keyword_import import (
-    extract_text_lines,
-    make_image_preview_data,
-    render_text_selectable_image,
-)
+import ocr_keyword_import as _ocr_keyword_import
+
+_OCR_IMPORTS = ("extract_text_lines", "make_image_preview_data", "render_text_selectable_image")
+if any(not callable(getattr(_ocr_keyword_import, name, None)) for name in _OCR_IMPORTS):
+    # Streamlit Cloud can rerun the new entrypoint while retaining an older
+    # helper module in sys.modules. Reload only for a stale helper API.
+    importlib.invalidate_caches()
+    _ocr_keyword_import = importlib.reload(_ocr_keyword_import)
+_missing_ocr_imports = [
+    name for name in _OCR_IMPORTS
+    if not callable(getattr(_ocr_keyword_import, name, None))
+]
+if _missing_ocr_imports:
+    raise ImportError(
+        "ocr_keyword_import is missing required functions after reload: "
+        + ", ".join(_missing_ocr_imports)
+    )
+extract_text_lines = _ocr_keyword_import.extract_text_lines
+make_image_preview_data = _ocr_keyword_import.make_image_preview_data
+render_text_selectable_image = _ocr_keyword_import.render_text_selectable_image
 
 
 @st.cache_resource(show_spinner="Loading the Korean OCR model…")
