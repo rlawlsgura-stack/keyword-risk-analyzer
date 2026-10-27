@@ -17,6 +17,19 @@ import ocr_keyword_import as ocr
 
 class OCROverlayBrowserTests(unittest.TestCase):
     def test_text_selection_fits_ocr_boxes_after_preview_resize(self):
+        self.check_overlay((2000, 1000), [
+            {"text": "긴 한글 문장과 영문 Long OCR text " * 4,
+             "bbox": [100, 100, 600, 150]},
+            {"text": "짧음", "bbox": [1600, 700, 1950, 750]},
+        ])
+
+    def test_header_selection_stays_on_one_line_in_tall_advertisement(self):
+        self.check_overlay((846, 3000), [
+            {"text": "SEBUM AND PORE CARE", "bbox": [43, 36, 350, 64]},
+            {"text": "IMPROVEMENT EFFECT", "bbox": [507, 36, 800, 64]},
+        ])
+
+    def check_overlay(self, image_size, lines):
         browser = shutil.which("google-chrome") or shutil.which("chromium")
         if not browser:
             for root, relative in [
@@ -31,40 +44,39 @@ class OCROverlayBrowserTests(unittest.TestCase):
             self.skipTest("Chrome or Chromium is required for the overlay layout check")
 
         buffer = io.BytesIO()
-        Image.new("RGB", (2000, 1000), "white").save(buffer, format="PNG")
+        Image.new("RGB", image_size, "white").save(buffer, format="PNG")
         image, width, height = ocr.make_image_preview_data(buffer.getvalue())
         data = json.dumps({
             "image": image, "width": width, "height": height,
-            "lines": [
-                {"text": "긴 한글 문장과 영문 Long OCR text " * 4,
-                 "bbox": [100, 100, 600, 150]},
-                {"text": "짧음", "bbox": [1600, 700, 1950, 750]},
-            ],
+            "lines": lines,
         }, ensure_ascii=False)
         renderer = ocr._TEXT_SELECTABLE_IMAGE_JS.replace(
             "export default function", "function renderOverlay", 1)
         page = """<!doctype html><meta charset="utf-8">
-<style>body { margin: 0; } CSS</style>
-<div id="host"><div class="ocr-image-root"><div class="ocr-image-stage"></div></div></div>
+<style>body { margin: 0; }</style>
+<template id="component"><style>CSS</style><div class="ocr-image-root"><div class="ocr-image-stage"></div></div></template>
+<div id="host"></div>
 <pre id="result">pending</pre>
 <script>window.onerror = message => document.querySelector('#result').textContent = JSON.stringify([message]);</script>
 <script>
 RENDERER
 const host = document.querySelector('#host');
+const root = host.attachShadow({mode: 'open'});
+root.appendChild(document.querySelector('#component').content.cloneNode(true));
 const data = DATA;
-renderOverlay({ data, parentElement: host });
+renderOverlay({ data, parentElement: root });
 const errors = [];
 const frame = () => new Promise(resolve => setTimeout(resolve, 50));
 (async () => {
-  const img = host.querySelector('img');
+  const img = root.querySelector('img');
   await new Promise(resolve => img.complete ? resolve() : img.addEventListener('load', resolve));
   for (const width of [800, 240, 100, 1800]) {
     host.style.width = `${width}px`;
     await frame(); await frame();
-    const image = host.querySelector('img').getBoundingClientRect();
-    if (Math.abs(image.width - Math.min(width, 1600)) > 1 || image.height < 1)
+    const image = img.getBoundingClientRect();
+    if (Math.abs(image.width - Math.min(width, img.naturalWidth)) > 1 || image.height < 1)
       errors.push(`Invalid preview size at ${width}: ${image.width} x ${image.height}`);
-    [...host.querySelectorAll('.ocr-text-line')].forEach((line, index) => {
+    [...root.querySelectorAll('.ocr-text-line')].forEach((line, index) => {
       const box = data.lines[index].bbox;
       const rect = line.getBoundingClientRect();
       const expected = [image.x + box[0] / data.width * image.width,

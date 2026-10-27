@@ -1,4 +1,8 @@
 import io
+import importlib
+from pathlib import Path
+import sys
+from types import ModuleType
 import unittest
 from unittest.mock import patch
 
@@ -7,6 +11,29 @@ from PIL import Image
 
 import ocr_keyword_import
 from ocr_keyword_import import extract_text_lines, make_image_preview_data
+
+
+class OCRModuleReloadTests(unittest.TestCase):
+    def test_app_reloads_old_overlay_even_when_functions_exist(self):
+        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed291.py').read_text(
+            encoding='utf-8')
+        start = source.index('import ocr_keyword_import as _ocr_keyword_import')
+        end = source.index('\nextract_text_lines =', start)
+        stale = ModuleType('ocr_keyword_import')
+        for name in ('extract_text_lines', 'make_image_preview_data', 'render_text_selectable_image'):
+            setattr(stale, name, lambda: None)
+
+        for revision in (None, 1, ocr_keyword_import.OCR_OVERLAY_REVISION):
+            with self.subTest(revision=revision):
+                stale.OCR_OVERLAY_REVISION = revision
+                with patch.dict(sys.modules, {'ocr_keyword_import': stale}), \
+                        patch.object(importlib, 'reload', return_value=ocr_keyword_import) as reload:
+                    exec(source[start:end], {'importlib': importlib})
+
+                if revision == ocr_keyword_import.OCR_OVERLAY_REVISION:
+                    reload.assert_not_called()
+                else:
+                    reload.assert_called_once_with(stale)
 
 
 class FakePage:

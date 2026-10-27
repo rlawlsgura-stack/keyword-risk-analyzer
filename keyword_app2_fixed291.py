@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (FIXED291 - aligned OCR upload panels)
+Keyword Risk Analyzer (FIXED291.1 - refreshed OCR selection overlay)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -78,7 +78,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = Path(__file__).stem.rsplit('_', 1)[-1].upper()
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.1"
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
@@ -1399,7 +1399,7 @@ def merge_or_overwrite(base: pd.DataFrame, incoming: pd.DataFrame, mode: str) ->
 # -----------------------------
 # UI
 # -----------------------------
-st.set_page_config(page_title="Keyword Risk Analyzer", layout="wide")
+st.set_page_config(page_title=f"Keyword Risk Analyzer · {APP_VERSION}", layout="wide")
 
 # --- Compact button & row spacing ---
 st.markdown("""
@@ -2616,9 +2616,10 @@ def _get_auxiliary_analysis_function(name):
 import ocr_keyword_import as _ocr_keyword_import
 
 _OCR_IMPORTS = ("extract_text_lines", "make_image_preview_data", "render_text_selectable_image")
-if any(not callable(getattr(_ocr_keyword_import, name, None)) for name in _OCR_IMPORTS):
+if (getattr(_ocr_keyword_import, "OCR_OVERLAY_REVISION", None) != 2
+        or any(not callable(getattr(_ocr_keyword_import, name, None)) for name in _OCR_IMPORTS)):
     # Streamlit Cloud can rerun the new entrypoint while retaining an older
-    # helper module in sys.modules. Reload only for a stale helper API.
+    # helper module in sys.modules, even when its function names still match.
     importlib.invalidate_caches()
     _ocr_keyword_import = importlib.reload(_ocr_keyword_import)
 _missing_ocr_imports = [

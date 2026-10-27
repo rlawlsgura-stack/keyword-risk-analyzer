@@ -12,6 +12,7 @@ _ocr_engine = None
 _ocr_engine_lock = Lock()
 
 
+OCR_OVERLAY_REVISION = 2
 _TEXT_SELECTABLE_IMAGE = None
 _TEXT_SELECTABLE_IMAGE_ERROR = ""
 _TEXT_SELECTABLE_IMAGE_CSS = """
@@ -101,7 +102,7 @@ def _get_text_selectable_image_component():
         import streamlit as st
 
         _TEXT_SELECTABLE_IMAGE = st.components.v2.component(
-            "kra_ocr_text_selectable_image",
+            f"kra_ocr_text_selectable_image_v{OCR_OVERLAY_REVISION}",
             html="<div class='ocr-image-root'><div class='ocr-image-stage'></div></div>",
             css=_TEXT_SELECTABLE_IMAGE_CSS,
             js=_TEXT_SELECTABLE_IMAGE_JS,
@@ -160,7 +161,7 @@ def render_text_selectable_image(image_data: str, width: int, height: int,
         return False
     try:
         component(
-            key=key,
+            key=f"{key}_v{OCR_OVERLAY_REVISION}",
             data={"image": image_data, "width": image_width,
                   "height": image_height, "lines": safe_lines, "alt": alt},
             width="stretch",

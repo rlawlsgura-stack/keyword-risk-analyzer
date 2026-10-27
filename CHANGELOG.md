@@ -1,3 +1,9 @@
+## FIXED291.1 - OCR overlay refresh on deployment
+
+- Reload older OCR helper revisions even when their public function names still match.
+- Version the OCR component and widget key so existing browser sessions mount the corrected selection overlay.
+- Verify header selection on tall advertisement previews inside Shadow DOM and display FIXED291.1 in the sidebar and browser title.
+
 ## FIXED291 - OCR upload layout alignment
 
 - Fit selectable OCR text to each detected box, including resized previews, and prevent image width from collapsing under CSS size containment.
