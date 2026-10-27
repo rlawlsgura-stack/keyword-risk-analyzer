@@ -78,8 +78,30 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.4"
-from unmatched_collection import ocr_collection_text
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.5"
+try:
+    from unmatched_collection import ocr_collection_text
+except ModuleNotFoundError as exc:
+    if exc.name != 'unmatched_collection':
+        raise
+    # Keep the app usable if a deployment package omits this small helper module.
+    from math import isfinite
+
+    def ocr_collection_text(file_results):
+        texts = []
+        for result in file_results:
+            if result.get('error'):
+                continue
+            for line in result.get('lines', []):
+                try:
+                    score = float(line.get('confidence', 0))
+                except (TypeError, ValueError):
+                    continue
+                if isfinite(score) and score >= 0.60:
+                    text = str(line.get('text', '')).strip()
+                    if text:
+                        texts.append(text)
+        return '\n'.join(texts)
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
