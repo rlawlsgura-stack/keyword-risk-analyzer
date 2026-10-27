@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (FIXED291.1 - refreshed OCR selection overlay)
+Keyword Risk Analyzer (FIXED291.2 - immediate OCR text selection)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -78,7 +78,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.1"
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.2"
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
@@ -2991,6 +2991,9 @@ def render_image_ocr_tab():
                     for row in unique_rows.values()
                 ]
                 st.session_state.ocr_keyword_editor_version = st.session_state.get("ocr_keyword_editor_version", 0) + 1
+                # The preview above rendered before these results existed.
+                # Refresh it immediately; reuse the saved OCR results.
+                st.rerun()
 
     for result in st.session_state.get("ocr_keyword_file_results", []):
         if result["error"]:

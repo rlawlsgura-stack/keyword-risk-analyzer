@@ -1,3 +1,8 @@
+## FIXED291.2 - Immediate OCR text selection
+
+- Refresh the image preview immediately after OCR results are saved so text can be selected without leaving the OCR tab.
+- Reuse the stored OCR results during the refresh; do not run the model twice.
+
 ## FIXED291.1 - OCR overlay refresh on deployment
 
 - Reload older OCR helper revisions even when their public function names still match.
