@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (FIXED291.2 - immediate OCR text selection)
+Keyword Risk Analyzer (FIXED291.3 - collect unmatched terms from OCR preview)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -78,7 +78,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.2"
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.3"
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
@@ -3221,7 +3221,7 @@ with tabs['analysis']:
                     approved_partials=approved_partials,
                 )
                 analysis_id = str(uuid4())
-                if collect_unmatched_pool and analyze_clicked:
+                if collect_unmatched_pool:
                     try:
                         coverage_matches = matches
                         if st.session_state.get('pre_cats') or st.session_state.get('pre_risks'):

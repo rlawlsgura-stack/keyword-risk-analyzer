@@ -1,3 +1,8 @@
+## FIXED291.3 - Collect unmatched terms from OCR preview
+
+- Collect unmatched terms during the automatic analysis started by the OCR highlight-preview button, without another click on the text-analysis button.
+- Respect the candidate-collection checkbox and avoid collecting again on ordinary rerenders.
+
 ## FIXED291.2 - Immediate OCR text selection
 
 - Refresh the image preview immediately after OCR results are saved so text can be selected without leaving the OCR tab.
