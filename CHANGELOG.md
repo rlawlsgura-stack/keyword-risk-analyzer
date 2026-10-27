@@ -1,5 +1,6 @@
 ## FIXED291 - OCR upload layout alignment
 
+- Fit selectable OCR text to each detected box, including resized previews, and prevent image width from collapsing under CSS size containment.
 - Match the OCR upload dropzone and empty-state panel widths and heights for admin and user accounts.
 - Keep the uploader button at its standard size and use a compact responsive 62px panel layout.
 - Point local and Community Cloud entrypoints to FIXED291.

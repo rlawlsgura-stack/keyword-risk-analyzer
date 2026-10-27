@@ -16,17 +16,18 @@ _TEXT_SELECTABLE_IMAGE = None
 _TEXT_SELECTABLE_IMAGE_ERROR = ""
 _TEXT_SELECTABLE_IMAGE_CSS = """
 .ocr-image-root { width: 100%; min-width: 0; }
-.ocr-image-stage { position: relative; width: fit-content; max-width: 100%; line-height: 0; container-type: inline-size; }
-.ocr-image-stage img { display: block; width: auto; max-width: 100%; height: auto; }
+.ocr-image-stage { position: relative; width: 100%; max-width: 100%; line-height: 0; container-type: inline-size; }
+.ocr-image-stage img { display: block; width: 100%; height: auto; }
 .ocr-text-layer { position: absolute; inset: 0; overflow: hidden; }
 .ocr-text-line {
-  position: absolute; display: block; width: max-content; max-width: 100%;
-  overflow: visible; white-space: pre;
+  position: absolute; display: flex; align-items: center;
+  overflow: hidden; white-space: pre;
   color: transparent; cursor: text; user-select: text; -webkit-user-select: text;
   line-height: 1; font-family: Arial, sans-serif;
 }
+.ocr-text-content { display: block; flex: none; width: max-content; transform-origin: left center; }
 .ocr-text-line:hover { background: rgba(55, 115, 255, 0.16); outline: 1px solid rgba(55, 115, 255, 0.38); }
-.ocr-text-line::selection { color: #111; background: rgba(80, 145, 255, 0.72); }
+.ocr-text-content::selection { color: #111; background: rgba(80, 145, 255, 0.72); }
 """
 _TEXT_SELECTABLE_IMAGE_JS = """
 export default function (component) {
@@ -34,8 +35,13 @@ export default function (component) {
   const stage = parentElement.querySelector('.ocr-image-stage');
   if (!stage || !data) return;
 
+  stage._ocrResizeObserver?.disconnect();
   stage.replaceChildren();
+  const imageWidth = Math.max(1, Number(data.width) || 1);
+  const imageHeight = Math.max(1, Number(data.height) || 1);
+  stage.style.width = `${imageWidth}px`;
   const image = document.createElement('img');
+  image.onload = () => { stage.style.width = `${image.naturalWidth}px`; };
   image.src = data.image;
   image.alt = data.alt || 'OCR 분석 이미지';
   image.draggable = false;
@@ -46,8 +52,6 @@ export default function (component) {
   for (const line of data.lines || []) {
     const box = line.bbox;
     if (!box || box.length !== 4) continue;
-    const imageWidth = Math.max(1, Number(data.width) || 1);
-    const imageHeight = Math.max(1, Number(data.height) || 1);
     const left = Math.max(0, Math.min(imageWidth, Number(box[0])));
     const top = Math.max(0, Math.min(imageHeight, Number(box[1])));
     const right = Math.max(0, Math.min(imageWidth, Number(box[2])));
@@ -55,15 +59,35 @@ export default function (component) {
     if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) continue;
     const span = document.createElement('span');
     span.className = 'ocr-text-line';
-    span.textContent = line.text || '';
+    const content = document.createElement('span');
+    content.className = 'ocr-text-content';
+    content.textContent = line.text || '';
+    span.appendChild(content);
     span.title = line.text || '';
     span.style.left = `${100 * left / imageWidth}%`;
     span.style.top = `${100 * top / imageHeight}%`;
-    const fontScale = 100 * Math.max(8, (bottom - top) * 0.78) / imageWidth;
-    span.style.fontSize = `max(7px, ${fontScale}cqw)`;
+    span.style.width = `${100 * (right - left) / imageWidth}%`;
+    span.style.height = `${100 * (bottom - top) / imageHeight}%`;
+    const fontScale = 100 * (bottom - top) * 0.78 / imageWidth;
+    span.style.fontSize = `${fontScale}cqw`;
     layer.appendChild(span);
   }
   stage.appendChild(layer);
+  const fitText = () => {
+    for (const line of layer.children) {
+      const content = line.firstElementChild;
+      content.style.transform = '';
+      const textWidth = content.getBoundingClientRect().width;
+      if (textWidth > 0) {
+        content.style.transform = `scaleX(${line.getBoundingClientRect().width / textWidth})`;
+      }
+    }
+  };
+  const observer = new ResizeObserver(fitText);
+  stage._ocrResizeObserver = observer;
+  observer.observe(stage);
+  fitText();
+  return () => { observer.disconnect(); image.onload = null; };
 }
 """
 
