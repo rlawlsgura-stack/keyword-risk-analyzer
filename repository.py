@@ -214,11 +214,24 @@ class SupabaseRepository:
                         p_actor=actor, p_revision=revision, p_result=result)
 
     def collect_unmatched_terms(self, analysis_id, candidates):
-        return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))), p_terms=[
-            {'term_norm': row['surface_key'], 'display_term': row['surface'],
-             'occurrences': int(row['occurrences'])}
-            for row in candidates
-        ])
+        terms = []
+        for row in candidates or ():
+            if not isinstance(row, dict):
+                continue
+            term_norm = str(row.get('surface_key') or '').strip()
+            display_term = str(row.get('surface') or '').strip()
+            if not term_norm or not display_term:
+                continue
+            try:
+                occurrences = int(row.get('occurrences') or 1)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if occurrences < 1:
+                continue
+            terms.append({'term_norm': term_norm, 'display_term': display_term,
+                          'occurrences': occurrences})
+        return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))),
+                        p_terms=terms)
 
     def load_unmatched_terms(self, offset=0, limit=100, search=''):
         return self.rpc('unmatched_term_page', p_offset=offset, p_limit=limit, p_search=search)

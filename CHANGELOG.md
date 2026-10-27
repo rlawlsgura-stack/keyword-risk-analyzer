@@ -1,3 +1,7 @@
+## FIXED291.6 - Handle missing unmatched-expression counts
+
+- Treat a missing occurrence count as one expression and skip malformed candidate rows instead of aborting the shared aggregation.
+
 ## FIXED291.4 - Persistent shared unmatched-expression statistics
 
 - Persist expressions, occurrence/analysis counts and collection times in Supabase for all approved accounts, without account or source-document storage.

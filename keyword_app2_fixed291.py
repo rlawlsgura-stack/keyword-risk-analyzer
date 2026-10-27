@@ -78,7 +78,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.5"
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.6"
 try:
     from unmatched_collection import ocr_collection_text
 except ModuleNotFoundError as exc:
