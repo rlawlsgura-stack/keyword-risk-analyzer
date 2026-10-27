@@ -1,10 +1,37 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED291.3** (`keyword_app2_fixed291.py`).
+Current local development version: **FIXED291.4** (`keyword_app2_fixed291.py`).
 `run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) now targets FIXED291.3. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) now targets FIXED291.4. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+
+### Shared unmatched-expression collection
+
+In Supabase mode, every explicit text-analysis run and every completed OCR run
+collects unmatched expressions in the shared database. OCR lines below 60%
+confidence are excluded. Repeated OCR lines retain their original occurrence
+counts; opening the OCR highlight preview does not collect them a second time.
+Each new analysis receives an anonymous ID. Save retries use that same ID, so
+refreshes, retries and retries after deletion cannot increment the counts again.
+
+Only expressions, counts, timestamps and anonymous retry IDs are stored in the
+unmatched tables. Account identities, source documents and images are not stored
+there. Approved accounts share the same statistics after logout or restart.
+The candidate tab provides search, pages of 100 entries and a full CSV export.
+Review-input reset preserves the accumulated data. Administrators can permanently
+delete selected expressions and their observations after confirmation; newly
+performed analyses can collect those expressions again.
+
+Database upgrades: apply `supabase/persistent_unmatched_setup.sql` after the
+existing `supabase/unmatched_term_pool_setup.sql`. Fresh installations use
+`supabase/schema.sql`. All collection tables and RPCs remain server-only with
+RLS enabled; deletion additionally validates the administrator's current token.
+Run `tests/unmatched_persistence.sql` to check the database behavior; its test
+data is rolled back. Failed saves remain pending in the current session with a
+retry button, and logout is blocked until those saves finish. Browser closure
+before an unsuccessful save is retried can still lose unsaved candidates.
+CSV mode is local development only and retains its session-local pool.
 
 ## 설계 문서
 

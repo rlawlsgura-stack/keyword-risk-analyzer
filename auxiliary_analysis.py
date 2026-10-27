@@ -73,7 +73,7 @@ def extract_unmatched_term_surfaces(text, matches, kiwi=None, limit=1000):
 
     return [
         {"surface_key": term, "surface": surfaces[term], "occurrences": count}
-        for term, count in counts.most_common(max(1, min(int(limit), 1000)))
+        for term, count in counts.most_common(None if limit is None else max(1, min(int(limit), 1000)))
     ]
 
 

@@ -29,6 +29,8 @@ from unittest.mock import patch
 import pandas as pd
 import streamlit as st
 from matching_engine import DB_COLS
+from unmatched_collection import ocr_collection_text
+from uuid import uuid4
 
 DEFAULT_CATEGORIES = RISK_OPTIONS = DEFAULT_DETAIL_CRITERIA = []
 DEFAULT_EVIDENCE_TYPES = DEFAULT_ALT_KEYWORDS = []
@@ -42,6 +44,9 @@ st.session_state.setdefault('ocr_keyword_uploaded_files', [
 
 def _load_korean_ocr():
     return object()
+
+def _collect_unmatched_text(*args, **kwargs):
+    return True
 
 def extract_text_lines(image_bytes, engine):
     st.session_state.ocr_call_count += 1

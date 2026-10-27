@@ -1,3 +1,11 @@
+## FIXED291.4 - Persistent shared unmatched-expression statistics
+
+- Persist expressions, occurrence/analysis counts and collection times in Supabase for all approved accounts, without account or source-document storage.
+- Collect text analyses and original OCR lines at or above 60% confidence automatically; preserve OCR repetitions and avoid collecting again on preview.
+- Keep anonymous completed-event IDs for idempotent retries, including after permanent deletion; serialize collection and deletion transactions.
+- Add paginated shared lookup, search, full CSV export, pending-save retry and administrator-only confirmed permanent deletion.
+- Preserve accumulated statistics when review inputs are reset. CSV mode remains session-local development only.
+
 ## FIXED291.3 - Collect unmatched terms from OCR preview
 
 - Collect unmatched terms during the automatic analysis started by the OCR highlight-preview button, without another click on the text-analysis button.

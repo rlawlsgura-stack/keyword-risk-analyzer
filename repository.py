@@ -213,6 +213,25 @@ class SupabaseRepository:
         return self.rpc('record_analysis', p_id=analysis_id, p_fingerprint=fingerprint,
                         p_actor=actor, p_revision=revision, p_result=result)
 
+    def collect_unmatched_terms(self, analysis_id, candidates):
+        return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))), p_terms=[
+            {'term_norm': row['surface_key'], 'display_term': row['surface'],
+             'occurrences': int(row['occurrences'])}
+            for row in candidates
+        ])
+
+    def load_unmatched_terms(self, offset=0, limit=100, search=''):
+        return self.rpc('unmatched_term_page', p_offset=offset, p_limit=limit, p_search=search)
+
+    def export_unmatched_terms(self):
+        return self.rpc('unmatched_term_export')
+
+    def delete_unmatched_terms(self, terms, access_token):
+        actor = self.user(access_token)
+        if (actor.get('app_metadata') or {}).get('role') != 'admin':
+            raise PermissionError('미매칭 후보 영구 삭제는 관리자만 가능합니다.')
+        return self.rpc('delete_unmatched_terms', p_terms=list(terms))
+
     def previous_analysis(self, analysis_id, actor, fingerprint=None):
         return self.rpc('get_analysis', p_id=analysis_id, p_actor=actor,
                         p_fingerprint=fingerprint)

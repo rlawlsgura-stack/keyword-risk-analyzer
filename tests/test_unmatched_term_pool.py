@@ -17,6 +17,12 @@ class FakeKiwi:
 
 
 class UnmatchedTermPoolTests(unittest.TestCase):
+    def test_persistent_collection_can_keep_more_than_1000_surfaces(self):
+        text = ' '.join(f'candidate{i}' for i in range(1200))
+        rows = extract_unmatched_term_surfaces(text, [], kiwi=FakeKiwi(), limit=None)
+        self.assertEqual(len(rows), 1200)
+        self.assertTrue(all(row['occurrences'] == 1 for row in rows))
+
     def test_extracts_unmatched_surface_forms_without_normalizing_or_saving(self):
         text = "필러 antiaging AntiAging 123"
         matches = [Match2("필러", 0, 2)]

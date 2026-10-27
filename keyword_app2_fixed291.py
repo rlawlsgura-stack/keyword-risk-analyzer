@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (FIXED291.3 - collect unmatched terms from OCR preview)
+Keyword Risk Analyzer (FIXED291.4 - persistent shared unmatched candidates)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -78,7 +78,8 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.3"
+APP_VERSION = f"{Path(__file__).stem.rsplit('_', 1)[-1].upper()}.4"
+from unmatched_collection import ocr_collection_text
 from app_config import configure, cloud_enabled
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
@@ -1627,6 +1628,9 @@ def render_cloud_login():
             st.stop()
 
     if st.sidebar.button('로그아웃', key='cloud_logout'):
+        if st.session_state.get('unmatched_pending_collections'):
+            st.error('아직 저장하지 못한 미매칭 후보가 있습니다. 수집 저장 재시도 후 로그아웃하세요.')
+            st.stop()
         session = st.session_state.get('auth_session')
         try:
             if session:
@@ -2710,6 +2714,7 @@ def _clear_ocr_results_on_upload(candidates_key, editor_version_key, file_result
     st.session_state[file_results_key] = []
     st.session_state[preview_page_key] = 0
     st.session_state[editor_version_key] = int(st.session_state.get(editor_version_key, 0)) + 1
+    st.session_state.pop('ocr_keyword_collection_id', None)
 
 
 def _persist_ocr_candidate_edits(editor_key, candidates_key):
@@ -2734,6 +2739,55 @@ def _reset_ocr_analysis(candidates_key, editor_version_key, image_version_key, f
     st.session_state[editor_version_key] = int(st.session_state.get(editor_version_key, 0)) + 1
     st.session_state[image_version_key] = int(st.session_state.get(image_version_key, 0)) + 1
     st.session_state[stored_uploads_key] = []
+    st.session_state.pop('ocr_keyword_collection_id', None)
+
+
+def _clear_unmatched_review():
+    st.session_state['unmatched_candidate_recommendations'] = []
+    st.session_state['unmatched_recommendation_version'] = int(
+        st.session_state.get('unmatched_recommendation_version', 0)) + 1
+    st.session_state.pop('unmatched_export_csv', None)
+
+
+def _flush_unmatched_collections():
+    pending = st.session_state.setdefault('unmatched_pending_collections', {})
+    for analysis_id, candidates in list(pending.items()):
+        try:
+            SupabaseRepository().collect_unmatched_terms(analysis_id, candidates)
+        except Exception:
+            logging.exception('Could not persist unmatched candidates')
+            st.warning('미매칭 후보를 DB에 저장하지 못했습니다. 수집 저장 재시도로 다시 저장하세요.')
+            return False
+        pending.pop(analysis_id)
+        _clear_unmatched_review()
+    return True
+
+
+def _collect_unmatched_text(text, coverage_matches=None, analysis_id=None):
+    if coverage_matches is None:
+        config = _matching_config()
+        if cloud_enabled():
+            config = load_matching_config(SupabaseRepository(), config)
+        coverage_matches = [] if st.session_state.kw_df.empty else match_text(
+            text, st.session_state.kw_df, config=config,
+            approved_partials=load_approved_partials() if config.mode == 'similar' else None)
+    extract_surfaces = _get_auxiliary_analysis_function('extract_unmatched_term_surfaces')
+    candidates = extract_surfaces(text, coverage_matches, limit=None)
+    if cloud_enabled():
+        # Only expressions/counts and an anonymous retry ID survive this call.
+        pending = st.session_state.setdefault('unmatched_pending_collections', {})
+        pending[str(analysis_id or uuid4())] = candidates
+        return _flush_unmatched_collections()
+    # CSV mode is local development; shared persistence requires the server DB.
+    pool = st.session_state.setdefault('unmatched_candidate_pool', {})
+    for row in candidates:
+        previous = pool.get(row['surface_key'])
+        if previous:
+            previous['occurrences'] += row['occurrences']
+        else:
+            pool[row['surface_key']] = dict(row)
+    _clear_unmatched_review()
+    return True
 
 
 def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label):
@@ -2758,6 +2812,8 @@ def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_lab
     st.session_state.pop("ocr_analysis_error", None)
     st.session_state["analysis_input_text"] = text
     st.session_state["analysis_auto_run_pending"] = True
+    st.session_state['analysis_skip_unmatched_collection'] = bool(
+        st.session_state.get('ocr_keyword_collection_id'))
     st.session_state["main_app_tabs"] = analysis_tab_label
 
 
@@ -2991,6 +3047,13 @@ def render_image_ocr_tab():
                     for row in unique_rows.values()
                 ]
                 st.session_state.ocr_keyword_editor_version = st.session_state.get("ocr_keyword_editor_version", 0) + 1
+                collection_id = str(uuid4())
+                try:
+                    _collect_unmatched_text(ocr_collection_text(file_results), analysis_id=collection_id)
+                    st.session_state['ocr_keyword_collection_id'] = collection_id
+                except Exception:
+                    logging.exception('Could not extract unmatched OCR terms')
+                    st.session_state['ocr_unmatched_extraction_failed'] = True
                 # The preview above rendered before these results existed.
                 # Refresh it immediately; reuse the saved OCR results.
                 st.rerun()
@@ -3121,6 +3184,7 @@ def render_image_ocr_tab():
                 st.session_state.ocr_keyword_editor_version = version + 1
                 st.session_state[image_version_key] = int(st.session_state.get(image_version_key, 0)) + 1
                 st.session_state[stored_uploads_key] = []
+                st.session_state.pop('ocr_keyword_collection_id', None)
                 st.success(f"관리자 승인 키워드 {len(rows)}건을 등록했습니다.")
                 st.rerun()
 
@@ -3145,6 +3209,14 @@ tabs = dict(zip(
     (key for key, _ in tab_specs),
     st.tabs([label for _, label in tab_specs], on_change="rerun", key="main_app_tabs"),
 ))
+
+if st.session_state.get('unmatched_pending_collections'):
+    st.warning('미매칭 후보 중 아직 DB에 저장하지 못한 분석이 있습니다. 저장 전에는 로그아웃하지 마세요.')
+    if st.button('수집 저장 재시도', key='retry_unmatched_collection'):
+        _flush_unmatched_collections()
+        st.rerun()
+if st.session_state.pop('ocr_unmatched_extraction_failed', False):
+    st.warning('OCR은 완료했지만 미매칭 후보 추출에 실패했습니다. OCR을 다시 실행해 수집하세요.')
 
 with tabs['analysis']:
     # ① 텍스트 입력
@@ -3188,14 +3260,10 @@ with tabs['analysis']:
             with rules_summary.container():
                 render_matching_rules_summary(_matching_config())
 
-    collect_unmatched_pool = st.checkbox(
-        "분석 후 미매칭 키워드 후보를 임시 목록에 추가",
-        value=True,
-        key="collect_unmatched_pool",
-        help="후보와 빈도는 현재 로그인 세션에만 보관합니다. 분석 원문이나 후보 단어는 DB에 저장하지 않습니다.",
-    )
+    st.caption('미매칭 표현은 분석할 때마다 자동 수집됩니다. 원문·이미지·계정 정보는 후보 통계에 저장하지 않습니다.')
     analyze_clicked = st.button("텍스트 분석하기", type="primary", key="btn_analyze")
     auto_analyze = bool(st.session_state.pop("analysis_auto_run_pending", False))
+    skip_auto_collection = bool(st.session_state.pop('analysis_skip_unmatched_collection', False))
     if analyze_clicked or auto_analyze:
         try:
             # 항상 최신 키워드 DB 상태를 반영하기 위해 저장 경로에서 다시 로드
@@ -3204,6 +3272,8 @@ with tabs['analysis']:
             except Exception as _e:
                 st.warning(f"키워드 DB를 다시 불러오는 중 오류가 발생했습니다: {_e}")
             if st.session_state.kw_df.empty:
+                if analyze_clicked or not skip_auto_collection:
+                    _collect_unmatched_text(text, [])
                 st.info("키워드가 없습니다. 먼저 추가하세요.")
             else:
                 config = _matching_config()
@@ -3221,7 +3291,7 @@ with tabs['analysis']:
                     approved_partials=approved_partials,
                 )
                 analysis_id = str(uuid4())
-                if collect_unmatched_pool:
+                if analyze_clicked or not skip_auto_collection:
                     try:
                         coverage_matches = matches
                         if st.session_state.get('pre_cats') or st.session_state.get('pre_risks'):
@@ -3229,24 +3299,8 @@ with tabs['analysis']:
                                 text, st.session_state.kw_df, config=config,
                                 approved_partials=approved_partials,
                             )
-                        extract_surfaces = _get_auxiliary_analysis_function(
-                            "extract_unmatched_term_surfaces"
-                        )
-                        candidates = extract_surfaces(text, coverage_matches)
-                        pool = st.session_state.setdefault("unmatched_candidate_pool", {})
-                        for candidate in candidates:
-                            key = candidate["surface_key"]
-                            existing = pool.get(key)
-                            if existing:
-                                existing["occurrences"] += candidate["occurrences"]
-                            else:
-                                pool[key] = dict(candidate)
-                        if candidates:
-                            st.session_state["unmatched_candidate_recommendations"] = []
-                            st.session_state["unmatched_recommendation_version"] = int(
-                                st.session_state.get("unmatched_recommendation_version", 0)
-                            ) + 1
-                            st.caption(f"미매칭 후보 {len(candidates)}종을 임시 목록에 추가했습니다.")
+                        if _collect_unmatched_text(text, coverage_matches, analysis_id):
+                            st.caption('미매칭 후보 수집을 완료했습니다.')
                     except Exception as pool_error:
                         st.warning(f"미매칭 후보 집계에 실패했지만 텍스트 분석은 계속합니다: {pool_error}")
                 st.session_state.suffix_suggestions = {}
@@ -4007,18 +4061,89 @@ if cloud_enabled():
         if tabs['requests'].open:
             render_keyword_requests_tab()
 
-with tabs['candidate_pool']:
+def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
-    st.caption("후보는 현재 로그인 세션에 임시 보관됩니다. 분석 원문은 저장하지 않으며, 관리자가 승인해 등록하기 전까지 키워드 DB는 변경되지 않습니다.")
-    pool = st.session_state.setdefault("unmatched_candidate_pool", {})
-    surface_rows = list(pool.values())
+    if cloud_enabled():
+        st.caption('모든 승인 계정의 공용 누적 통계입니다. 로그아웃 후에도 유지됩니다. OCR은 신뢰도 60% 이상만 수집합니다.')
+        search = st.text_input('미매칭 표현 검색', key='unmatched_search', max_chars=100).strip()
+        if search != st.session_state.get('unmatched_last_search', ''):
+            st.session_state['unmatched_page'] = 0
+            st.session_state['unmatched_last_search'] = search
+        page = int(st.session_state.get('unmatched_page', 0))
+        try:
+            snapshot = SupabaseRepository().load_unmatched_terms(page * 100, 100, search)
+        except Exception:
+            st.error('공용 미매칭 후보를 불러오지 못했습니다. 잠시 후 새로고침하세요.')
+            return
+        rows, total = snapshot['rows'], int(snapshot['total'])
+        if page and not rows:
+            st.session_state['unmatched_page'] = 0
+            st.rerun()
+        surface_rows = [{'surface_key': row['term_norm'], 'surface': row['display_term'],
+                         'occurrences': row['total_occurrences']} for row in rows]
+        st.caption(f'검색 결과 {total:,}종 · {page + 1}/{max(1, (total + 99) // 100)} 페이지')
+        previous, following, refresh = st.columns(3)
+        if previous.button('이전', key='unmatched_previous', disabled=page == 0):
+            st.session_state['unmatched_page'] = page - 1
+            st.rerun()
+        if following.button('다음', key='unmatched_next', disabled=(page + 1) * 100 >= total):
+            st.session_state['unmatched_page'] = page + 1
+            st.rerun()
+        refresh.button('목록 새로고침', key='unmatched_refresh')
+        if rows:
+            display = pd.DataFrame(rows).rename(columns={
+                'display_term': '미매칭 표현', 'total_occurrences': '누적 출현 횟수',
+                'analysis_count': '분석 횟수', 'first_seen': '최초 수집 시각', 'last_seen': '최근 수집 시각',
+            })
+            for column in ('최초 수집 시각', '최근 수집 시각'):
+                display[column] = pd.to_datetime(display[column], utc=True).dt.tz_convert('Asia/Seoul')
+            st.dataframe(display[['미매칭 표현', '누적 출현 횟수', '분석 횟수', '최초 수집 시각', '최근 수집 시각']],
+                         hide_index=True, width='stretch', alt='계정 구분 없는 미매칭 표현 누적 통계')
+        if st.button('전체 누적 CSV 만들기', key='make_unmatched_export'):
+            try:
+                exported = SupabaseRepository().export_unmatched_terms()
+                export_frame = pd.DataFrame(exported).rename(columns={
+                    'display_term': '미매칭 표현', 'total_occurrences': '누적 출현 횟수',
+                    'analysis_count': '분석 횟수', 'first_seen': '최초 수집 시각', 'last_seen': '최근 수집 시각',
+                }).drop(columns=['term_norm'], errors='ignore')
+                for column in ('최초 수집 시각', '최근 수집 시각'):
+                    if column in export_frame:
+                        export_frame[column] = pd.to_datetime(export_frame[column], utc=True).dt.tz_convert('Asia/Seoul')
+                st.session_state['unmatched_export_csv'] = export_frame.to_csv(index=False).encode('utf-8-sig')
+            except Exception:
+                st.error('전체 CSV를 만들지 못했습니다. 다시 시도하세요.')
+        if st.session_state.get('unmatched_export_csv'):
+            st.download_button('전체 누적 CSV 다운로드', st.session_state['unmatched_export_csv'],
+                               'unmatched_candidates.csv', 'text/csv', key='download_unmatched_surfaces')
+        if is_admin() and rows:
+            with st.expander('관리자 영구 삭제'):
+                labels = {row['term_norm']: row['display_term'] for row in rows}
+                selected = st.multiselect('삭제할 표현 (현재 페이지)', list(labels),
+                                         format_func=labels.get, key=f'unmatched_delete_terms_{page}')
+                confirm = st.checkbox('선택한 표현의 누적 통계와 관련 기록을 영구 삭제합니다.',
+                                      key='confirm_unmatched_delete')
+                if st.button('선택 표현 영구 삭제', key='delete_unmatched_terms', disabled=not selected or not confirm):
+                    try:
+                        SupabaseRepository().delete_unmatched_terms(selected,
+                            st.session_state['auth_session']['access_token'])
+                        _clear_unmatched_review()
+                        st.session_state.pop(f'unmatched_delete_terms_{page}', None)
+                        st.session_state.pop('confirm_unmatched_delete', None)
+                        st.rerun()
+                    except (StorageError, PermissionError):
+                        st.error('영구 삭제에 실패했습니다. 관리자 권한과 연결 상태를 확인하세요.')
+    else:
+        st.caption('로컬 CSV 개발 모드: 공용 영구 누적은 Supabase 서버 모드에서 사용하세요.')
+        surface_rows = list(st.session_state.get('unmatched_candidate_pool', {}).values())
+        if surface_rows:
+            st.dataframe(pd.DataFrame(surface_rows).rename(columns={
+                'surface': '미매칭 표현', 'occurrences': '출현 횟수',
+            })[['미매칭 표현', '출현 횟수']], hide_index=True, width='stretch')
+            st.download_button('로컬 후보 CSV 다운로드',
+                pd.DataFrame(surface_rows).to_csv(index=False).encode('utf-8-sig'),
+                'unmatched_candidates.csv', 'text/csv', key='download_unmatched_surfaces')
     if surface_rows:
-        st.dataframe(pd.DataFrame(surface_rows).rename(columns={
-            "surface": "미매칭 표현", "occurrences": "출현 횟수",
-        })[["미매칭 표현", "출현 횟수"]], width="stretch", hide_index=True)
-        pool_csv = pd.DataFrame(surface_rows).to_csv(index=False).encode("utf-8-sig")
-        st.download_button("임시 후보 CSV 다운로드", pool_csv, "unmatched_candidate_surfaces.csv", "text/csv", key="download_unmatched_surfaces")
-        analyze_pool = st.button("미매칭 후보군 분석", type="primary", key="analyze_unmatched_candidate_pool")
+        analyze_pool = st.button("현재 페이지 후보군 분석", type="primary", key="analyze_unmatched_candidate_pool")
         if analyze_pool:
             try:
                 normalize_candidates = _get_auxiliary_analysis_function(
@@ -4032,15 +4157,11 @@ with tabs['candidate_pool']:
                 st.success(f"정규화 추천 {len(recommendations)}건을 만들었습니다. 검토 후 승인하세요.")
             except Exception as pool_error:
                 st.error(f"미매칭 후보군 분석에 실패했습니다: {pool_error}")
-        if st.button("임시 후보 목록 초기화", key="clear_unmatched_candidate_pool"):
-            st.session_state["unmatched_candidate_pool"] = {}
-            st.session_state["unmatched_candidate_recommendations"] = []
-            st.session_state["unmatched_recommendation_version"] = int(
-                st.session_state.get("unmatched_recommendation_version", 0)
-            ) + 1
+        if st.button("검토 입력 초기화", key="clear_unmatched_candidate_pool"):
+            _clear_unmatched_review()
             st.rerun()
     else:
-        st.info("아직 후보가 없습니다. 스크립트 분석 탭에서 분석을 실행하면 여기에 임시 후보가 쌓입니다.")
+        st.info("아직 후보가 없습니다. 텍스트 분석 또는 한국어 OCR을 실행하면 자동으로 수집됩니다.")
 
     recommendations = st.session_state.get("unmatched_candidate_recommendations", [])
     if recommendations:
@@ -4112,6 +4233,10 @@ with tabs['candidate_pool']:
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
         else:
             st.info("정규화 결과는 검토할 수 있지만, DB 등록은 관리자 승인 후 진행됩니다.")
+
+with tabs['candidate_pool']:
+    if tabs['candidate_pool'].open:
+        render_unmatched_candidate_pool()
 
 if is_admin():
     with tabs['keyword_admin']:

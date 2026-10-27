@@ -25,6 +25,7 @@ class OCRUnmatchedCollectionTests(unittest.TestCase):
         repository.load_setting.side_effect = lambda name, default: default
         repository.load_hits.return_value = pd.DataFrame(columns=['ts', 'kwd_no'])
         repository.load_keyword_requests.return_value = []
+        repository.load_unmatched_terms.return_value = {'rows': [], 'total': 0}
         source = Path(__file__).resolve().parents[1] / 'keyword_app2_fixed291.py'
 
         for text, collect in [('필러 보습 관리', True), ('보습 관리', True),
@@ -38,6 +39,7 @@ class OCRUnmatchedCollectionTests(unittest.TestCase):
                     patch('repository.SupabaseRepository', return_value=repository), \
                     patch('repository.requests.request', side_effect=AssertionError('Unexpected network')):
                 repository.record_analysis.reset_mock()
+                repository.collect_unmatched_terms.reset_mock()
                 app = AppTest.from_file(str(source), default_timeout=30)
                 app.session_state['auth_session'] = {
                     'access_token': 'test-token', 'expires_at': 9999999999,
@@ -59,11 +61,12 @@ class OCRUnmatchedCollectionTests(unittest.TestCase):
                 self.assertFalse(app.exception)
                 self.assertFalse(app.error)
                 self.assertEqual(app.session_state['analysis_input_text'], text)
-                pool = app.session_state['unmatched_candidate_pool']
-                expected = {'보습', '관리'} if collect else set()
-                self.assertEqual(set(pool), expected)
-                self.assertTrue(all(row['occurrences'] == 1 for row in pool.values()))
-                snapshot = {key: dict(row) for key, row in pool.items()}
+                # Collection remains mandatory even with an old unchecked preference.
+                repository.collect_unmatched_terms.assert_called_once()
+                event, candidates = repository.collect_unmatched_terms.call_args.args
+                self.assertTrue(event)
+                self.assertEqual({row['surface_key'] for row in candidates}, {'보습', '관리'})
+                self.assertTrue(all(row['occurrences'] == 1 for row in candidates))
                 if '필러' in text:
                     self.assertTrue(app.session_state['analysis_highlight_html'])
                     repository.record_analysis.assert_called_once()
@@ -71,7 +74,7 @@ class OCRUnmatchedCollectionTests(unittest.TestCase):
                 # Ordinary rerenders must not collect the same analysis twice.
                 app.run()
                 self.assertFalse(app.exception)
-                self.assertEqual(app.session_state['unmatched_candidate_pool'], snapshot)
+                repository.collect_unmatched_terms.assert_called_once()
                 if '필러' in text:
                     repository.record_analysis.assert_called_once()
 
