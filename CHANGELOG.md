@@ -1,3 +1,8 @@
+## FIXED293 - Diagnose Cloud unmatched-candidate lookup failures
+
+- Keep shared statistics global across accounts and logout; current production data contains 38 terms, 205 occurrences and 171 term-analysis observations.
+- Log lookup exceptions server-side and show safe diagnostic details in the page instead of hiding the cause.
+
 ## FIXED292 - Numbered application release
 
 - Create `keyword_app2_fixed292.py` as the next numbered application version.
