@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 from urllib.parse import quote, quote_plus
 
@@ -151,7 +152,9 @@ def _render(payload: dict[str, Any], *, articles_only: bool = False) -> str:
         lines = _flatten(payload)
     if not lines:
         lines = _flatten(payload)
-    return "\n".join(lines)[:12000]
+    rendered = "\n".join(lines)
+    rendered = re.sub(r"(?i)([?&]OC=)[^&#\s\"']+", r"\1[redacted]", rendered)
+    return rendered[:12000]
 
 
 def _article_code(article_no: str) -> str:

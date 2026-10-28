@@ -8,6 +8,7 @@
 
 - Send a `Referer` header with direct Law.go.kr API requests; allow an optional `LEGISLATION_REFERER` override for deployments that register a different domain.
 - Preserve upstream HTTP status and a short redacted response excerpt so rejected requests can be diagnosed without exposing the OC key or request URL.
+- Redact `OC` credentials embedded in Law.go.kr detail links before showing search results.
 
 ## FIXED298 - Rename legal review chat
 
