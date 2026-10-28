@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from typing import Any
+from urllib.parse import quote, quote_plus
 
 import requests
 
@@ -23,19 +24,40 @@ def _api_key() -> str:
     return key
 
 
+def _response_excerpt(body: str, api_key: str) -> str:
+    excerpt = " ".join(body.split())
+    for secret in {api_key, quote(api_key), quote_plus(api_key)}:
+        if secret:
+            excerpt = excerpt.replace(secret, "[redacted]")
+    return excerpt[:400]
+
+
 def _fetch(service: str, target: str, arguments: dict[str, Any]) -> dict[str, Any]:
     endpoint = SEARCH_URL if service == "search" else SERVICE_URL
-    params = {"OC": _api_key(), "target": target, "type": "JSON", **arguments}
+    api_key = _api_key()
+    params = {"OC": api_key, "target": target, "type": "JSON", **arguments}
     referer = os.getenv("LEGISLATION_REFERER", DEFAULT_REFERER).strip() or DEFAULT_REFERER
     try:
         response = requests.get(
             endpoint, params=params, headers={"Referer": referer}, timeout=(5, 30)
         )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError) as exc:
+    except requests.RequestException as exc:
         raise LegislationApiError(
             f"Law.go.kr {target} request failed ({type(exc).__name__})"
+        ) from exc
+    if response.status_code >= 400:
+        excerpt = _response_excerpt(response.text, api_key)
+        detail = f": {excerpt}" if excerpt else ""
+        raise LegislationApiError(
+            f"Law.go.kr {target} request failed (HTTP {response.status_code}){detail}"
+        )
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        excerpt = _response_excerpt(response.text, api_key)
+        detail = f": {excerpt}" if excerpt else ""
+        raise LegislationApiError(
+            f"Law.go.kr {target} returned a non-JSON response{detail}"
         ) from exc
     if not isinstance(payload, dict):
         raise LegislationApiError(f"Law.go.kr {target} returned an unexpected response")
