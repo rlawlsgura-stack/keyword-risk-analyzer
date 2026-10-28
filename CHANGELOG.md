@@ -1,3 +1,9 @@
+## FIXED297 - Evidence-first regulation assistant
+
+- Add an optional chat tab for law/precedent lookup from selected OCR candidates or text, and exact DB keyword lookup from a legal article.
+- Route Streamlit Cloud requests through the authenticated FastAPI service to a private Streamable HTTP MCP endpoint.
+- Keep LLM explanations disabled by default; when enabled, require source IDs and verbatim quotes and route uncertain/conflicting results to administrator review.
+
 ## FIXED296 - OCR button label and upload spacing
 
 - Rename the Korean OCR action to `OCR ?? ??`.

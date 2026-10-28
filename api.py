@@ -1,9 +1,11 @@
 """Run: python -m uvicorn api:app --host 0.0.0.0 --port 8000"""
 import os
 import secrets
+import logging
 from typing import Literal
 from uuid import UUID
 
+import requests
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,12 +14,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from app_config import configure, cloud_enabled
 from repository import ConflictError, StorageError, SupabaseRepository
 from service import analyze
+from regulation_assistant import RegulationSearchError, answer_regulation_question
 
 configure()
 app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
 bearer = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 def get_repository():
@@ -65,6 +69,14 @@ class AnalysisRequest(BaseModel):
     risks: list[str] = Field(default_factory=list, max_length=20)
     record: bool = False
     analysis_id: UUID | None = None
+
+
+class RegulationQuestionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    direction: Literal['keyword_to_law', 'law_to_keywords']
+    query: str = Field(min_length=2, max_length=500)
+    context_text: str = Field(default='', max_length=20000)
+    category: str = Field(default='', max_length=100)
 
 
 @app.exception_handler(StorageError)
@@ -118,3 +130,17 @@ def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
 def top_keywords(days: int = Query(7, ge=1, le=366),
                  limit: int = Query(10, ge=1, le=100), repository=Depends(get_repository)):
     return {'items': repository.report(days, limit)}
+
+
+@app.post('/api/v1/regulation/questions')
+def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_actor),
+                        repository=Depends(get_repository)):
+    try:
+        return answer_regulation_question(body.model_dump(), repository)
+    except RegulationSearchError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except requests.RequestException as exc:
+        raise HTTPException(502, 'Regulation evidence lookup is temporarily unavailable') from exc
+    except Exception as exc:
+        logger.exception('Regulation question failed')
+        raise HTTPException(502, 'Regulation search failed') from exc

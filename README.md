@@ -1,10 +1,11 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED296** (`keyword_app2_fixed296.py`).
+Current local development version: **FIXED297** (`keyword_app2_fixed297.py`).
 `run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
+The optional, evidence-first legal lookup chat and separate Render MCP service setup are described in [regulation MCP deployment](docs/regulation-mcp-deployment.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed296.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed297.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
 
 ### Shared unmatched-expression collection
 
