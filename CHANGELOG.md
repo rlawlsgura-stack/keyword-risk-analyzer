@@ -10,6 +10,10 @@
 - Preserve upstream HTTP status and a short redacted response excerpt so rejected requests can be diagnosed without exposing the OC key or request URL.
 - Redact `OC` credentials embedded in Law.go.kr detail links before showing search results.
 
+## FIXED299 - Reorder report and legal review tabs
+
+- Place `심의 Chat-bot` before `분석리포트` in the main navigation.
+
 ## FIXED298 - Rename legal review chat
 
 - Rename the legal-evidence chat tab and heading to `심의 Chat-bot`.
