@@ -15,7 +15,7 @@ from ocr_keyword_import import extract_text_lines, make_image_preview_data
 
 class OCRModuleReloadTests(unittest.TestCase):
     def test_app_reloads_old_overlay_even_when_functions_exist(self):
-        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed294.py').read_text(
+        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed295.py').read_text(
             encoding='utf-8')
         start = source.index('import ocr_keyword_import as _ocr_keyword_import')
         end = source.index('\nextract_text_lines =', start)

@@ -1,3 +1,8 @@
+## FIXED295 - OCR upload alignment and candidate numbering
+
+- Vertically center the upload button in the empty OCR dropzone while preserving the responsive multi-image layout.
+- Add a `NO.` column to unmatched candidate search results, numbered continuously across pages; local results start at 1.
+
 ## FIXED294 - Responsive OCR upload and button layout
 
 - Let multi-image attachment cards wrap and expand inside the uploader across viewport sizes; scope the add-files button style so it cannot stretch file cards.
