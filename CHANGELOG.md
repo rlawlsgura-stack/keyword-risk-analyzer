@@ -9,6 +9,11 @@
 - Send a `Referer` header with direct Law.go.kr API requests; allow an optional `LEGISLATION_REFERER` override for deployments that register a different domain.
 - Preserve upstream HTTP status and a short redacted response excerpt so rejected requests can be diagnosed without exposing the OC key or request URL.
 
+## FIXED298 - Rename legal review chat
+
+- Rename the legal-evidence chat tab and heading to `심의 Chat-bot`.
+- Keep the user-facing name neutral because the LLM explanation stage is optional and disabled by default.
+
 ## FIXED297 - Evidence-first regulation assistant
 
 - Add an optional chat tab for law/precedent lookup from selected OCR candidates or text, and exact DB keyword lookup from a legal article.
