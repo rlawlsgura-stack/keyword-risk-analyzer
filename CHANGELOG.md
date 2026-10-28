@@ -1,7 +1,7 @@
 ## FIXED293 - Diagnose Cloud unmatched-candidate lookup failures
 
 - Keep shared statistics global across accounts and logout; current production data contains 38 terms, 205 occurrences and 171 term-analysis observations.
-- Log lookup exceptions server-side and show safe diagnostic details in the page instead of hiding the cause.
+- Discard stale repository-module cache entries before running the Cloud app, and log lookup exceptions with safe page diagnostics.
 
 ## FIXED292 - Numbered application release
 

@@ -6,4 +6,17 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# A long-lived Streamlit process can retain repository.py from an older app
+# revision in sys.modules after the entrypoint reloads. Re-import the project
+# module when its cache is stale or came from a different path.
+cached_repository = sys.modules.get("repository")
+if cached_repository is not None:
+    cached_path = getattr(cached_repository, "__file__", None)
+    expected_path = (ROOT / "repository.py").resolve()
+    if (not cached_path or Path(cached_path).resolve() != expected_path
+            or not hasattr(getattr(cached_repository, "SupabaseRepository", None),
+                           "load_unmatched_terms")):
+        sys.modules.pop("repository", None)
+
 runpy.run_path(str(ROOT / "keyword_app2_fixed293.py"), run_name="__main__")
