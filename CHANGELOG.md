@@ -1,3 +1,8 @@
+## FIXED294 - Responsive OCR upload and button layout
+
+- Let multi-image attachment cards wrap and expand inside the uploader across viewport sizes; scope the add-files button style so it cannot stretch file cards.
+- Move the Korean OCR run button above the image preview pager controls.
+
 ## FIXED293 - Diagnose Cloud unmatched-candidate lookup failures
 
 - Keep shared statistics global across accounts and logout; current production data contains 38 terms, 205 occurrences and 171 term-analysis observations.

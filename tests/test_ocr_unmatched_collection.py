@@ -26,7 +26,7 @@ class OCRUnmatchedCollectionTests(unittest.TestCase):
         repository.load_hits.return_value = pd.DataFrame(columns=['ts', 'kwd_no'])
         repository.load_keyword_requests.return_value = []
         repository.load_unmatched_terms.return_value = {'rows': [], 'total': 0}
-        source = Path(__file__).resolve().parents[1] / 'keyword_app2_fixed293.py'
+        source = Path(__file__).resolve().parents[1] / 'keyword_app2_fixed294.py'
 
         for text, collect in [('필러 보습 관리', True), ('보습 관리', True),
                               ('필러 보습 관리', False)]:
