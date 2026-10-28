@@ -38,7 +38,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
     def app(self, role='member', tab='스크립트 분석'):
         self.repository.user.return_value = {
             'id': str(uuid4()), 'email': 'test@example.test', 'app_metadata': {'role': role}}
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed295.py'),
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed296.py'),
                                 default_timeout=30)
         app.session_state['auth_session'] = {'access_token': 'test-token', 'expires_at': 9999999999}
         app.session_state['main_app_tabs'] = tab

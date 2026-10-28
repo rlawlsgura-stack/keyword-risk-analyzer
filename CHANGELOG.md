@@ -1,3 +1,8 @@
+## FIXED296 - OCR button label and upload spacing
+
+- Rename the Korean OCR action to `OCR ?? ??`.
+- Use equal vertical padding inside the OCR upload box.
+
 ## FIXED295 - OCR upload alignment and candidate numbering
 
 - Vertically center the upload button in the empty OCR dropzone while preserving the responsive multi-image layout.
