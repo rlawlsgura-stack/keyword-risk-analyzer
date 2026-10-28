@@ -1,3 +1,7 @@
+## FIXED291.7 - Version metadata
+
+- Bump the displayed local and Community Cloud app version after FIXED291.6.
+
 ## FIXED291.6 - Handle missing unmatched-expression counts
 
 - Treat a missing occurrence count as one expression and skip malformed candidate rows instead of aborting the shared aggregation.
