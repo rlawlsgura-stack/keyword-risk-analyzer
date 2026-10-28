@@ -13,6 +13,9 @@ import requests
 from matching_engine import _BRACKET_NOTES
 
 
+UNMATCHED_SURFACE_LIMIT_REVISION = 1
+
+
 class AuxiliaryUnavailable(Exception):
     pass
 

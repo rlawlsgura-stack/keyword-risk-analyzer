@@ -2,6 +2,7 @@
 
 - Keep shared statistics global across accounts and logout; current production data contains 38 terms, 205 occurrences and 171 term-analysis observations.
 - Discard stale repository-module cache entries before running the Cloud app, and log lookup exceptions with safe page diagnostics.
+- Reload auxiliary-analysis code revisions so older cached helpers accept the uncapped `limit=None` used by shared collection.
 
 ## FIXED292 - Numbered application release
 

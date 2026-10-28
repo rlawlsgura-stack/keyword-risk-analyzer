@@ -2629,9 +2629,10 @@ import auxiliary_analysis as _auxiliary_analysis
 
 
 def _get_auxiliary_analysis_function(name):
-    """Reload a stale helper module retained across Streamlit reruns."""
+    """Reload stale helper code retained across Streamlit reruns."""
     function = getattr(_auxiliary_analysis, name, None)
-    if not callable(function):
+    if (getattr(_auxiliary_analysis, 'UNMATCHED_SURFACE_LIMIT_REVISION', 0) < 1
+            or not callable(function)):
         importlib.invalidate_caches()
         importlib.reload(_auxiliary_analysis)
         function = getattr(_auxiliary_analysis, name, None)
