@@ -1,7 +1,13 @@
+## Backend - Direct Law.go.kr search provider (2026-10-28)
+
+- Move law, administrative-rule, precedent, and article requests into `legislation_source.py`; keep question handling and DB/LLM comparison in `regulation_assistant.py`.
+- Remove the remote MCP service requirement and its FastMCP dependency; configure the Law.go.kr `OC` key on the authenticated API service as `LEGISLATION_API_KEY`.
+- Keep the provider boundary so a future MCP client can reuse the search operations without changing the question flow.
+
 ## FIXED297 - Evidence-first regulation assistant
 
 - Add an optional chat tab for law/precedent lookup from selected OCR candidates or text, and exact DB keyword lookup from a legal article.
-- Route Streamlit Cloud requests through the authenticated FastAPI service to a private Streamable HTTP MCP endpoint.
+- Route Streamlit Cloud requests through the authenticated FastAPI service for official legal-source retrieval.
 - Keep LLM explanations disabled by default; when enabled, require source IDs and verbatim quotes and route uncertain/conflicting results to administrator review.
 
 ## FIXED296 - OCR button label and upload spacing

@@ -1,7 +1,6 @@
-"""Evidence-first regulation lookup through the private legislation MCP server."""
+"""Evidence-first regulation lookup and explanation orchestration."""
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import re
@@ -9,45 +8,26 @@ from typing import Any
 
 import pandas as pd
 import requests
+from legislation_source import LegislationApiError, search_many as _law_api_search_many
 
 
 class RegulationSearchError(RuntimeError):
     pass
 
 
-def _call_mcp_many(calls: list[tuple[str, dict[str, Any]]]) -> list[str]:
-    url = os.getenv("REGULATION_MCP_URL", "").strip()
-    if not url:
-        raise RegulationSearchError("REGULATION_MCP_URL is not configured")
-    allowed_tools = {"search_law", "search_law_articles", "search_precedent",
-                     "search_administrative_rule"}
-    if any(tool not in allowed_tools for tool, _ in calls):
-        raise RegulationSearchError("Unsupported legislation search tool")
-
-    async def call() -> list[str]:
-        from fastmcp import Client
-
-        outputs = []
-        async with Client(url) as client:
-            for tool, arguments in calls:
-                result = await client.call_tool(tool, arguments)
-                if getattr(result, "is_error", False):
-                    raise RegulationSearchError(f"MCP tool failed: {tool}")
-                texts = [str(item.text) for item in getattr(result, "content", [])
-                         if getattr(item, "text", None)]
-                outputs.append("\n\n".join(texts)[:12000])
-        return outputs
-
+def _search_legislation_many(calls: list[tuple[str, dict[str, Any]]]) -> list[str]:
     try:
-        return asyncio.run(call())
-    except RegulationSearchError:
-        raise
+        return _law_api_search_many(calls)
+    except LegislationApiError as exc:
+        raise RegulationSearchError(str(exc)) from exc
     except Exception as exc:
-        raise RegulationSearchError(f"MCP connection or search failed ({type(exc).__name__})") from exc
+        raise RegulationSearchError(
+            f"Legislation search failed ({type(exc).__name__})"
+        ) from exc
 
 
-def _call_mcp(tool: str, arguments: dict[str, Any]) -> str:
-    return _call_mcp_many([(tool, arguments)])[0]
+def _search_legislation(tool: str, arguments: dict[str, Any]) -> str:
+    return _search_legislation_many([(tool, arguments)])[0]
 
 
 def _source(source_id: str, label: str, text: str) -> dict[str, str]:
@@ -140,7 +120,7 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
     tool_calls: list[dict[str, Any]] = []
 
     if direction == "keyword_to_law":
-        # MCP law and precedent tools are called only after the user submits a question.
+        # Law.go.kr is queried only after the user submits a question.
         stop_terms = {"관련", "법령", "조문", "판례", "찾아", "알려", "해주세요",
                       "해줘", "이내용", "이문구", "광고", "문구", "내용", "대해서",
                       "무엇", "어떤", "저촉", "위반", "기준", "현재"}
@@ -157,20 +137,20 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
                                 ("search_precedent", "판례")):
                 calls.append((tool, {"query": term, "search": 2, "display": 5}))
                 labels.append((tool, term, index, label))
-        for (tool, term, sequence, label), text in zip(labels, _call_mcp_many(calls)):
+        for (tool, term, sequence, label), text in zip(labels, _search_legislation_many(calls)):
             tool_calls.append({"tool": tool, "query": term})
             if text.strip():
                 source_prefix = {"법령": "LAW", "행정규칙": "RULE", "판례": "CASE"}[label]
                 sources.append(_source(f"{source_prefix}{sequence}", f"{label} 검색: {term}", text))
         if not any(source["id"].startswith(("LAW", "CASE")) for source in sources):
-            raise RegulationSearchError("MCP returned no law or precedent search results")
+            raise RegulationSearchError("Law.go.kr returned no law or precedent search results")
     elif direction == "law_to_keywords":
-        law_match = re.search(r"(.+?(?:법률|법|령|규칙))\s*(?:제\s*(\d+)\s*조)?", query)
+        law_match = re.search(r"(.+?(?:법률|법|령|규칙))\s*(?:제\s*(\d+(?:의\d+)?)\s*조)?", query)
         if not law_match:
             raise RegulationSearchError("법령명과 조항을 함께 입력해 주세요. 예: 화장품법 제13조")
         law_name = law_match.group(1).strip()
         article_no = law_match.group(2)
-        law_text = _call_mcp("search_law", {"query": law_name, "search": 1, "display": 5})
+        law_text = _search_legislation("search_law", {"query": law_name, "search": 1, "display": 5})
         tool_calls.append({"tool": "search_law", "query": law_name})
         mst_match = re.search(r"(?:MST|법령일련번호)\s*[:：=]?\s*(\d{5,})", law_text, re.I)
         if not mst_match:
@@ -183,7 +163,7 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
         args: dict[str, Any] = {"mst": mst_match.group(1), "include_content": True, "display": 100}
         if article_no:
             args["article_no"] = article_no
-        article_text = _call_mcp("search_law_articles", args)
+        article_text = _search_legislation("search_law_articles", args)
         tool_calls.append({"tool": "search_law_articles", "law": law_name, "article": article_no or "all"})
         article_body = article_text
         for marker in ("**조문 내용:**", "조문 내용:"):
@@ -232,7 +212,7 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
                   " 의미상 관련된 키워드까지 찾은 결과는 아닙니다.")
         status, needs_admin = "retrieved", False
     else:
-        answer = (f"현재 DB에서 관련 후보 {len(matches)}개를 찾았습니다. 아래 MCP 법령·판례 검색 결과를 "
+        answer = (f"현재 DB에서 관련 후보 {len(matches)}개를 찾았습니다. 아래 법령·판례 검색 결과를 "
                   "근거 자료로 확인해 주세요. 검색 결과만으로 적법 여부를 판단하지 않습니다.")
         status, needs_admin = "retrieved", False
     return {"status": status, "administrator_review": needs_admin,

@@ -33,5 +33,5 @@ services:
         sync: false
       - key: API_ACCESS_TOKEN
         sync: false
-      - key: REGULATION_MCP_URL
+      - key: LEGISLATION_API_KEY
         sync: false
