@@ -9,6 +9,7 @@ import requests
 
 SEARCH_URL = "https://www.law.go.kr/DRF/lawSearch.do"
 SERVICE_URL = "https://www.law.go.kr/DRF/lawService.do"
+DEFAULT_REFERER = "https://www.law.go.kr/"
 
 
 class LegislationApiError(RuntimeError):
@@ -25,8 +26,11 @@ def _api_key() -> str:
 def _fetch(service: str, target: str, arguments: dict[str, Any]) -> dict[str, Any]:
     endpoint = SEARCH_URL if service == "search" else SERVICE_URL
     params = {"OC": _api_key(), "target": target, "type": "JSON", **arguments}
+    referer = os.getenv("LEGISLATION_REFERER", DEFAULT_REFERER).strip() or DEFAULT_REFERER
     try:
-        response = requests.get(endpoint, params=params, timeout=(5, 30))
+        response = requests.get(
+            endpoint, params=params, headers={"Referer": referer}, timeout=(5, 30)
+        )
         response.raise_for_status()
         payload = response.json()
     except (requests.RequestException, ValueError) as exc:

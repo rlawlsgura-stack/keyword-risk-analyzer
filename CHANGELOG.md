@@ -4,6 +4,10 @@
 - Remove the remote MCP service requirement and its FastMCP dependency; configure the Law.go.kr `OC` key on the authenticated API service as `LEGISLATION_API_KEY`.
 - Keep the provider boundary so a future MCP client can reuse the search operations without changing the question flow.
 
+## Backend - Law.go.kr request validation header (2026-10-29)
+
+- Send a `Referer` header with direct Law.go.kr API requests; allow an optional `LEGISLATION_REFERER` override for deployments that register a different domain.
+
 ## FIXED297 - Evidence-first regulation assistant
 
 - Add an optional chat tab for law/precedent lookup from selected OCR candidates or text, and exact DB keyword lookup from a legal article.

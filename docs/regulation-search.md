@@ -10,6 +10,7 @@ The optional, evidence-first legal lookup chat sends submitted questions to the 
 4. Keep `REGULATION_API_URL` in Streamlit Community Cloud Secrets pointed at the public URL of `keyword-risk-api`.
 
 The Law.go.kr key belongs only on the API service. Do not put it in Streamlit Cloud Secrets or commit it. `REGULATION_MCP_URL` is no longer used. An MCP service is not required for this application's current searches.
+The API adapter sends `Referer: https://www.law.go.kr/` by default because some Law.go.kr deployments reject requests without a `Referer`. Set `LEGISLATION_REFERER` on `keyword-risk-api` only if the registered system requires a different referring domain.
 
 ## Retrieved evidence and optional explanation
 
