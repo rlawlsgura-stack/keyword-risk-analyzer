@@ -1,3 +1,9 @@
+## FIXED292 - Numbered application release
+
+- Create `keyword_app2_fixed292.py` as the next numbered application version.
+- Keep `streamlit_cloud/app.py` as the stable Cloud entrypoint and point it to the new app file.
+- Adopt whole-number release labels (`FIXED291`, `FIXED292`) for numbered app versions.
+
 ## FIXED291.7 - Version metadata
 
 - Bump the displayed local and Community Cloud app version after FIXED291.6.
