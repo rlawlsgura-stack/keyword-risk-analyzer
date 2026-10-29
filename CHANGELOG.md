@@ -1,3 +1,8 @@
+## FIXED305 - Use row selection without a duplicate checkbox column
+
+- Remove the extra candidate checkbox column and use Streamlit table row selection for analysis.
+- Keep single-expression editing and selected-row removal available; these only affect the current review session.
+
 ## FIXED304 - Rename candidate checkbox to selection
 
 - Label the narrow unmatched-candidate checkbox column "선택".

@@ -47,11 +47,12 @@ class SharedUnmatchedUITests(unittest.TestCase):
 
     def test_candidate_analysis_requires_an_explicit_selection(self):
         self.seed_shared_row()
-        app = self.app(tab='미매칭 후보군', version=304).run()
+        app = self.app(tab='미매칭 후보군', version=305).run()
         self.assertFalse(app.exception)
+        self.assertTrue(app.dataframe)
         app.button(key='analyze_unmatched_candidate_pool').click().run()
         self.assertFalse(app.exception)
-        self.assertTrue(any('체크박스를 선택' in item.value for item in app.warning))
+        self.assertTrue(any('표에서 선택' in item.value for item in app.warning))
         self.assertEqual(self.repository.load_unmatched_terms.call_count, 2)
         self.repository.load_unmatched_terms.assert_called_with(0, 100, '')
 
