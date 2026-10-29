@@ -105,6 +105,13 @@ except ModuleNotFoundError as exc:
                         texts.append(text)
         return '\n'.join(texts)
 from app_config import configure, cloud_enabled
+# Local Streamlit runs execute this file directly, so invalidate a stale
+# repository module retained by an already-running Streamlit process.
+_cached_repository = sys.modules.get('repository')
+if (_cached_repository is not None
+        and not hasattr(getattr(_cached_repository, 'SupabaseRepository', None),
+                        'submit_new_keyword_registration_requests')):
+    sys.modules.pop('repository', None)
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
     NotificationConfigurationError,
