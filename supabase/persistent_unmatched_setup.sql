@@ -86,6 +86,7 @@ language sql stable security invoker set search_path = '' as $$
     select coalesce(jsonb_agg(jsonb_build_object(
         'term_norm', term_norm, 'display_term', display_term,
         'total_occurrences', total_occurrences, 'analysis_count', analysis_count,
+        'review_status', review_status,
         'first_seen', first_seen, 'last_seen', last_seen)
         order by total_occurrences desc, analysis_count desc, term_norm), '[]'::jsonb)
     from public.kra_unmatched_term_candidates;

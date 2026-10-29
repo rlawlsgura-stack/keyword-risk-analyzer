@@ -80,6 +80,18 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertIsNotNone(app.button(key='request_unmatched_keyword_registration'))
         self.assertFalse(any(button.key == 'approve_unmatched_recommendations' for button in app.button))
 
+    def test_sidebar_new_keyword_request_queues_terms_without_keyword_inquiry(self):
+        self.repository.submit_new_keyword_registration_requests.return_value = 2
+        app = self.app(version=306).run()
+        app.session_state['keyword_request_type'] = 'new_keyword_registration'
+        app.run()
+        app.text_area(key='keyword_request_detail').set_value('알파, 베타, 알파')
+        next(button for button in app.button if button.label == '입력').click().run()
+        self.assertFalse(app.exception)
+        self.repository.submit_new_keyword_registration_requests.assert_called_once_with(
+            ['알파', '베타'], 'test-token')
+        self.repository.submit_keyword_request.assert_not_called()
+
     def seed_shared_row(self):
         row = {'term_norm': '보습', 'display_term': '보습', 'total_occurrences': 3,
                'analysis_count': 2, 'first_seen': '2026-10-28T00:00:00Z',

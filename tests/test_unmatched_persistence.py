@@ -48,10 +48,22 @@ class UnmatchedPersistenceTests(unittest.TestCase):
         user.assert_called_once_with('member-token')
         request.assert_called_once_with(
             'POST', '/rest/v1/kra_unmatched_registration_requests',
-            [{'term': 'candidate', 'source_terms': 'source', 'occurrences': 3,
+            [{'term': 'candidate', 'term_norm': 'candidate', 'source_terms': 'source', 'occurrences': 3,
               'category': 'Food', 'risk': '2', 'criteria': 'review',
               'evidence_type': 'document', 'alternative': '-'}],
             prefer='return=representation')
+
+    def test_sidebar_registration_requests_are_deduplicated_without_statistics(self):
+        with patch.object(self.repository, 'user', return_value={'id': str(uuid4())}) as user, \
+                patch.object(self.repository, 'rpc', return_value=2) as rpc:
+            count = self.repository.submit_new_keyword_registration_requests(
+                ['Alpha', 'ＡＬＰＨＡ', '키워드'], 'member-token')
+        self.assertEqual(count, 2)
+        user.assert_called_once_with('member-token')
+        rpc.assert_called_once_with('submit_new_keyword_registration_requests', p_terms=[
+            {'term': 'Alpha', 'term_norm': 'alpha'},
+            {'term': '키워드', 'term_norm': '키워드'},
+        ])
 
     def test_registration_queue_read_and_delete_require_admin(self):
         with patch.object(self.repository, 'user', return_value={

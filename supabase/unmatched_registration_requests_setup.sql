@@ -1,6 +1,7 @@
 -- Pending keyword registrations from unmatched-term normalization requests.
 create table if not exists public.kra_unmatched_registration_requests (
     id uuid primary key default gen_random_uuid(),
+    term_norm text,
     term text not null check (char_length(btrim(term)) between 1 and 150),
     source_terms text not null default '' check (char_length(source_terms) <= 500),
     occurrences bigint not null default 0 check (occurrences between 0 and 1000000000),

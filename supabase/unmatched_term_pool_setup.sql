@@ -7,7 +7,7 @@ create table public.kra_unmatched_term_candidates (
     first_seen timestamptz not null default now(),
     last_seen timestamptz not null default now(),
     review_status text not null default 'pending'
-        check (review_status in ('pending', 'approved', 'ignored'))
+        check (review_status in ('pending', 'approved', 'ignored', 'registration_requested'))
 );
 
 create table public.kra_unmatched_term_observations (

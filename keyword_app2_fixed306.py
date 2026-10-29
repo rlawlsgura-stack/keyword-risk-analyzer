@@ -8,6 +8,7 @@ Keyword Risk Analyzer (FIXED306 - request admin registration of candidates)
 from __future__ import annotations
 import os
 import sys
+import unicodedata
 
 # PaddleX reads this flag while its package is imported. Set it before loading
 # Streamlit, pandas, or application modules so reruns cannot trigger a second
@@ -1818,6 +1819,16 @@ def render_keyword_request_form():
                 keyword_options[f'{keyword_code} | {keyword_name}'] = keyword_code
 
     with st.sidebar.expander('키워드 문의', expanded=False):
+        request_type = st.selectbox(
+            '문의 유형',
+            options=sorted(KEYWORD_REQUEST_TYPE_LABELS,
+                           key=lambda value: KEYWORD_REQUEST_TYPE_LABELS[value]),
+            format_func=lambda value: KEYWORD_REQUEST_TYPE_LABELS[value],
+            key='keyword_request_type',
+        )
+        is_new_keyword_request = request_type == 'new_keyword_registration'
+        if is_new_keyword_request:
+            st.caption('신규키워드는 한 항목씩 입력해 주세요. 여러 키워드는 쉼표(,)로 구분하세요. 예: 키워드A, 키워드B')
         with st.form('keyword_request_form', clear_on_submit=True):
             selected_keyword = st.selectbox(
                 '키워드 검색 (kwd_no / 키워드명)',
@@ -1828,25 +1839,40 @@ def render_keyword_request_form():
                 disabled=not keyword_options,
                 key='keyword_request_kwd_select',
             )
-            request_type = st.selectbox(
-                '문의 유형',
-                options=sorted(KEYWORD_REQUEST_TYPE_LABELS,
-                               key=lambda value: KEYWORD_REQUEST_TYPE_LABELS[value]),
-                format_func=lambda value: KEYWORD_REQUEST_TYPE_LABELS[value],
-                key='keyword_request_type',
-            )
             detail = st.text_area(
-                '요청 상세 내용 (선택)', max_chars=4000,
+                '요청 상세 내용' if is_new_keyword_request else '요청 상세 내용 (선택)', max_chars=4000,
                 key='keyword_request_detail',
-                help='변경이 필요한 이유나 원하는 내용을 적어주세요. 최대 4,000자까지 입력할 수 있습니다.',
+                placeholder='키워드A, 키워드B' if is_new_keyword_request else '',
+                help=('신규키워드는 쉼표(,)로 구분해 입력하세요.' if is_new_keyword_request
+                      else '변경이 필요한 이유나 원하는 내용을 적어주세요. 최대 4,000자까지 입력할 수 있습니다.'),
             )
             submitted = st.form_submit_button('입력', type='primary')
 
         if not submitted:
             return
+        if is_new_keyword_request:
+            terms, seen = [], set()
+            for value in detail.split(','):
+                term = value.strip()
+                term_norm = unicodedata.normalize('NFKC', term).casefold().strip()
+                if term and term_norm not in seen:
+                    terms.append(term)
+                    seen.add(term_norm)
+            if not terms:
+                st.error('등록 요청할 키워드를 쉼표로 구분해 입력하세요.')
+                return
+            try:
+                queued = SupabaseRepository().submit_new_keyword_registration_requests(
+                    terms, st.session_state.auth_session['access_token']
+                )
+            except (StorageError, PermissionError, KeyError, ValueError) as exc:
+                st.error('신규 키워드 등록 요청을 접수하지 못했습니다. Supabase 연결과 입력을 확인하세요.')
+                st.caption(str(exc))
+                return
+            st.success(f'신규 키워드 {int(queued or 0)}건을 미매칭 표현 목록에 요청 상태로 추가했습니다.')
+            return
         keyword_code = keyword_options.get(selected_keyword, '')
-        is_new_keyword_request = request_type == 'new_keyword_registration'
-        if not keyword_code and not is_new_keyword_request:
+        if not keyword_code:
             st.error('\ubaa9\ub85d\uc5d0\uc11c \ud0a4\uc6cc\ub4dc \ubc88\ud638 \ub610\ub294 \ud0a4\uc6cc\ub4dc\uba85\uc744 \uac80\uc0c9\ud574 \uc120\ud0dd\ud558\uc138\uc694.')
             return
 
@@ -4310,6 +4336,33 @@ def build_unmatched_registration_candidates(selected):
     return candidates
 
 
+def unmatched_registration_source_keys(selected):
+    keys = set()
+    for _, item in selected.iterrows():
+        raw_key = item.get('term_norm', '')
+        request_key = '' if pd.isna(raw_key) else str(raw_key).strip()
+        if request_key:
+            keys.add(request_key)
+            continue
+        raw_sources = item.get('source_terms', '')
+        source_terms = '' if pd.isna(raw_sources) else str(raw_sources).strip()
+        sources = source_terms.split(' | ') if source_terms else [str(item.get('term') or '')]
+        keys.update(
+            unicodedata.normalize('NFKC', source).casefold().strip()
+            for source in sources if str(source).strip()
+        )
+    return sorted(key for key in keys if 1 <= len(key) <= 100)
+
+
+def clear_registered_unmatched_candidates(selected, access_token):
+    repository = SupabaseRepository()
+    term_keys = unmatched_registration_source_keys(selected)
+    if term_keys:
+        repository.delete_unmatched_terms(term_keys, access_token)
+    request_ids = [str(value) for value in selected.get('request_id', []) if str(value).strip()]
+    return repository.delete_unmatched_registration_requests(request_ids, access_token) if request_ids else 0
+
+
 def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
     if cloud_enabled():
@@ -4332,7 +4385,10 @@ def render_unmatched_candidate_pool():
             st.rerun()
         surface_rows = [{'surface_key': row['term_norm'], 'surface': row['display_term'],
                          'occurrences': row['total_occurrences'],
-                         'analysis_count': row.get('analysis_count', 0)} for row in rows]
+                         'analysis_count': row.get('analysis_count', 0),
+                         'status': ('신규키워드 등록요청'
+                                    if row.get('review_status') == 'registration_requested' else '')}
+                        for row in rows]
         st.caption(f'검색 결과 {total:,}종 · {page + 1}/{max(1, (total + 99) // 100)} 페이지')
         previous, following, refresh = st.columns(3)
         if previous.button('이전', key='unmatched_previous', disabled=page == 0):
@@ -4347,8 +4403,13 @@ def render_unmatched_candidate_pool():
                 exported = SupabaseRepository().export_unmatched_terms()
                 export_frame = pd.DataFrame(exported).rename(columns={
                     'display_term': '미매칭 표현', 'total_occurrences': '누적 출현 횟수',
-                    'analysis_count': '분석 횟수', 'first_seen': '최초 수집 시각', 'last_seen': '최근 수집 시각',
+                    'analysis_count': '분석 횟수', 'review_status': '상태',
+                    'first_seen': '최초 수집 시각', 'last_seen': '최근 수집 시각',
                 }).drop(columns=['term_norm'], errors='ignore')
+                if '상태' in export_frame:
+                    export_frame['상태'] = export_frame['상태'].replace({
+                        'registration_requested': '신규키워드 등록요청',
+                    })
                 for column in ('최초 수집 시각', '최근 수집 시각'):
                     if column in export_frame:
                         export_frame[column] = pd.to_datetime(export_frame[column], utc=True).dt.tz_convert('Asia/Seoul')
@@ -4391,6 +4452,7 @@ def render_unmatched_candidate_pool():
     if review_rows:
         candidate_df = pd.DataFrame([
             {'미매칭 표현': row['surface'], '출현 횟수': int(row.get('occurrences', 0) or 0),
+             '상태': row.get('status', ''),
              **({'분석 횟수': int(row.get('analysis_count', 0) or 0)} if cloud_enabled() else {})}
             for row in review_rows
         ])
@@ -4399,6 +4461,7 @@ def render_unmatched_candidate_pool():
             column_config={
                 '미매칭 표현': st.column_config.TextColumn('미매칭 표현'),
                 '출현 횟수': st.column_config.NumberColumn('출현 횟수'),
+                '상태': st.column_config.TextColumn('상태'),
                 **({'분석 횟수': st.column_config.NumberColumn('분석 횟수')} if cloud_enabled() else {}),
             },
             on_select='rerun', selection_mode='multi-row',
@@ -4466,6 +4529,7 @@ def render_unmatched_candidate_pool():
             recommendations = [
                 {'term': row['term'], 'source_terms': row.get('source_terms', ''),
                  'occurrences': row.get('occurrences', 0), 'request_id': row['id'],
+                 'term_norm': row.get('term_norm', ''),
                  'request_date': row.get('created_at', ''),
                  '상품카테고리': row.get('category', ''),
                  '리스크 등급': row.get('risk', ''),
@@ -4484,7 +4548,7 @@ def render_unmatched_candidate_pool():
                 "상품카테고리": "", "리스크 등급": "",
                 "리스크 등급별 세부 심의기준": "",
                 "증빙자료유형": "", "대체키워드": "-",
-                "request_id": "", "request_date": ""}.items():
+                "request_id": "", "request_date": "", "term_norm": ""}.items():
             if column not in recommendation_df:
                 recommendation_df[column] = default
         edited_recommendations = st.data_editor(
@@ -4504,6 +4568,7 @@ def render_unmatched_candidate_pool():
                 "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=list(st.session_state.opt_alt_terms), required=False),
                 "request_date": st.column_config.TextColumn("요청 접수일", disabled=True),
                 "request_id": None,
+                "term_norm": None,
             },
             key=(f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
                  + hashlib.sha256(','.join(row['id'] for row in registration_requests).encode()).hexdigest()[:12]),
@@ -4540,16 +4605,12 @@ def render_unmatched_candidate_pool():
                     if additions:
                         st.session_state.kw_df = pd.concat([st.session_state.kw_df, pd.DataFrame(additions)], ignore_index=True)
                         save_db(st.session_state.kw_df[get_db_cols()], Path(st.session_state.storage_path))
-                        request_ids = [str(value) for value in selected.get("request_id", []) if str(value).strip()]
-                        cleared = 0
-                        if request_ids:
-                            try:
-                                cleared = SupabaseRepository().delete_unmatched_registration_requests(
-                                    request_ids, st.session_state.auth_session['access_token']
-                                )
-                            except (StorageError, PermissionError, ValueError) as exc:
-                                st.error(f"DB \uc800\uc7a5\uc740 \uc644\ub8cc\ud588\uc9c0\ub9cc \uc694\uccad \ub300\uae30\uc5f4\uc744 \ube44\uc6b0\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
-                                return
+                        try:
+                            cleared = clear_registered_unmatched_candidates(
+                                selected, st.session_state.auth_session['access_token'])
+                        except (StorageError, PermissionError, ValueError) as exc:
+                            st.error(f"DB \uc800\uc7a5\uc740 \uc644\ub8cc\ud588\uc9c0\ub9cc \ubbf8\ub9e4\uce6d \ud45c\ud604\uacfc \uc694\uccad \uc815\ub9ac\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4: {exc}")
+                            return
                         st.session_state["unmatched_candidate_recommendations"] = []
                         st.session_state["unmatched_recommendation_version"] = int(
                             st.session_state.get("unmatched_recommendation_version", 0)
@@ -4557,18 +4618,15 @@ def render_unmatched_candidate_pool():
                         st.success(f"승인된 키워드 {len(additions)}건을 DB에 등록하고 요청 {cleared}건을 정리했습니다.")
                         st.rerun()
                     else:
-                        request_ids = [str(value) for value in selected.get("request_id", []) if str(value).strip()]
-                        if request_ids:
-                            try:
-                                cleared = SupabaseRepository().delete_unmatched_registration_requests(
-                                    request_ids, st.session_state.auth_session['access_token']
-                                )
-                            except (StorageError, PermissionError, ValueError) as exc:
-                                st.error(f"\uc694\uccad \ub300\uae30\uc5f4\uc744 \ube44\uc6b0\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
-                                return
-                            if cleared:
-                                st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\ub77c DB \ubcc0\uacbd \uc5c6\uc774 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
-                                st.rerun()
+                        try:
+                            cleared = clear_registered_unmatched_candidates(
+                                selected, st.session_state.auth_session['access_token'])
+                        except (StorageError, PermissionError, ValueError) as exc:
+                            st.error(f"\ubbf8\ub9e4\uce6d \ud45c\ud604\uacfc \uc694\uccad \uc815\ub9ac\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4: {exc}")
+                            return
+                        if cleared or unmatched_registration_source_keys(selected):
+                            st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\uc758 \ubbf8\ub9e4\uce6d \ud1b5\uacc4\uc640 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
+                            st.rerun()
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
         else:
             if cloud_enabled():

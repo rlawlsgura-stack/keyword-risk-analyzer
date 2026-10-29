@@ -1,5 +1,6 @@
 """Server-only Supabase REST access. No mutable user session is shared."""
 import os
+import unicodedata
 from uuid import UUID
 
 import pandas as pd
@@ -303,6 +304,7 @@ class SupabaseRepository:
         for candidate in candidates:
             row = {
                 'term': str(candidate.get('term') or '').strip(),
+                'term_norm': unicodedata.normalize('NFKC', str(candidate.get('term') or '')).casefold().strip(),
                 'source_terms': str(candidate.get('source_terms') or '').strip(),
                 'occurrences': int(candidate.get('occurrences') or 0),
                 'category': str(candidate.get('category') or '').strip(),
@@ -313,8 +315,8 @@ class SupabaseRepository:
             }
             if not 1 <= len(row['term']) <= 150 or len(row['source_terms']) > 500:
                 raise ValueError('Invalid candidate or source-term length.')
-            if any(not row[key] for key in ('category', 'risk', 'criteria', 'evidence_type')):
-                raise ValueError('Category and risk classification fields are required.')
+            if not 1 <= len(row['term_norm']) <= 100:
+                raise ValueError('Normalized candidate length must be between 1 and 100 characters.')
             if any(len(row[key]) > 500 for key in ('category', 'risk', 'criteria', 'evidence_type', 'alternative')):
                 raise ValueError('Classification field is too long.')
             if not 0 <= row['occurrences'] <= 1_000_000_000:
@@ -325,11 +327,29 @@ class SupabaseRepository:
             prefer='return=representation',
         )
 
+    def submit_new_keyword_registration_requests(self, terms, access_token):
+        self.user(access_token)
+        rows = []
+        seen = set()
+        for value in terms or ():
+            term = str(value or '').strip()
+            term_norm = unicodedata.normalize('NFKC', term).casefold().strip()
+            if not term:
+                continue
+            if not 1 <= len(term) <= 150 or not 1 <= len(term_norm) <= 100:
+                raise ValueError('Keyword length must be between 1 and 100 normalized characters.')
+            if term_norm not in seen:
+                rows.append({'term': term, 'term_norm': term_norm})
+                seen.add(term_norm)
+        if not rows or len(rows) > 1000:
+            raise ValueError('Request between 1 and 1,000 unique keywords.')
+        return self.rpc('submit_new_keyword_registration_requests', p_terms=rows)
+
     def load_unmatched_registration_requests(self, access_token):
         self._require_admin(access_token)
         return self.request(
             'GET', '/rest/v1/kra_unmatched_registration_requests'
-            '?select=id,term,source_terms,occurrences,category,risk,criteria,evidence_type,alternative,created_at'
+            '?select=id,term,term_norm,source_terms,occurrences,category,risk,criteria,evidence_type,alternative,created_at'
             '&order=created_at.asc&limit=1000',
         ) or []
 
