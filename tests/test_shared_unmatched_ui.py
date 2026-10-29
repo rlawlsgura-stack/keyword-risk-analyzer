@@ -47,7 +47,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
 
     def test_candidate_analysis_requires_an_explicit_selection(self):
         self.seed_shared_row()
-        app = self.app(tab='미매칭 후보군', version=303).run()
+        app = self.app(tab='미매칭 후보군', version=304).run()
         self.assertFalse(app.exception)
         app.button(key='analyze_unmatched_candidate_pool').click().run()
         self.assertFalse(app.exception)

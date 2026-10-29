@@ -1,3 +1,7 @@
+## FIXED304 - Rename candidate checkbox to selection
+
+- Label the narrow unmatched-candidate checkbox column "선택".
+
 ## FIXED303 - Keep the analysis checkbox column narrow
 
 - Set the unmatched-candidate analysis checkbox column to Streamlit's small width.
