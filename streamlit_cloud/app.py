@@ -14,11 +14,16 @@ cached_repository = sys.modules.get("repository")
 if cached_repository is not None:
     cached_path = getattr(cached_repository, "__file__", None)
     expected_path = (ROOT / "repository.py").resolve()
+    required_methods = (
+        "load_unmatched_terms",
+        "mutate_own_keyword_inquiry",
+        "submit_unmatched_registration_requests",
+        "load_unmatched_registration_requests",
+        "delete_unmatched_registration_requests",
+    )
+    repository_class = getattr(cached_repository, "SupabaseRepository", None)
     if (not cached_path or Path(cached_path).resolve() != expected_path
-            or not hasattr(getattr(cached_repository, "SupabaseRepository", None),
-                           "load_unmatched_terms")
-            or not hasattr(getattr(cached_repository, "SupabaseRepository", None),
-                           "mutate_own_keyword_inquiry")):
+            or any(not hasattr(repository_class, method) for method in required_methods)):
         sys.modules.pop("repository", None)
 
 runpy.run_path(str(ROOT / "keyword_app2_fixed306.py"), run_name="__main__")
