@@ -71,18 +71,50 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
                          'Bearer admin-access-token')
 
     def test_admin_request_delete_uses_user_jwt_and_delete_method(self):
-        row = {'id': 'request-1'}
+        request_id = '00000000-0000-0000-0000-000000000001'
+        row = {'id': request_id}
         with patch('repository.requests.request', return_value=self.response([row])) as request:
             deleted = SupabaseRepository().delete_keyword_request(
-                'request-1', 'admin-access-token')
+                request_id, 'admin-access-token')
 
         self.assertEqual(deleted, row)
         self.assertEqual(request.call_args.args[:2], (
             'DELETE',
-            'https://project.example.supabase.co/rest/v1/kra_keyword_requests?id=eq.request-1',
+            'https://project.example.supabase.co/rest/v1/kra_keyword_requests?id=eq.' + request_id,
         ))
         self.assertEqual(request.call_args.kwargs['headers']['Authorization'],
                          'Bearer admin-access-token')
+
+    def test_owner_edit_uses_user_token_and_only_content_fields(self):
+        request_id = '00000000-0000-0000-0000-000000000001'
+        row = {'id': request_id, 'request_detail': 'edited'}
+        with patch('repository.requests.request', return_value=self.response(row)) as request:
+            saved = SupabaseRepository().edit_own_keyword_request(
+                request_id, 'review_criteria_change', '  edited  ', 'owner-token')
+        self.assertEqual(saved, row)
+        self.assertEqual(request.call_args.args[:2], (
+            'POST', 'https://project.example.supabase.co/rest/v1/rpc/kra_edit_own_keyword_request',
+        ))
+        self.assertEqual(request.call_args.kwargs['json'], {
+            'p_request_id': request_id, 'p_request_type': 'review_criteria_change',
+            'p_request_detail': 'edited',
+        })
+        self.assertEqual(request.call_args.kwargs['headers']['Authorization'], 'Bearer owner-token')
+
+    def test_owner_mutations_require_a_token_valid_id_and_valid_content(self):
+        repo = SupabaseRepository()
+        request_id = '00000000-0000-0000-0000-000000000001'
+        with patch('repository.requests.request') as request:
+            with self.assertRaises(PermissionError):
+                repo.edit_own_keyword_request(request_id, 'review_criteria_change', '', '')
+            with self.assertRaises(PermissionError):
+                repo.delete_keyword_request(request_id, '')
+            with self.assertRaises(ValueError):
+                repo.delete_keyword_request(request_id + '&id=neq.other', 'owner-token')
+            for request_type, detail in [('invalid', ''), ('review_criteria_change', 'x' * 4001)]:
+                with self.assertRaises(ValueError):
+                    repo.edit_own_keyword_request(request_id, request_type, detail, 'owner-token')
+            request.assert_not_called()
 
     def test_request_message_history_uses_user_jwt_and_ascending_order(self):
         request_id = '00000000-0000-0000-0000-000000000001'

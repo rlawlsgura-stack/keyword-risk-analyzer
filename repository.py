@@ -134,6 +134,27 @@ class SupabaseRepository:
             raise StorageError('문의 처리 내용이 저장되지 않았습니다. 관리자 권한과 DB 정책을 확인하세요.')
         return rows[0]
 
+    def edit_own_keyword_request(self, request_id, request_type, request_detail, access_token):
+        if not access_token:
+            raise PermissionError('로그인 후 본인 문의를 수정하세요.')
+        request_id = str(UUID(str(request_id)))
+        if request_type not in {
+            'risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration',
+        }:
+            raise ValueError('문의 유형이 올바르지 않습니다.')
+        request_detail = str(request_detail or '').strip()
+        if len(request_detail) > 4000:
+            raise ValueError('요청 상세 내용은 4,000자 이내로 입력하세요.')
+        row = self.request(
+            'POST', '/rest/v1/rpc/kra_edit_own_keyword_request',
+            {'p_request_id': request_id, 'p_request_type': request_type,
+             'p_request_detail': request_detail},
+            token=access_token,
+        )
+        if not row:
+            raise StorageError('본인 문의가 없거나 수정 내용을 저장하지 못했습니다.')
+        return row
+
     def load_keyword_request_messages(self, request_id, access_token, limit=1000):
         request_id = str(UUID(str(request_id)))
         limit = max(1, min(int(limit), 1000))
@@ -183,12 +204,15 @@ class SupabaseRepository:
         return rows[0]
 
     def delete_keyword_request(self, request_id, access_token):
-        path = '/rest/v1/kra_keyword_requests?id=eq.' + str(request_id)
+        if not access_token:
+            raise PermissionError('로그인 후 문의를 삭제하세요.')
+        request_id = str(UUID(str(request_id)))
+        path = '/rest/v1/kra_keyword_requests?id=eq.' + request_id
         rows = self.request(
             'DELETE', path, token=access_token, prefer='return=representation',
         )
         if not rows:
-            raise StorageError('Request deletion failed; verify administrator role and database policy.')
+            raise StorageError('본인 문의 또는 관리자 권한이 있는 문의만 삭제할 수 있습니다.')
         return rows[0]
 
     def load_request_email_notifications(self, access_token=None):

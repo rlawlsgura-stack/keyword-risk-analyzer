@@ -1,3 +1,8 @@
+## FIXED300 - Edit and delete own keyword requests
+
+- Allow signed-in request owners to edit the inquiry type and detail, and delete their existing requests after confirmation.
+- Enforce ownership in the database, synchronize the initial inquiry text, and preserve administrator answers and workflow status when editing.
+
 ## Backend - Direct Law.go.kr search provider (2026-10-28)
 
 - Move law, administrative-rule, precedent, and article requests into `legislation_source.py`; keep question handling and DB/LLM comparison in `regulation_assistant.py`.
