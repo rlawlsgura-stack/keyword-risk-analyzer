@@ -164,6 +164,28 @@ class SupabaseRepository:
                 + '&order=created_at.asc,id.asc&limit=' + str(limit))
         return self.request('GET', path, token=access_token) or []
 
+    def mutate_own_keyword_inquiry(self, request_id, inquiry_id, action, access_token,
+                                   body=None, request_type=None):
+        if not access_token:
+            raise PermissionError('로그인 후 본인 문의를 수정·삭제하세요.')
+        request_id = str(UUID(str(request_id)))
+        inquiry_id = str(UUID(str(inquiry_id)))
+        if action not in {'edit', 'delete'}:
+            raise ValueError('문의 변경 작업이 올바르지 않습니다.')
+        if action == 'edit':
+            body = str(body or '').strip()
+            if len(body) > 4000:
+                raise ValueError('문의 내용은 4,000자 이내로 입력하세요.')
+        result = self.request(
+            'POST', '/rest/v1/rpc/kra_mutate_own_keyword_inquiry',
+            {'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+             'p_action': action, 'p_body': body, 'p_request_type': request_type},
+            token=access_token,
+        )
+        if not result:
+            raise StorageError('본인 문의가 없거나 변경 내용을 저장하지 못했습니다.')
+        return result
+
     def respond_to_keyword_inquiry(self, request_id, inquiry_id, body, status, access_token):
         request_id = str(UUID(str(request_id)))
         inquiry_id = str(UUID(str(inquiry_id)))

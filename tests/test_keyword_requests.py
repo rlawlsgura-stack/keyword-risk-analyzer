@@ -132,6 +132,41 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs['headers']['Authorization'],
                          'Bearer user-access-token')
 
+    def test_each_inquiry_mutation_uses_its_own_id_and_user_token(self):
+        request_id = '00000000-0000-0000-0000-000000000001'
+        inquiry_id = '00000000-0000-0000-0000-000000000002'
+        for action in ('edit', 'delete'):
+            with self.subTest(action=action), patch('repository.requests.request',
+                    return_value=self.response({'id': inquiry_id})) as request:
+                result = SupabaseRepository().mutate_own_keyword_inquiry(
+                    request_id, inquiry_id, action, 'owner-token',
+                    body='  edited  ' if action == 'edit' else None,
+                )
+                self.assertEqual(result, {'id': inquiry_id})
+                self.assertEqual(request.call_args.args[:2], (
+                    'POST', 'https://project.example.supabase.co/rest/v1/rpc/kra_mutate_own_keyword_inquiry',
+                ))
+                self.assertEqual(request.call_args.kwargs['json'], {
+                    'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+                    'p_action': action, 'p_body': 'edited' if action == 'edit' else None,
+                    'p_request_type': None,
+                })
+                self.assertEqual(request.call_args.kwargs['headers']['Authorization'], 'Bearer owner-token')
+
+    def test_each_inquiry_mutation_rejects_missing_auth_invalid_ids_and_actions(self):
+        request_id = '00000000-0000-0000-0000-000000000001'
+        with patch('repository.requests.request') as request:
+            repo = SupabaseRepository()
+            with self.assertRaises(PermissionError):
+                repo.mutate_own_keyword_inquiry(request_id, request_id, 'delete', '')
+            for inquiry_id, action, body in [
+                ('invalid', 'edit', 'body'), (request_id, 'invalid', 'body'),
+                (request_id, 'edit', 'x' * 4001),
+            ]:
+                with self.assertRaises(ValueError):
+                    repo.mutate_own_keyword_inquiry(request_id, inquiry_id, action, 'token', body)
+            request.assert_not_called()
+
     def test_request_message_insert_uses_signed_in_user_token(self):
         request_id = '00000000-0000-0000-0000-000000000001'
         author_id = '00000000-0000-0000-0000-000000000002'

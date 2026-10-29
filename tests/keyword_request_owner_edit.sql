@@ -26,13 +26,20 @@ from kra_owner_test t cross join lateral (values
     (t.missing_initial_request, t.owner_id), (t.broken_request, t.owner_id)
 ) fixture(request_id, user_id);
 
+-- The current registration trigger creates initial inquiries; keep one absent
+-- to verify compatibility with historical requests that predate that trigger.
+delete from public.kra_keyword_request_messages
+where request_id = (select missing_initial_request from kra_owner_test);
+
 insert into public.kra_keyword_request_messages
     (request_id, author_id, author_email, author_role, is_initial, body, status)
 select request_id, user_id, 'owner-test@example.test', 'user', true, 'original', '검토중'
 from kra_owner_test t cross join lateral (values
     (t.own_request, t.owner_id), (t.other_request, t.other_id),
     (t.broken_request, t.other_id)
-) fixture(request_id, user_id);
+) fixture(request_id, user_id)
+on conflict (request_id) where is_initial
+do update set author_id = excluded.author_id, body = excluded.body, status = excluded.status;
 
 insert into public.kra_keyword_request_messages
     (request_id, author_id, author_email, author_role, reply_to_id, body)

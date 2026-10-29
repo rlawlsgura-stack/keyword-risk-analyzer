@@ -1,3 +1,9 @@
+## FIXED301 - Edit and delete each numbered inquiry
+
+- Add owner-only edit and confirmed deletion controls to every numbered user inquiry and follow-up. Deletion removes only that inquiry and its connected replies.
+- Display receipt number, keyword number, and keyword name as individually labeled fields.
+- Create the initial inquiry when a request is registered so it can use the same per-inquiry controls.
+
 ## FIXED300 - Edit and delete own keyword requests
 
 - Allow signed-in request owners to edit the inquiry type and detail, and delete their existing requests after confirmation.

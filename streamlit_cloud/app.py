@@ -1,4 +1,4 @@
-"""Streamlit Community Cloud entrypoint for FIXED300."""
+"""Streamlit Community Cloud entrypoint for FIXED301."""
 from pathlib import Path
 import runpy
 import sys
@@ -18,7 +18,7 @@ if cached_repository is not None:
             or not hasattr(getattr(cached_repository, "SupabaseRepository", None),
                            "load_unmatched_terms")
             or not hasattr(getattr(cached_repository, "SupabaseRepository", None),
-                           "edit_own_keyword_request")):
+                           "mutate_own_keyword_inquiry")):
         sys.modules.pop("repository", None)
 
-runpy.run_path(str(ROOT / "keyword_app2_fixed300.py"), run_name="__main__")
+runpy.run_path(str(ROOT / "keyword_app2_fixed301.py"), run_name="__main__")
