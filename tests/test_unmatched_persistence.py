@@ -36,6 +36,42 @@ class UnmatchedPersistenceTests(unittest.TestCase):
             user.assert_called_once_with('admin-token')
             rpc.assert_called_once_with('delete_unmatched_terms', p_terms=['보습'])
 
+    def test_registration_requests_are_submitted_to_the_separate_queue(self):
+        with patch.object(self.repository, 'user', return_value={'id': str(uuid4())}) as user, \
+                patch.object(self.repository, 'request', return_value=[{'id': 'queued'}]) as request:
+            result = self.repository.submit_unmatched_registration_requests([
+                {'term': 'candidate', 'source_terms': 'source', 'occurrences': 3,
+                 'category': 'Food', 'risk': '2', 'criteria': 'review',
+                 'evidence_type': 'document', 'alternative': '-'},
+            ], 'member-token')
+        self.assertEqual(result, [{'id': 'queued'}])
+        user.assert_called_once_with('member-token')
+        request.assert_called_once_with(
+            'POST', '/rest/v1/kra_unmatched_registration_requests',
+            [{'term': 'candidate', 'source_terms': 'source', 'occurrences': 3,
+              'category': 'Food', 'risk': '2', 'criteria': 'review',
+              'evidence_type': 'document', 'alternative': '-'}],
+            prefer='return=representation')
+
+    def test_registration_queue_read_and_delete_require_admin(self):
+        with patch.object(self.repository, 'user', return_value={
+                'app_metadata': {'role': 'member'}}), patch.object(self.repository, 'request') as request:
+            with self.assertRaises(PermissionError):
+                self.repository.load_unmatched_registration_requests('member-token')
+            with self.assertRaises(PermissionError):
+                self.repository.delete_unmatched_registration_requests([str(uuid4())], 'member-token')
+            request.assert_not_called()
+        request_id = str(uuid4())
+        with patch.object(self.repository, 'user', return_value={
+                'app_metadata': {'role': 'admin'}}), \
+                patch.object(self.repository, 'request', return_value=[{'id': request_id}]) as request:
+            self.assertEqual(self.repository.load_unmatched_registration_requests('admin-token'), [{'id': request_id}])
+            self.assertEqual(self.repository.delete_unmatched_registration_requests(
+                [request_id], 'admin-token'), 1)
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args.args[0], 'DELETE')
+        self.assertIn('/rest/v1/kra_unmatched_registration_requests?', request.call_args.args[1])
+
     def test_ocr_threshold_is_inclusive_and_keeps_repeated_lines(self):
         text = ocr_collection_text([{'lines': [
             {'text': '보습', 'confidence': 0.60},

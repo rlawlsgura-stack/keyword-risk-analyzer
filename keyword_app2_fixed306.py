@@ -4285,36 +4285,29 @@ if cloud_enabled():
         if tabs['requests'].open:
             render_keyword_requests_tab()
 
-def build_unmatched_keyword_registration_request(selected, user):
-    required = ['term', '상품카테고리', '리스크 등급', '리스크 등급별 세부 심의기준', '증빙자료유형']
+def build_unmatched_registration_candidates(selected):
+    required = ['term', '상품카테고리', '리스크 등급',
+                '리스크 등급별 세부 심의기준', '증빙자료유형']
     if selected.empty:
-        raise ValueError('등록을 요청할 정규화 후보를 선택하세요.')
+        raise ValueError("정규화 후보를 선택하세요.")
     if selected[required].fillna('').astype(str).apply(lambda col: col.str.strip().eq('')).any().any():
-        raise ValueError('선택 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.')
+        raise ValueError("선택 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.")
     candidates = []
     for _, item in selected.iterrows():
+        term = str(item['term']).strip()
+        source_terms = str(item.get('source_terms') or '').strip()
+        if not 1 <= len(term) <= 150 or len(source_terms) > 500:
+            raise ValueError("후보 키워드 또는 원본 표현 길이를 확인하세요.")
+        occurrences = int(item.get('occurrences') or 0)
         candidates.append({
-            'term': str(item['term']).strip(),
-            'source_terms': str(item.get('source_terms', '') or '').strip(),
-            'occurrences': int(item['occurrences']) if pd.notna(item.get('occurrences')) else 0,
+            'term': term, 'source_terms': source_terms, 'occurrences': occurrences,
             'category': str(item['상품카테고리']).strip(),
             'risk': str(item['리스크 등급']).strip(),
             'criteria': str(item['리스크 등급별 세부 심의기준']).strip(),
             'evidence_type': str(item['증빙자료유형']).strip(),
             'alternative': str(item.get('대체키워드', '-') or '-').strip(),
         })
-    detail = json.dumps({'source': '미매칭 후보군 정규화', 'candidates': candidates},
-                        ensure_ascii=False, separators=(',', ':'))
-    if len(detail) > 4000:
-        raise ValueError('문의 내용은 4,000자까지 저장할 수 있습니다. 선택 후보 수를 줄여 다시 요청하세요.')
-    email = str(user.get('email', '')).strip()
-    if not email:
-        raise ValueError('로그인 계정 이메일을 확인할 수 없습니다.')
-    return {
-        'requester_id': user['id'], 'requester_email': email,
-        'kwd_no': '', 'keyword_name': f'정규화 후보 등록 ({len(candidates)}건)',
-        'request_type': 'new_keyword_registration', 'request_detail': detail,
-    }
+    return candidates
 
 
 def render_unmatched_candidate_pool():
@@ -4460,16 +4453,40 @@ def render_unmatched_candidate_pool():
     else:
         st.info("아직 후보가 없습니다. 텍스트 분석 또는 한국어 OCR을 실행하면 자동으로 수집됩니다.")
 
-    recommendations = st.session_state.get("unmatched_candidate_recommendations", [])
+    recommendations = list(st.session_state.get("unmatched_candidate_recommendations", []))
+    registration_requests = []
+    if cloud_enabled() and is_admin():
+        try:
+            registration_requests = SupabaseRepository().load_unmatched_registration_requests(
+                st.session_state.auth_session['access_token']
+            )
+        except (StorageError, PermissionError) as exc:
+            st.error(f"\ub4f1\ub85d \uc694\uccad\uc744 \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
+        else:
+            recommendations = [
+                {'term': row['term'], 'source_terms': row.get('source_terms', ''),
+                 'occurrences': row.get('occurrences', 0), 'request_id': row['id'],
+                 'request_date': row.get('created_at', ''),
+                 '상품카테고리': row.get('category', ''),
+                 '리스크 등급': row.get('risk', ''),
+                 '리스크 등급별 세부 심의기준': row.get('criteria', ''),
+                 '증빙자료유형': row.get('evidence_type', ''),
+                 '대체키워드': row.get('alternative', '-')}
+                for row in registration_requests
+            ] + recommendations
+            if registration_requests:
+                st.caption(f"\ub204\uc801\ub41c DB \ub4f1\ub85d \uc694\uccad: {len(registration_requests)}\uac74")
     if recommendations:
         st.markdown("#### 정규화 추천 및 분류 입력")
         recommendation_df = pd.DataFrame(recommendations)
         recommendation_df.insert(0, "승인", False)
-        recommendation_df["상품카테고리"] = ""
-        recommendation_df["리스크 등급"] = ""
-        recommendation_df["리스크 등급별 세부 심의기준"] = ""
-        recommendation_df["증빙자료유형"] = ""
-        recommendation_df["대체키워드"] = "-"
+        for column, default in {
+                "상품카테고리": "", "리스크 등급": "",
+                "리스크 등급별 세부 심의기준": "",
+                "증빙자료유형": "", "대체키워드": "-",
+                "request_id": "", "request_date": ""}.items():
+            if column not in recommendation_df:
+                recommendation_df[column] = default
         edited_recommendations = st.data_editor(
             recommendation_df,
             hide_index=True,
@@ -4485,8 +4502,11 @@ def render_unmatched_candidate_pool():
                 "리스크 등급별 세부 심의기준": st.column_config.SelectboxColumn("세부 심의기준", options=[""] + list(st.session_state.opt_details), required=True),
                 "증빙자료유형": st.column_config.SelectboxColumn("증빙자료유형", options=[""] + list(st.session_state.opt_evidences), required=True),
                 "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=list(st.session_state.opt_alt_terms), required=False),
+                "request_date": st.column_config.TextColumn("요청 접수일", disabled=True),
+                "request_id": None,
             },
-            key=f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}",
+            key=(f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
+                 + hashlib.sha256(','.join(row['id'] for row in registration_requests).encode()).hexdigest()[:12]),
         )
         if is_admin():
             if st.button("선택 후보 승인 및 DB 등록", type="primary", key="approve_unmatched_recommendations"):
@@ -4520,51 +4540,50 @@ def render_unmatched_candidate_pool():
                     if additions:
                         st.session_state.kw_df = pd.concat([st.session_state.kw_df, pd.DataFrame(additions)], ignore_index=True)
                         save_db(st.session_state.kw_df[get_db_cols()], Path(st.session_state.storage_path))
+                        request_ids = [str(value) for value in selected.get("request_id", []) if str(value).strip()]
+                        cleared = 0
+                        if request_ids:
+                            try:
+                                cleared = SupabaseRepository().delete_unmatched_registration_requests(
+                                    request_ids, st.session_state.auth_session['access_token']
+                                )
+                            except (StorageError, PermissionError, ValueError) as exc:
+                                st.error(f"DB \uc800\uc7a5\uc740 \uc644\ub8cc\ud588\uc9c0\ub9cc \uc694\uccad \ub300\uae30\uc5f4\uc744 \ube44\uc6b0\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
+                                return
                         st.session_state["unmatched_candidate_recommendations"] = []
                         st.session_state["unmatched_recommendation_version"] = int(
                             st.session_state.get("unmatched_recommendation_version", 0)
                         ) + 1
-                        st.success(f"승인된 키워드 {len(additions)}건을 DB에 등록했습니다.")
+                        st.success(f"승인된 키워드 {len(additions)}건을 DB에 등록하고 요청 {cleared}건을 정리했습니다.")
                         st.rerun()
                     else:
+                        request_ids = [str(value) for value in selected.get("request_id", []) if str(value).strip()]
+                        if request_ids:
+                            try:
+                                cleared = SupabaseRepository().delete_unmatched_registration_requests(
+                                    request_ids, st.session_state.auth_session['access_token']
+                                )
+                            except (StorageError, PermissionError, ValueError) as exc:
+                                st.error(f"\uc694\uccad \ub300\uae30\uc5f4\uc744 \ube44\uc6b0\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {exc}")
+                                return
+                            if cleared:
+                                st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\ub77c DB \ubcc0\uacbd \uc5c6\uc774 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
+                                st.rerun()
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
         else:
             if cloud_enabled():
-                if st.button('선택 후보 DB 등록요청', type='primary', key='request_unmatched_keyword_registration'):
-                    selected = edited_recommendations[edited_recommendations['승인'].fillna(False)].copy()
+                if st.button('\uc120\ud0dd \ud6c4\ubcf4 DB \ub4f1\ub85d\uc694\uccad', type='primary', key='request_unmatched_keyword_registration'):
+                    selected = edited_recommendations[edited_recommendations['\uc2b9\uc778'].fillna(False)].copy()
                     try:
-                        request_payload = build_unmatched_keyword_registration_request(
-                            selected, st.session_state.cloud_user
+                        candidates = build_unmatched_registration_candidates(selected)
+                        SupabaseRepository().submit_unmatched_registration_requests(
+                            candidates, st.session_state.auth_session['access_token']
                         )
-                    except (KeyError, ValueError) as exc:
-                        st.warning(str(exc))
+                    except (StorageError, PermissionError, KeyError, ValueError) as exc:
+                        st.error('DB \ub4f1\ub85d \uc694\uccad\uc744 \uc811\uc218\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uace0 \ub2e4\uc2dc \uc2dc\ub3c4\ud558\uc138\uc694.')
+                        st.caption(str(exc))
                     else:
-                        request_hash = hashlib.sha256(
-                            request_payload['request_detail'].encode('utf-8')
-                        ).hexdigest()
-                        submitted_hashes = st.session_state.setdefault(
-                            'unmatched_registration_request_hashes', set()
-                        )
-                        if request_hash in submitted_hashes:
-                            st.info('같은 후보 조합의 등록 요청이 이미 접수되어 있습니다.')
-                        else:
-                            try:
-                                repository = SupabaseRepository()
-                                request_row = repository.submit_keyword_request(
-                                    request_payload, st.session_state.auth_session['access_token']
-                                )
-                            except (StorageError, PermissionError, KeyError, ValueError) as exc:
-                                st.error('DB 등록 요청을 접수하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.')
-                                st.caption(str(exc))
-                            else:
-                                submitted_hashes.add(request_hash)
-                                st.success('관리자에게 DB 등록 요청을 접수했습니다. 키워드 문의 내역에서 처리 상태를 확인하세요.')
-                                try:
-                                    if repository.load_request_email_notifications():
-                                        send_keyword_request_email(request_row)
-                                except (NotificationConfigurationError, NotificationDeliveryError, StorageError) as exc:
-                                    st.warning('요청은 접수됐지만 관리자 이메일 알림을 보내지 못했습니다.')
-                                    st.caption(str(exc))
+                        st.success('\uad00\ub9ac\uc790 \uc815\uaddc\ud654 \ucd94\ucc9c \ubc0f \ubd84\ub958 \uc785\ub825\ub780\uc5d0 \uc694\uccad\uc774 \ub204\uc801\ub418\uc5c8\uc2b5\ub2c8\ub2e4.')
             else:
                 st.info("정규화 결과는 검토할 수 있지만, DB 등록은 관리자 승인 후 진행됩니다.")
 

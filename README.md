@@ -21,11 +21,12 @@ unmatched tables. Account identities, source documents and images are not stored
 there. Approved accounts share the same statistics after logout or restart.
 The candidate tab provides search, pages of 100 entries and a full CSV export.
 Each page can be selectively reviewed: select table rows for analysis, edit a selected expression, and remove selected rows from the review. These review edits do not change shared statistics; administrators can permanently delete shared expressions after confirmation.
-Members can submit selected, classified normalization recommendations to the administrator as a `신규키워드 등록요청`; the keyword database changes only after administrator review.
+Members can submit normalization candidates into a separate server-only registration queue. Administrators see the queue in the normalization and classification editor; approved rows are removed after the keyword database save. These requests do not create keyword inquiry history.
 Review-input reset preserves the accumulated data. Administrators can permanently
 delete selected expressions and their observations after confirmation; newly
 performed analyses can collect those expressions again.
 
+Registration queue upgrade: apply `supabase/unmatched_registration_requests_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
 Database upgrades: apply `supabase/persistent_unmatched_setup.sql` after the
 existing `supabase/unmatched_term_pool_setup.sql`. Fresh installations use
 `supabase/schema.sql`. All collection tables and RPCs remain server-only with

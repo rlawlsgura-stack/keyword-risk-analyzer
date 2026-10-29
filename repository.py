@@ -286,10 +286,65 @@ class SupabaseRepository:
         return self.rpc('unmatched_term_export')
 
     def delete_unmatched_terms(self, terms, access_token):
+        self._require_admin(access_token)
+        return self.rpc('delete_unmatched_terms', p_terms=list(terms))
+
+    def _require_admin(self, access_token):
         actor = self.user(access_token)
         if (actor.get('app_metadata') or {}).get('role') != 'admin':
-            raise PermissionError('미매칭 후보 영구 삭제는 관리자만 가능합니다.')
-        return self.rpc('delete_unmatched_terms', p_terms=list(terms))
+            raise PermissionError('\uad00\ub9ac\uc790\ub9cc \uc0ac\uc6a9\ud560 \uc218 \uc788\ub294 \uc791\uc5c5\uc785\ub2c8\ub2e4.')
+        return actor
+
+    def submit_unmatched_registration_requests(self, candidates, access_token):
+        self.user(access_token)
+        if not candidates or len(candidates) > 1000:
+            raise ValueError('Request between 1 and 1,000 candidates.')
+        rows = []
+        for candidate in candidates:
+            row = {
+                'term': str(candidate.get('term') or '').strip(),
+                'source_terms': str(candidate.get('source_terms') or '').strip(),
+                'occurrences': int(candidate.get('occurrences') or 0),
+                'category': str(candidate.get('category') or '').strip(),
+                'risk': str(candidate.get('risk') or '').strip(),
+                'criteria': str(candidate.get('criteria') or '').strip(),
+                'evidence_type': str(candidate.get('evidence_type') or '').strip(),
+                'alternative': str(candidate.get('alternative') or '-').strip() or '-',
+            }
+            if not 1 <= len(row['term']) <= 150 or len(row['source_terms']) > 500:
+                raise ValueError('Invalid candidate or source-term length.')
+            if any(not row[key] for key in ('category', 'risk', 'criteria', 'evidence_type')):
+                raise ValueError('Category and risk classification fields are required.')
+            if any(len(row[key]) > 500 for key in ('category', 'risk', 'criteria', 'evidence_type', 'alternative')):
+                raise ValueError('Classification field is too long.')
+            if not 0 <= row['occurrences'] <= 1_000_000_000:
+                raise ValueError('Invalid occurrence count.')
+            rows.append(row)
+        return self.request(
+            'POST', '/rest/v1/kra_unmatched_registration_requests', rows,
+            prefer='return=representation',
+        )
+
+    def load_unmatched_registration_requests(self, access_token):
+        self._require_admin(access_token)
+        return self.request(
+            'GET', '/rest/v1/kra_unmatched_registration_requests'
+            '?select=id,term,source_terms,occurrences,category,risk,criteria,evidence_type,alternative,created_at'
+            '&order=created_at.asc&limit=1000',
+        ) or []
+
+    def delete_unmatched_registration_requests(self, request_ids, access_token):
+        self._require_admin(access_token)
+        ids = list(dict.fromkeys(str(UUID(str(value))) for value in request_ids))
+        if not ids:
+            return 0
+        if len(ids) > 1000:
+            raise ValueError('At most 1,000 requests can be cleared at once.')
+        path = '/rest/v1/kra_unmatched_registration_requests?' + urlencode(
+            {'id': 'in.(' + ','.join(ids) + ')'}
+        )
+        rows = self.request('DELETE', path, prefer='return=representation') or []
+        return len(rows)
 
     def previous_analysis(self, analysis_id, actor, fingerprint=None):
         return self.rpc('get_analysis', p_id=analysis_id, p_actor=actor,

@@ -27,6 +27,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.repository.load_hits.return_value = pd.DataFrame(columns=['ts', 'kwd_no'])
         self.repository.load_keyword_requests.return_value = []
         self.repository.load_unmatched_terms.return_value = {'rows': [], 'total': 0}
+        self.repository.load_unmatched_registration_requests.return_value = []
         for patcher in [patch.dict(os.environ, {
                 'STORAGE_BACKEND': 'supabase', 'SUPABASE_URL': 'https://example.supabase.co',
                 'SUPABASE_SECRET_KEY': 'test-only'}),
@@ -55,6 +56,19 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertTrue(any('표에서 선택' in item.value for item in app.warning))
         self.assertEqual(self.repository.load_unmatched_terms.call_count, 2)
         self.repository.load_unmatched_terms.assert_called_with(0, 100, '')
+
+    def test_admin_sees_requests_submitted_by_other_accounts(self):
+        request_id = str(uuid4())
+        self.repository.load_unmatched_registration_requests.return_value = [{
+            'id': request_id, 'term': '\ubcf4\uc2b5', 'source_terms': '\ubcf4\uc2b5\ub825',
+            'occurrences': 3, 'category': '', 'risk': '', 'criteria': '',
+            'evidence_type': '', 'alternative': '-', 'created_at': '2026-10-28T00:00:00Z',
+        }]
+        app = self.app(role='admin', tab='\ubbf8\ub9e4\uce6d \ud6c4\ubcf4\uad70', version=306).run()
+        self.assertFalse(app.exception)
+        self.repository.load_unmatched_registration_requests.assert_called_once_with('test-token')
+        self.assertTrue(any('1\uac74' in item.value for item in app.caption))
+        self.assertTrue(any(button.key == 'approve_unmatched_recommendations' for button in app.button))
 
     def test_member_can_open_registration_request_action(self):
         app = self.app(tab='미매칭 후보군', version=306)
