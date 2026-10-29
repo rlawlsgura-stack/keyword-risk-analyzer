@@ -110,7 +110,7 @@ from app_config import configure, cloud_enabled
 _cached_repository = sys.modules.get('repository')
 if (_cached_repository is not None
         and not hasattr(getattr(_cached_repository, 'SupabaseRepository', None),
-                        'submit_new_keyword_registration_requests')):
+                        'reject_unmatched_registration_requests')):
     sys.modules.pop('repository', None)
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (

@@ -22,10 +22,10 @@ class KeywordRequestOwnerUITests(unittest.TestCase):
             exec(compile(entrypoint.read_bytes(), str(entrypoint), 'exec'),
                  {'__file__': str(entrypoint)})
             self.assertNotIn('repository', sys.modules)
-            run.assert_called_once_with(str(root / 'keyword_app2_fixed301.py'), run_name='__main__')
+            run.assert_called_once_with(str(root / 'keyword_app2_fixed306.py'), run_name='__main__')
 
     def app(self, user_id='owner', admin=False):
-        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed301.py').read_text(
+        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed306.py').read_text(
             encoding='utf-8')
         dialog = next(node for node in ast.parse(source).body
                       if isinstance(node, ast.FunctionDef)

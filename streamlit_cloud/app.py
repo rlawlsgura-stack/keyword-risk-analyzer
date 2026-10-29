@@ -21,6 +21,7 @@ if cached_repository is not None:
         "load_unmatched_registration_requests",
         "delete_unmatched_registration_requests",
         "submit_new_keyword_registration_requests",
+        "reject_unmatched_registration_requests",
     )
     repository_class = getattr(cached_repository, "SupabaseRepository", None)
     if (not cached_path or Path(cached_path).resolve() != expected_path
