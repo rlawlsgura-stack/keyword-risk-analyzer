@@ -366,6 +366,15 @@ class SupabaseRepository:
         rows = self.request('DELETE', path, prefer='return=representation') or []
         return len(rows)
 
+    def reject_unmatched_registration_requests(self, request_ids, access_token):
+        self._require_admin(access_token)
+        ids = list(dict.fromkeys(str(UUID(str(value))) for value in request_ids))
+        if not ids:
+            return 0
+        if len(ids) > 1000:
+            raise ValueError('At most 1,000 requests can be rejected at once.')
+        return self.rpc('reject_unmatched_registration_requests', p_ids=ids)
+
     def previous_analysis(self, analysis_id, actor, fingerprint=None):
         return self.rpc('get_analysis', p_id=analysis_id, p_actor=actor,
                         p_fingerprint=fingerprint)

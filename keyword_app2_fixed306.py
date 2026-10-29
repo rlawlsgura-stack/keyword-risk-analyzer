@@ -2873,6 +2873,7 @@ def _reset_ocr_analysis(candidates_key, editor_version_key, image_version_key, f
 
 def _clear_unmatched_review():
     st.session_state['unmatched_candidate_recommendations'] = []
+    st.session_state['unmatched_recommendation_hidden_ids'] = []
     st.session_state['unmatched_recommendation_version'] = int(
         st.session_state.get('unmatched_recommendation_version', 0)) + 1
     st.session_state.pop('unmatched_export_csv', None)
@@ -4370,6 +4371,15 @@ def clear_registered_unmatched_candidates(selected, access_token):
     return repository.delete_unmatched_registration_requests(request_ids, access_token) if request_ids else 0
 
 
+def unmatched_recommendation_id(row):
+    request_id = str(row.get('request_id') or '').strip()
+    if request_id:
+        return f'request:{request_id}'
+    identity = '\0'.join(str(row.get(key) or '').strip()
+                          for key in ('term', 'source_terms', 'occurrences'))
+    return 'local:' + hashlib.sha256(identity.encode()).hexdigest()
+
+
 def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
     if cloud_enabled():
@@ -4393,8 +4403,8 @@ def render_unmatched_candidate_pool():
         surface_rows = [{'surface_key': row['term_norm'], 'surface': row['display_term'],
                          'occurrences': row['total_occurrences'],
                          'analysis_count': row.get('analysis_count', 0),
-                         'status': ('신규키워드 등록요청'
-                                    if row.get('review_status') == 'registration_requested' else '')}
+                         'status': {'registration_requested': '신규키워드 등록요청',
+                                    'ignored': '관리자 거절'}.get(row.get('review_status'), '')}
                         for row in rows]
         st.caption(f'검색 결과 {total:,}종 · {page + 1}/{max(1, (total + 99) // 100)} 페이지')
         previous, following, refresh = st.columns(3)
@@ -4416,6 +4426,7 @@ def render_unmatched_candidate_pool():
                 if '상태' in export_frame:
                     export_frame['상태'] = export_frame['상태'].replace({
                         'registration_requested': '신규키워드 등록요청',
+                        'ignored': '관리자 거절',
                     })
                 for column in ('최초 수집 시각', '최근 수집 시각'):
                     if column in export_frame:
@@ -4509,6 +4520,7 @@ def render_unmatched_candidate_pool():
                     ]
                     recommendations = normalize_candidates(analysis_rows)
                     st.session_state["unmatched_candidate_recommendations"] = recommendations
+                    st.session_state['unmatched_recommendation_hidden_ids'] = []
                     st.session_state["unmatched_recommendation_version"] = int(
                         st.session_state.get("unmatched_recommendation_version", 0)
                     ) + 1
@@ -4547,10 +4559,18 @@ def render_unmatched_candidate_pool():
             ] + recommendations
             if registration_requests:
                 st.caption(f"\ub204\uc801\ub41c DB \ub4f1\ub85d \uc694\uccad: {len(registration_requests)}\uac74")
+    recommendations = [
+        {**row, 'recommendation_id': unmatched_recommendation_id(row)}
+        for row in recommendations
+    ]
+    hidden_recommendation_ids = set(
+        st.session_state.get('unmatched_recommendation_hidden_ids', []))
+    recommendations = [row for row in recommendations
+                       if row['recommendation_id'] not in hidden_recommendation_ids]
     if recommendations:
         st.markdown("#### 정규화 추천 및 분류 입력")
         recommendation_df = pd.DataFrame(recommendations)
-        recommendation_df.insert(0, "승인", False)
+        recommendation_df.insert(0, "선택", False)
         for column, default in {
                 "상품카테고리": "", "리스크 등급": "",
                 "리스크 등급별 세부 심의기준": "",
@@ -4564,7 +4584,7 @@ def render_unmatched_candidate_pool():
             width="stretch",
             num_rows="fixed",
             column_config={
-                "승인": st.column_config.CheckboxColumn("승인"),
+                "선택": st.column_config.CheckboxColumn("선택"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
                 "source_terms": st.column_config.TextColumn("원본 표현"),
                 "occurrences": st.column_config.NumberColumn("출현 횟수", disabled=True),
@@ -4576,16 +4596,27 @@ def render_unmatched_candidate_pool():
                 "request_date": st.column_config.TextColumn("요청 접수일", disabled=True),
                 "request_id": None,
                 "term_norm": None,
+                "recommendation_id": None,
             },
             key=(f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
-                 + hashlib.sha256(','.join(row['id'] for row in registration_requests).encode()).hexdigest()[:12]),
+                 + hashlib.sha256(','.join(row['recommendation_id'] for row in recommendations).encode()).hexdigest()[:12]),
         )
+        if st.button('선택 항목 현재 목록에서 제외', key='exclude_unmatched_recommendations'):
+            selected_for_exclusion = edited_recommendations[
+                edited_recommendations['선택'].fillna(False)]
+            if selected_for_exclusion.empty:
+                st.warning('목록에서 제외할 항목을 선택하세요.')
+            else:
+                hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
+                hidden.extend(selected_for_exclusion['recommendation_id'].astype(str).tolist())
+                st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                st.rerun()
         if is_admin():
             if st.button("선택 후보 승인 및 DB 등록", type="primary", key="approve_unmatched_recommendations"):
-                selected = edited_recommendations[edited_recommendations["승인"].fillna(False)].copy()
+                selected = edited_recommendations[edited_recommendations["선택"].fillna(False)].copy()
                 required = ["term", "상품카테고리", "리스크 등급", "리스크 등급별 세부 심의기준", "증빙자료유형"]
                 if selected.empty:
-                    st.warning("먼저 등록할 후보의 승인 상자를 선택하세요.")
+                    st.warning("먼저 등록할 후보를 선택하세요.")
                 elif selected[required].fillna("").astype(str).apply(lambda col: col.str.strip().eq("")).any().any():
                     st.warning("선택한 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.")
                 else:
@@ -4635,10 +4666,29 @@ def render_unmatched_candidate_pool():
                             st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\uc758 \ubbf8\ub9e4\uce6d \ud1b5\uacc4\uc640 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
                             st.rerun()
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
+            if st.button('선택 요청 거절', key='reject_unmatched_registration_requests'):
+                selected = edited_recommendations[
+                    edited_recommendations['선택'].fillna(False)]
+                request_ids = [str(value) for value in selected.get('request_id', [])
+                               if str(value).strip()]
+                if not request_ids:
+                    st.warning('거절할 등록 요청을 선택하세요.')
+                else:
+                    try:
+                        rejected = SupabaseRepository().reject_unmatched_registration_requests(
+                            request_ids, st.session_state.auth_session['access_token'])
+                    except (StorageError, PermissionError, ValueError) as exc:
+                        st.error(f'등록 요청을 거절하지 못했습니다: {exc}')
+                    else:
+                        hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
+                        hidden.extend(f'request:{request_id}' for request_id in request_ids)
+                        st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                        st.success(f'등록 요청 {rejected}건을 거절했습니다.')
+                        st.rerun()
         else:
             if cloud_enabled():
                 if st.button('\uc120\ud0dd \ud6c4\ubcf4 DB \ub4f1\ub85d\uc694\uccad', type='primary', key='request_unmatched_keyword_registration'):
-                    selected = edited_recommendations[edited_recommendations['\uc2b9\uc778'].fillna(False)].copy()
+                    selected = edited_recommendations[edited_recommendations['\uc120\ud0dd'].fillna(False)].copy()
                     try:
                         candidates = build_unmatched_registration_candidates(selected)
                         SupabaseRepository().submit_unmatched_registration_requests(
@@ -4648,7 +4698,11 @@ def render_unmatched_candidate_pool():
                         st.error('DB \ub4f1\ub85d \uc694\uccad\uc744 \uc811\uc218\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uace0 \ub2e4\uc2dc \uc2dc\ub3c4\ud558\uc138\uc694.')
                         st.caption(str(exc))
                     else:
+                        hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
+                        hidden.extend(selected['recommendation_id'].astype(str).tolist())
+                        st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
                         st.success('\uad00\ub9ac\uc790 \uc815\uaddc\ud654 \ucd94\ucc9c \ubc0f \ubd84\ub958 \uc785\ub825\ub780\uc5d0 \uc694\uccad\uc774 \ub204\uc801\ub418\uc5c8\uc2b5\ub2c8\ub2e4.')
+                        st.rerun()
             else:
                 st.info("정규화 결과는 검토할 수 있지만, DB 등록은 관리자 승인 후 진행됩니다.")
 

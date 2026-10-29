@@ -84,6 +84,20 @@ class UnmatchedPersistenceTests(unittest.TestCase):
         self.assertEqual(request.call_args.args[0], 'DELETE')
         self.assertIn('/rest/v1/kra_unmatched_registration_requests?', request.call_args.args[1])
 
+    def test_reject_registration_requests_requires_admin_and_uses_reject_rpc(self):
+        request_id = str(uuid4())
+        with patch.object(self.repository, 'user', return_value={
+                'app_metadata': {'role': 'member'}}), patch.object(self.repository, 'rpc') as rpc:
+            with self.assertRaises(PermissionError):
+                self.repository.reject_unmatched_registration_requests([request_id], 'member-token')
+            rpc.assert_not_called()
+        with patch.object(self.repository, 'user', return_value={
+                'app_metadata': {'role': 'admin'}}), \
+                patch.object(self.repository, 'rpc', return_value=1) as rpc:
+            self.assertEqual(self.repository.reject_unmatched_registration_requests(
+                [request_id], 'admin-token'), 1)
+        rpc.assert_called_once_with('reject_unmatched_registration_requests', p_ids=[request_id])
+
     def test_ocr_threshold_is_inclusive_and_keeps_repeated_lines(self):
         text = ocr_collection_text([{'lines': [
             {'text': '보습', 'confidence': 0.60},

@@ -80,6 +80,19 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertIsNotNone(app.button(key='request_unmatched_keyword_registration'))
         self.assertFalse(any(button.key == 'approve_unmatched_recommendations' for button in app.button))
 
+    def test_both_roles_can_exclude_recommendations_and_admin_can_reject_requests(self):
+        for role in ('member', 'admin'):
+            app = self.app(role=role, tab='미매칭 후보군', version=306)
+            app.session_state['unmatched_candidate_recommendations'] = [
+                {'term': '보습', 'source_terms': '보습', 'occurrences': 2}
+            ]
+            app.run()
+            self.assertFalse(app.exception)
+            self.assertTrue(any(button.key == 'exclude_unmatched_recommendations'
+                                for button in app.button))
+            self.assertEqual(any(button.key == 'reject_unmatched_registration_requests'
+                                 for button in app.button), role == 'admin')
+
     def test_sidebar_new_keyword_request_queues_terms_without_keyword_inquiry(self):
         self.repository.submit_new_keyword_registration_requests.return_value = 2
         app = self.app(version=306).run()
