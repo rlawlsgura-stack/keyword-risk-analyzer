@@ -6,7 +6,7 @@
 
 앱은 Supabase의 PostgreSQL, Data API와 Auth를 사용합니다. Realtime, Storage 버킷, Edge Functions와 Cron은 현재 앱에서 사용하지 않습니다. 프로젝트 참조는 `qmhdwfqcihpfjfvcjcwa`이고 API 주소는 `https://qmhdwfqcihpfjfvcjcwa.supabase.co`입니다.
 
-업무 데이터는 public 스키마의 `kra_` 테이블 5개에 저장합니다. 기존 `public.keywords`와 프로젝트 내 다른 앱 데이터는 이 앱의 신규 저장소에서 제외했습니다. JSONB 원장에는 현재 컬럼을 그대로 보존하고 정합성에 중요한 코드와 집계는 별도 물리 컬럼으로 관리합니다.
+업무 데이터는 public 스키마의 `kra_` 테이블 5개에 저장합니다. 기존 `public.keywords`는 이 앱이 참조하지 않는 레거시 테이블입니다. `secure_legacy_keywords_table` migration은 해당 테이블의 RLS를 켜고 `anon`·`authenticated` 권한을 회수합니다. JSONB 원장에는 현재 컬럼을 그대로 보존하고 정합성에 중요한 코드와 집계는 별도 물리 컬럼으로 관리합니다.
 
 ## ERD와 관계
 
@@ -201,7 +201,7 @@ Supabase의 safeupdate가 켜진 HTTP 세션에서도 실행되도록 대상 조
 | authenticated | 회수 | 회수 | 일반 사용자 JWT만으로 직접 DB 호출 불가 |
 | service_role | 부여 | 부여 | 앱 서버 전용, RLS 우회 |
 
-앱 전용 테이블 5개는 RLS가 켜져 있지만 사용자 정책은 만들지 않았습니다. 직접 클라이언트 접근을 막고 서버가 역할을 검사하는 의도된 구성입니다. 기존 `public.keywords`의 RLS 미설정은 관찰됐으며 이 앱 구성에서 수정하지 않았습니다. 신규 앱 테이블 권한과 기존 테이블 권한을 혼동하지 않습니다.
+앱 전용 테이블 5개는 RLS가 켜져 있지만 사용자 정책은 만들지 않았습니다. 직접 클라이언트 접근을 막고 서버가 역할을 검사합니다. 레거시 `public.keywords`도 RLS를 켜고 `anon`·`authenticated` 권한을 회수했으며, `service_role`은 서버 전용 권한을 갖습니다. 상세 SQL은 `supabase/secure_legacy_keywords.sql`입니다.
 
 ## 이관과 보존
 

@@ -1,5 +1,5 @@
 -- Server-only schema. Apply once in the selected Supabase project's SQL Editor.
--- Existing public.keywords and its permissions are intentionally untouched.
+-- Legacy public.keywords is outside this app schema; see secure_legacy_keywords.sql.
 create table public.kra_state (
     id boolean primary key default true check (id),
     revision bigint not null default 0,

@@ -91,7 +91,7 @@ render.yaml에는 keyword-risk-ui와 keyword-risk-api Web Service가 정의돼 �
 | 리포트가 바로 안 변함 | 기간, visible, 30초 캐시, 누적과 주간 구분 | 새로 불러오기 후 지표 확인 |
 | 전체 초기화 뒤 주간 표 유지 | 이벤트 보존 여부 | 정상 의미, 주간 제외는 별도 동작 |
 
-기존 public.keywords의 RLS 미설정과 기존 함수의 search_path 경고는 앱 전용 테이블과 구분해 담당자가 검토해야 합니다. 이 문서가 기존 테이블 사용처의 권한을 자동 변경하지 않습니다.
+기존 `public.keywords`는 `secure_legacy_keywords_table` migration에서 RLS를 켜고 `anon`·`authenticated` 권한을 회수했습니다. 기존 함수의 search_path 경고는 앱 전용 테이블과 구분해 담당자가 검토합니다.
 
 ## 백업과 복구 계획
 

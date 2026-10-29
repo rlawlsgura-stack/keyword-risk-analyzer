@@ -68,7 +68,7 @@ FastAPI ────┘
 - 조회수 초기화의 안전한 갱신 조건은 `fix_keyword_count_reset_safeupdate` migration으로 반영했습니다. 기존 별도 설치에는 `supabase/fix_reset_counts.sql`을 적용합니다.
 - 로컬 키워드 1,431개·13개 컬럼과 조회 로그 9,037건을 `kra_` 테이블에 복사했습니다.
 - 빈 누적 조회수 21건은 숫자 `0`으로 정규화했습니다. 나머지 원장 필드는 보존합니다.
-- 로컬 CSV, 기존 `public.keywords`, 다른 앱의 테이블과 권한은 변경하지 않았습니다.
+- 로컬 CSV와 다른 앱의 데이터는 변경하지 않았습니다. 이 앱이 쓰지 않는 레거시 `public.keywords`는 RLS를 켜고 `anon`·`authenticated` 권한을 회수했습니다.
 - 서버 비밀 키와 사용할 계정의 역할 지정은 운영자가 관리합니다. 화면은 Streamlit Community Cloud 사용을 기준으로 합니다.
 - `render.yaml`은 별도 서버 배포 예시입니다. RAG 모델 서버와 규정 검색 API의 추가 배포는 아직 수행하지 않았습니다.
 
@@ -191,15 +191,8 @@ API도 Supabase 사용자 access token을 Auth 서버에서 검증합니다. 서
 데이터 접근은 서버 비밀 키로만 실행합니다. 이 키는 RLS를 우회하므로 Streamlit/API의 권한 검사와 분석 소유자 검사가 접근 경계입니다.
 직접 클라이언트 접근을 허용하는 RLS 정책은 의도적으로 만들지 않았습니다.
 
-기존 `public.keywords`에는 RLS가 꺼져 있다는 보안 진단이 남아 있습니다.
-기존 사용처의 정책을 확인하기 전까지 이 작업에서 권한을 변경하지 않았습니다.
-다음은 기존 테이블 담당자가 접근 정책과 함께 검토할 SQL이며, 새 `kra_` 테이블 설치 과정에서는 실행하지 않습니다.
-
-```sql
-alter table public.keywords enable row level security;
--- 필요한 접근 범위에 맞는 GRANT와 RLS 정책을 함께 정의해야 합니다.
-```
-
+기존 `public.keywords`는 이 앱의 코드와 뷰에서 참조하지 않는 레거시 테이블입니다. `secure_legacy_keywords_table` migration을 적용해 RLS를 켰고 `anon`·`authenticated`의 읽기·쓰기 권한을 회수했으며, 서버 역할 권한은 유지했습니다.
+기존 프로젝트에서 수동 적용할 SQL은 [`supabase/secure_legacy_keywords.sql`](supabase/secure_legacy_keywords.sql)에 있습니다. 이 테이블을 직접 쓰는 다른 앱이 있다면 그 앱의 접근 방식에 맞는 정책을 따로 정해야 합니다.
 [Supabase RLS 문서](https://supabase.com/docs/guides/database/postgres/row-level-security)
 
 ## 별도 API
