@@ -1,3 +1,7 @@
+## FIXED303 - Keep the analysis checkbox column narrow
+
+- Set the unmatched-candidate analysis checkbox column to Streamlit's small width.
+
 ## FIXED302 - Select and edit unmatched candidates
 
 - Add checkboxes to choose which current-page unmatched candidates to analyze.
