@@ -13,6 +13,7 @@
 ## FIXED299 - Reorder report and legal review tabs
 
 - Place `심의 Chat-bot` before `분석리포트` in the main navigation.
+- Correct the page title and sidebar version label to `FIXED299`.
 
 ## FIXED298 - Rename legal review chat
 
