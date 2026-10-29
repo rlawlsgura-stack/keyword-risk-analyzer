@@ -1,3 +1,8 @@
+## FIXED302 - Select and edit unmatched candidates
+
+- Add checkboxes to choose which current-page unmatched candidates to analyze.
+- Allow candidate expression edits and row removal from the review table without changing shared aggregate statistics.
+
 ## FIXED301 - Edit and delete each numbered inquiry
 
 - Add owner-only edit and confirmed deletion controls to every numbered user inquiry and follow-up. Deletion removes only that inquiry and its connected replies.

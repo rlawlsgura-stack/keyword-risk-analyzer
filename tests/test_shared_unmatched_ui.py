@@ -35,15 +35,25 @@ class SharedUnmatchedUITests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def app(self, role='member', tab='스크립트 분석'):
+    def app(self, role='member', tab='스크립트 분석', version=297):
         self.repository.user.return_value = {
             'id': str(uuid4()), 'email': 'test@example.test', 'app_metadata': {'role': role}}
-        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed297.py'),
+        app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / f'keyword_app2_fixed{version}.py'),
                                 default_timeout=30)
         app.session_state['auth_session'] = {'access_token': 'test-token', 'expires_at': 9999999999}
         app.session_state['main_app_tabs'] = tab
         app.session_state['match_mode'] = MATCH_MODES['exact']
         return app
+
+    def test_candidate_analysis_requires_an_explicit_selection(self):
+        self.seed_shared_row()
+        app = self.app(tab='미매칭 후보군', version=302).run()
+        self.assertFalse(app.exception)
+        app.button(key='analyze_unmatched_candidate_pool').click().run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any('체크박스를 선택' in item.value for item in app.warning))
+        self.assertEqual(self.repository.load_unmatched_terms.call_count, 2)
+        self.repository.load_unmatched_terms.assert_called_with(0, 100, '')
 
     def seed_shared_row(self):
         row = {'term_norm': '보습', 'display_term': '보습', 'total_occurrences': 3,

@@ -1,11 +1,11 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED301** (`keyword_app2_fixed301.py`).
+Current local development version: **FIXED302** (`keyword_app2_fixed302.py`).
 `run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed301.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed302.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
 
 ### Shared unmatched-expression collection
 
@@ -20,6 +20,7 @@ Only expressions, counts, timestamps and anonymous retry IDs are stored in the
 unmatched tables. Account identities, source documents and images are not stored
 there. Approved accounts share the same statistics after logout or restart.
 The candidate tab provides search, pages of 100 entries and a full CSV export.
+Each page can be selectively reviewed: edit candidate expressions, remove rows from the analysis table, and analyze only checked rows. These review edits do not change shared statistics; administrators can permanently delete shared expressions after confirmation.
 Review-input reset preserves the accumulated data. Administrators can permanently
 delete selected expressions and their observations after confirmation; newly
 performed analyses can collect those expressions again.
