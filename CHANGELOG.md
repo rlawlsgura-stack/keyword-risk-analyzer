@@ -1,3 +1,8 @@
+## FIXED306 - Request administrator registration of normalized candidates
+
+- Rename the candidate normalization action to `선택후보군 정규화 작업`.
+- Add a member-facing DB registration request action that submits selected, classified recommendations through the existing keyword request workflow; it does not write directly to the keyword database.
+
 ## FIXED305 - Use row selection without a duplicate checkbox column
 
 - Remove the extra candidate checkbox column and use Streamlit table row selection for analysis.

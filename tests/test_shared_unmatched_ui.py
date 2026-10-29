@@ -47,7 +47,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
 
     def test_candidate_analysis_requires_an_explicit_selection(self):
         self.seed_shared_row()
-        app = self.app(tab='미매칭 후보군', version=305).run()
+        app = self.app(tab='미매칭 후보군', version=306).run()
         self.assertFalse(app.exception)
         self.assertTrue(app.dataframe)
         app.button(key='analyze_unmatched_candidate_pool').click().run()
@@ -55,6 +55,16 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertTrue(any('표에서 선택' in item.value for item in app.warning))
         self.assertEqual(self.repository.load_unmatched_terms.call_count, 2)
         self.repository.load_unmatched_terms.assert_called_with(0, 100, '')
+
+    def test_member_can_open_registration_request_action(self):
+        app = self.app(tab='미매칭 후보군', version=306)
+        app.session_state['unmatched_candidate_recommendations'] = [
+            {'term': '보습', 'source_terms': '보습', 'occurrences': 3}
+        ]
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertIsNotNone(app.button(key='request_unmatched_keyword_registration'))
+        self.assertFalse(any(button.key == 'approve_unmatched_recommendations' for button in app.button))
 
     def seed_shared_row(self):
         row = {'term_norm': '보습', 'display_term': '보습', 'total_occurrences': 3,
