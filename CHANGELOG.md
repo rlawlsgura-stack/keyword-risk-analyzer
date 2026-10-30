@@ -1,3 +1,7 @@
+## FIXED324 - Pin the OCR selection column
+
+- Pin the OCR checkbox column at 56 pixels so it stays narrow and its row checkboxes remain aligned with the header checkbox.
+
 ## FIXED323 - Fix the OCR selection column width
 
 - Fix the first column at 56 pixels and center the header checkbox to match the row checkboxes.
