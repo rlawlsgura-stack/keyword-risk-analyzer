@@ -1,3 +1,8 @@
+## FIXED307 - Restore login after page refresh
+
+- Persist only the Supabase refresh token in the current browser tab's session storage and restore the authenticated session after a page reload.
+- Clear the stored token on logout and refresh the access token five minutes before expiration (the default access-token lifetime remains about one hour).
+
 ## FIXED306 - Request administrator registration of normalized candidates
 
 - Rename the candidate normalization action to `선택후보군 정규화 작업`.

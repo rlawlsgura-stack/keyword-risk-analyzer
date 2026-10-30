@@ -80,6 +80,21 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertIsNotNone(app.button(key='request_unmatched_keyword_registration'))
         self.assertFalse(any(button.key == 'approve_unmatched_recommendations' for button in app.button))
 
+    def test_refresh_restores_session_from_browser_refresh_token(self):
+        self.repository.refresh.return_value = {
+            'access_token': 'restored-access-token', 'refresh_token': 'rotated-refresh-token',
+            'expires_at': 9999999999,
+        }
+        app = self.app(version=307)
+        del app.session_state['auth_session']
+        app.session_state['cloud_auth_session_storage'] = {
+            'refresh_token': 'stored-refresh-token', 'checked': True,
+        }
+        app.run()
+        self.assertFalse(app.exception)
+        self.repository.refresh.assert_called_once_with('stored-refresh-token')
+        self.repository.user.assert_called_with('restored-access-token')
+
     def test_both_roles_can_exclude_recommendations_and_admin_can_reject_requests(self):
         for role in ('member', 'admin'):
             app = self.app(role=role, tab='미매칭 후보군', version=306)

@@ -34,6 +34,16 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
         self.assertEqual(request.call_args.args[:2], (
             'POST', 'https://project.example.supabase.co/rest/v1/kra_keyword_requests'))
 
+    def test_refresh_rotates_the_supabase_session_with_refresh_grant(self):
+        refreshed = {'access_token': 'new-access', 'refresh_token': 'new-refresh'}
+        with patch('repository.requests.request', return_value=self.response(refreshed)) as request:
+            result = SupabaseRepository().refresh('old-refresh')
+
+        self.assertEqual(result, refreshed)
+        self.assertEqual(request.call_args.args[:2], (
+            'POST', 'https://project.example.supabase.co/auth/v1/token?grant_type=refresh_token'))
+        self.assertEqual(request.call_args.kwargs['json'], {'refresh_token': 'old-refresh'})
+
     def test_request_list_and_notification_settings_use_user_jwt(self):
         with patch('repository.requests.request', side_effect=[
             self.response([]), self.response([{'email_notifications_enabled': True}]),
