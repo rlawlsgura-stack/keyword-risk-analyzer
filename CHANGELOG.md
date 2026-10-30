@@ -1,3 +1,7 @@
+## FIXED312 - Make table row deletion persistent for admins
+
+- Make the table's admin delete action call the database deletion operation; non-admin users can still hide selected rows for the current view.
+
 ## FIXED311 - Keep deleted unmatched terms suppressed
 
 - Persist administrator deletions so future script analyses do not add those normalized terms back to the shared candidate pool.
