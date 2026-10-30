@@ -118,7 +118,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
                                  for button in app.button), role == 'admin')
 
     def test_latest_recommendation_table_header_selects_and_clears_every_row(self):
-        app = self.app(tab='미매칭 후보군', version=318)
+        app = self.app(tab='미매칭 후보군', version=319)
         app.session_state['unmatched_candidate_recommendations'] = [
             {'term': '보습', 'source_terms': '보습', 'occurrences': 2},
             {'term': '진정', 'source_terms': '진정', 'occurrences': 1},
@@ -133,6 +133,13 @@ class SharedUnmatchedUITests(unittest.TestCase):
         select_all.uncheck().run()
         self.assertFalse(app.exception)
         self.assertEqual(app.session_state['unmatched_recommendation_selected_ids'], [])
+
+    def test_keyword_editor_has_select_all_header_checkbox(self):
+        app = self.app(role='admin', tab='키워드 관리', version=319).run()
+        self.assertFalse(app.exception)
+        app.checkbox(key='keyword_editor_select_all_dropdown').check().run()
+        self.assertFalse(app.exception)
+        self.assertTrue(all(row['선택'] for row in app.session_state['keyword_editor_draft_dropdown']))
 
     def test_sidebar_new_keyword_request_queues_terms_without_keyword_inquiry(self):
         self.repository.submit_new_keyword_registration_requests.return_value = 2

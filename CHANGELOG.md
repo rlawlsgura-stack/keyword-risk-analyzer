@@ -1,3 +1,8 @@
+## FIXED319 - Add selection checkboxes to every table
+
+- Give every read-only table a left-side multi-row checkbox selector with header select-all and clear.
+- Add first-column checkboxes and bulk select/clear controls to editable tables, while preserving unsaved edits when toggling the keyword database table.
+
 ## FIXED318 - Add table-wide selection and launch the newest app
 
 - Add a header-level select-all checkbox for normalization recommendations and move the OCR selection checkbox to the first column.
