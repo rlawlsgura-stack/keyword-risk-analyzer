@@ -1,3 +1,7 @@
+## FIXED321 - Put the OCR bulk selector in the table header
+
+- Overlay the select-all checkbox in the OCR table's first-column header and hide the text label.
+
 ## FIXED320 - Make the OCR bulk selector checkbox-only
 
 - Remove the OCR select-all label and help icon so the control is a single checkbox aligned above the table's leftmost selection column.
