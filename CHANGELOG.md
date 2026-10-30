@@ -1,3 +1,7 @@
+## FIXED320 - Make the OCR bulk selector checkbox-only
+
+- Remove the OCR select-all label and help icon so the control is a single checkbox aligned above the table's leftmost selection column.
+
 ## FIXED319 - Add selection checkboxes to every table
 
 - Give every read-only table a left-side multi-row checkbox selector with header select-all and clear.
