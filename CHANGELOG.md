@@ -1,3 +1,7 @@
+## FIXED309 - Reload stale repository sort signature
+
+- Detect and evict a cached repository module that predates the unmatched-term sort argument, avoiding Streamlit Cloud reload failures.
+
 ## FIXED308 - Sort unmatched candidates by registration order
 
 - Add a list sort control for frequency or registration time; registration order uses the earliest collection timestamp across the full search result before pagination.

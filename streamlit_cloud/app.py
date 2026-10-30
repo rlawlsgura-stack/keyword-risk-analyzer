@@ -1,5 +1,6 @@
-"""Streamlit Community Cloud entrypoint for FIXED308."""
+"""Streamlit Community Cloud entrypoint for FIXED309."""
 from pathlib import Path
+import inspect
 import runpy
 import sys
 
@@ -24,8 +25,15 @@ if cached_repository is not None:
         "reject_unmatched_registration_requests",
     )
     repository_class = getattr(cached_repository, "SupabaseRepository", None)
+    try:
+        repository_supports_sort = "sort" in inspect.signature(
+            repository_class.load_unmatched_terms
+        ).parameters
+    except (AttributeError, TypeError, ValueError):
+        repository_supports_sort = False
     if (not cached_path or Path(cached_path).resolve() != expected_path
-            or any(not hasattr(repository_class, method) for method in required_methods)):
+            or any(not hasattr(repository_class, method) for method in required_methods)
+            or not repository_supports_sort):
         sys.modules.pop("repository", None)
 
-runpy.run_path(str(ROOT / "keyword_app2_fixed308.py"), run_name="__main__")
+runpy.run_path(str(ROOT / "keyword_app2_fixed309.py"), run_name="__main__")
