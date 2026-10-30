@@ -1,3 +1,7 @@
+## FIXED313 - Collect OCR candidates from preview analysis
+
+- Collect approved OCR candidate text when preview analysis runs, preserve repeated recognized lines in occurrence counts, and avoid collecting before candidate approval.
+
 ## FIXED312 - Make table row deletion persistent for admins
 
 - Make the table's admin delete action call the database deletion operation; non-admin users can still hide selected rows for the current view.
