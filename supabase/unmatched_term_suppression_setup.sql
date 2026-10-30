@@ -1,4 +1,4 @@
--- Keep administrator-deleted unmatched terms out of future automatic collections.
+-- Historical migration; superseded by unmatched_term_reenable_collection_setup.sql.
 create table if not exists public.kra_unmatched_term_suppressions (
     term_norm text primary key check (char_length(btrim(term_norm)) between 1 and 100),
     deleted_at timestamptz not null default now()

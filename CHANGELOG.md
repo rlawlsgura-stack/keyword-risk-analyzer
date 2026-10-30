@@ -1,3 +1,7 @@
+## FIXED314 - Allow collection after deletion
+
+- Deletion removes existing candidate history but allows a new OCR or text analysis to collect the expression again; old event retries remain idempotent.
+
 ## FIXED313 - Collect OCR candidates from preview analysis
 
 - Collect approved OCR candidate text when preview analysis runs, preserve repeated recognized lines in occurrence counts, and avoid collecting before candidate approval.
