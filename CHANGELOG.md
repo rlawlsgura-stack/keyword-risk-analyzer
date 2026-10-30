@@ -1,3 +1,7 @@
+## FIXED311 - Keep deleted unmatched terms suppressed
+
+- Persist administrator deletions so future script analyses do not add those normalized terms back to the shared candidate pool.
+
 ## FIXED310 - Sort unmatched candidates from table headers
 
 - Remove the separate unmatched-expression sort selector and add a sortable registration timestamp column to the candidate table.

@@ -11,6 +11,16 @@ insert into public.kra_unmatched_collection_events(analysis_id)
     select distinct analysis_id from public.kra_unmatched_term_observations
     on conflict do nothing;
 
+create table public.kra_unmatched_term_suppressions (
+    term_norm text primary key check (char_length(btrim(term_norm)) between 1 and 100),
+    deleted_at timestamptz not null default now()
+);
+alter table public.kra_unmatched_term_suppressions enable row level security;
+revoke all on public.kra_unmatched_term_suppressions from public, anon, authenticated;
+grant select, insert on public.kra_unmatched_term_suppressions to service_role;
+revoke update, delete, truncate, references, trigger
+    on public.kra_unmatched_term_suppressions from service_role;
+
 create or replace function public.kra_collect_unmatched_terms(p_id uuid, p_terms jsonb)
 returns integer
 language plpgsql security invoker set search_path = '' as $$
@@ -41,6 +51,10 @@ begin
         select p_id, term_norm, sum(occurrences)::integer
         from jsonb_to_recordset(p_terms)
             as item(term_norm text, display_term text, occurrences integer)
+        where not exists (
+            select 1 from public.kra_unmatched_term_suppressions as suppressed
+            where suppressed.term_norm = item.term_norm
+        )
         group by term_norm;
 
     insert into public.kra_unmatched_term_candidates as candidate
@@ -48,6 +62,10 @@ begin
         select term_norm, min(display_term), sum(occurrences)::bigint, 1
         from jsonb_to_recordset(p_terms)
             as item(term_norm text, display_term text, occurrences integer)
+        where not exists (
+            select 1 from public.kra_unmatched_term_suppressions as suppressed
+            where suppressed.term_norm = item.term_norm
+        )
         group by term_norm order by term_norm
         on conflict (term_norm) do update set
             total_occurrences = candidate.total_occurrences + excluded.total_occurrences,
@@ -112,6 +130,9 @@ begin
         raise exception 'Invalid unmatched-term selection' using errcode = '22023';
     end if;
     perform pg_catalog.pg_advisory_xact_lock(193728174, 1);
+    insert into public.kra_unmatched_term_suppressions(term_norm)
+        select distinct term from unnest(p_terms) as selected(term)
+        on conflict do nothing;
     delete from public.kra_unmatched_term_observations where term_norm = any(p_terms);
     delete from public.kra_unmatched_term_candidates where term_norm = any(p_terms);
     get diagnostics v_count = row_count;
