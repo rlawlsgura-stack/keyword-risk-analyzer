@@ -1,3 +1,7 @@
+## FIXED310 - Sort unmatched candidates from table headers
+
+- Remove the separate unmatched-expression sort selector and add a sortable registration timestamp column to the candidate table.
+
 ## FIXED309 - Reload stale repository sort signature
 
 - Detect and evict a cached repository module that predates the unmatched-term sort argument, avoiding Streamlit Cloud reload failures.
