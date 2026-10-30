@@ -204,20 +204,16 @@ class SharedUnmatchedUITests(unittest.TestCase):
             self.assertEqual(self.repository.collect_unmatched_terms.call_count, 2)
             self.assertNotEqual(self.repository.collect_unmatched_terms.call_args.args[0], first_id)
 
-    def test_admin_deletion_requires_confirmation_and_uses_authenticated_token(self):
+    def test_admin_row_deletion_requires_confirmation(self):
         self.seed_shared_row()
-        def delete(terms, token):
-            self.repository.load_unmatched_terms.return_value = {'rows': [], 'total': 0}
-            return 1
-        self.repository.delete_unmatched_terms.side_effect = delete
-        app = self.app(role='admin', tab='미매칭 후보군').run()
+        app = self.app(role='admin', tab='미매칭 후보군', version=316).run()
         self.assertFalse(app.exception)
-        self.assertTrue(app.button(key='delete_unmatched_terms').disabled)
-        app.multiselect(key='unmatched_delete_terms_0').set_value(['보습']).run()
-        app.checkbox(key='confirm_unmatched_delete').check().run()
-        app.button(key='delete_unmatched_terms').click().run()
-        self.assertFalse(app.exception)
-        self.repository.delete_unmatched_terms.assert_called_once_with(['보습'], 'test-token')
+        self.assertTrue(app.button(key='delete_selected_unmatched_review_rows').disabled)
+        self.assertTrue(app.checkbox(key='confirm_selected_unmatched_delete'))
+        self.assertNotIn('delete_unmatched_terms', [button.key for button in app.button])
+        self.assertFalse(any(key.startswith('unmatched_delete_terms_') for key in
+                             [multiselect.key for multiselect in app.multiselect]))
+        self.repository.delete_unmatched_terms.assert_not_called()
 
 
 if __name__ == '__main__':

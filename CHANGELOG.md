@@ -1,3 +1,7 @@
+## FIXED316 - Remove duplicate unmatched deletion controls
+
+- Keep the table row-selection deletion action and remove the separate administrator deletion expander.
+
 ## FIXED315 - Append OCR text to existing analysis input
 
 - Preserve the current script, add a blank line, then append approved OCR text before preview analysis; reject combined input over 20,000 characters without replacing it.
