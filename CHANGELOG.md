@@ -1,3 +1,7 @@
+## FIXED325 - Release the latest app version
+
+- Publish the current OCR selection layout and shared local/cloud launcher as FIXED325.
+
 ## FIXED324 - Pin the OCR selection column
 
 - Pin the OCR checkbox column at 56 pixels so it stays narrow and its row checkboxes remain aligned with the header checkbox.
