@@ -22,7 +22,12 @@ class KeywordRequestOwnerUITests(unittest.TestCase):
             exec(compile(entrypoint.read_bytes(), str(entrypoint), 'exec'),
                  {'__file__': str(entrypoint)})
             self.assertNotIn('repository', sys.modules)
-            run.assert_called_once_with(str(root / 'keyword_app2_fixed306.py'), run_name='__main__')
+            latest = max(
+                (path for path in root.glob('keyword_app2_fixed*.py')
+                 if path.stem.removeprefix('keyword_app2_fixed').isdigit()),
+                key=lambda path: int(path.stem.removeprefix('keyword_app2_fixed')),
+            )
+            run.assert_called_once_with(str(latest), run_name='__main__')
 
     def app(self, user_id='owner', admin=False):
         source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed306.py').read_text(

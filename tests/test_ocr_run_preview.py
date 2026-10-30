@@ -7,7 +7,7 @@ from streamlit.testing.v1 import AppTest
 
 class OCRRunPreviewTests(unittest.TestCase):
     def test_scan_is_ready_immediately_after_ocr_click(self):
-        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed297.py').read_text(
+        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed318.py').read_text(
             encoding='utf-8')
         names = {
             '_ocr_normalize', '_ocr_select_options', '_ocr_options_for_column',
@@ -74,6 +74,13 @@ def render_text_selectable_image(*args, **kwargs):
         self.assertEqual(app.session_state['main_app_tabs'], '이미지 OCR분석')
         self.assertEqual(len(app.session_state['ocr_keyword_candidates']), 1)
         self.assertEqual(len(app.session_state['ocr_keyword_uploaded_files']), 1)
+
+        version = app.session_state['ocr_keyword_editor_version']
+        app.checkbox(key=f'ocr_keyword_select_all_{version}').uncheck().run()
+        self.assertFalse(app.session_state['ocr_keyword_candidates'][0]['approved'])
+        version = app.session_state['ocr_keyword_editor_version']
+        app.checkbox(key=f'ocr_keyword_select_all_{version}').check().run()
+        self.assertTrue(app.session_state['ocr_keyword_candidates'][0]['approved'])
 
 
 if __name__ == '__main__':

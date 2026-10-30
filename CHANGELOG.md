@@ -1,3 +1,8 @@
+## FIXED318 - Add table-wide selection and launch the newest app
+
+- Add a header-level select-all checkbox for normalization recommendations and move the OCR selection checkbox to the first column.
+- Make the local, Streamlit Community Cloud, and Render launchers all choose the highest numbered `keyword_app2_fixed###.py` file.
+
 ## FIXED317 - Reorder unmatched candidate columns
 
 - Show unmatched expression, registration time, processing status, detection count including duplicates, and analysis count in that order.

@@ -117,6 +117,23 @@ class SharedUnmatchedUITests(unittest.TestCase):
             self.assertEqual(any(button.key == 'reject_unmatched_registration_requests'
                                  for button in app.button), role == 'admin')
 
+    def test_latest_recommendation_table_header_selects_and_clears_every_row(self):
+        app = self.app(tab='미매칭 후보군', version=318)
+        app.session_state['unmatched_candidate_recommendations'] = [
+            {'term': '보습', 'source_terms': '보습', 'occurrences': 2},
+            {'term': '진정', 'source_terms': '진정', 'occurrences': 1},
+        ]
+        app.run()
+        self.assertFalse(app.exception)
+        select_all = next(item for item in app.checkbox if item.label == '선택')
+        select_all.check().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(len(app.session_state['unmatched_recommendation_selected_ids']), 2)
+        select_all = next(item for item in app.checkbox if item.label == '선택')
+        select_all.uncheck().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.session_state['unmatched_recommendation_selected_ids'], [])
+
     def test_sidebar_new_keyword_request_queues_terms_without_keyword_inquiry(self):
         self.repository.submit_new_keyword_registration_requests.return_value = 2
         app = self.app(version=306).run()

@@ -1,4 +1,4 @@
-"""Streamlit Community Cloud entrypoint for FIXED317."""
+"""Streamlit entrypoint that always runs the newest numbered app."""
 from pathlib import Path
 import inspect
 import runpy
@@ -36,4 +36,11 @@ if cached_repository is not None:
             or not repository_supports_sort):
         sys.modules.pop("repository", None)
 
-runpy.run_path(str(ROOT / "keyword_app2_fixed317.py"), run_name="__main__")
+apps = [
+    (int(path.stem.removeprefix("keyword_app2_fixed")), path)
+    for path in ROOT.glob("keyword_app2_fixed*.py")
+    if path.stem.removeprefix("keyword_app2_fixed").isdigit()
+]
+if not apps:
+    raise FileNotFoundError("No keyword_app2_fixed###.py application file was found")
+runpy.run_path(str(max(apps, key=lambda item: item[0])[1]), run_name="__main__")
