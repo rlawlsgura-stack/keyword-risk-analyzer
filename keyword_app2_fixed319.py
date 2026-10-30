@@ -5403,4 +5403,3 @@ if 'regulation_chat' in tabs:
     with tabs['regulation_chat']:
         if tabs['regulation_chat'].open:
             render_regulation_chat_tab()
-
