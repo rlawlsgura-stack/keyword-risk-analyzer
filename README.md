@@ -1,11 +1,11 @@
 # Keyword Risk Analyzer
 
 Current local development version: **FIXED323** (`keyword_app2_fixed323.py`).
-`run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
+`run_latest.ps1` checks Supabase Auth connectivity first, then starts the same `streamlit_cloud/app.py` entrypoint used by Streamlit Cloud and Render. That shared entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-The local launcher and Streamlit entrypoint (`streamlit_cloud/app.py`) both select the highest numbered `keyword_app2_fixed###.py` app file. Local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
+The Streamlit Community Cloud app file path must be `streamlit_cloud/app.py` on branch `main`; do not point it at a numbered app file. Local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
 
 ```powershell
 py -3.13 -m venv .venv-ocr313

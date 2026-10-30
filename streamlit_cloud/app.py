@@ -43,4 +43,6 @@ apps = [
 ]
 if not apps:
     raise FileNotFoundError("No keyword_app2_fixed###.py application file was found")
-runpy.run_path(str(max(apps, key=lambda item: item[0])[1]), run_name="__main__")
+latest_app = max(apps, key=lambda item: item[0])[1]
+print(f"Launching latest application: {latest_app.name}")
+runpy.run_path(str(latest_app), run_name="__main__")
