@@ -1,3 +1,7 @@
+## FIXED317 - Reorder unmatched candidate columns
+
+- Show unmatched expression, registration time, processing status, detection count including duplicates, and analysis count in that order.
+
 ## FIXED316 - Remove duplicate unmatched deletion controls
 
 - Keep the table row-selection deletion action and remove the separate administrator deletion expander.
