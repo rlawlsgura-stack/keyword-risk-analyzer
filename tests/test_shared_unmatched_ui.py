@@ -185,7 +185,8 @@ class SharedUnmatchedUITests(unittest.TestCase):
         ] + [{'text': '제외어', 'confidence': 0.599, 'bbox': [10, 40, 100, 60]}]
         with patch.dict(sys.modules, {'paddleocr': SimpleNamespace(PaddleOCR=Mock(return_value=object()))}), \
                 patch('ocr_keyword_import.extract_text_lines', return_value=rows):
-            app = self.app(tab='이미지 OCR분석', version=313)
+            app = self.app(tab='이미지 OCR분석', version=315)
+            app.session_state['analysis_input_text'] = '필러'
             app.session_state['ocr_keyword_uploaded_files'] = [
                 SimpleNamespace(name='test.png', size=len(content), getvalue=lambda: content)]
             app.run()
@@ -194,6 +195,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
             self.repository.collect_unmatched_terms.assert_not_called()
             app.button(key='ocr_keyword_preview_analysis').click().run()
             self.assertFalse(app.exception)
+            self.assertEqual(app.session_state['analysis_input_text'], '필러\n\n필러 보습\n필러 보습')
             self.repository.collect_unmatched_terms.assert_called_once()
             first_id, terms = self.repository.collect_unmatched_terms.call_args.args
             self.assertEqual(terms, [{'surface_key': '보습', 'surface': '보습', 'occurrences': 2}])

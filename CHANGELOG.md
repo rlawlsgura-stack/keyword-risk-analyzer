@@ -1,3 +1,7 @@
+## FIXED315 - Append OCR text to existing analysis input
+
+- Preserve the current script, add a blank line, then append approved OCR text before preview analysis; reject combined input over 20,000 characters without replacing it.
+
 ## FIXED314 - Allow collection after deletion
 
 - Deletion removes existing candidate history but allows a new OCR or text analysis to collect the expression again; old event retries remain idempotent.
