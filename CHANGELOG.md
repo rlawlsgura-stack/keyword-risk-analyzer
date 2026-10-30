@@ -1,3 +1,7 @@
+## FIXED322 - Keep the OCR selection column compact
+
+- Set the OCR selection column to the smallest width and position its header checkbox in normal document flow so it moves with the table.
+
 ## FIXED321 - Put the OCR bulk selector in the table header
 
 - Overlay the select-all checkbox in the OCR table's first-column header and hide the text label.

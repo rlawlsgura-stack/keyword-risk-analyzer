@@ -118,7 +118,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
                                  for button in app.button), role == 'admin')
 
     def test_latest_recommendation_table_header_selects_and_clears_every_row(self):
-        app = self.app(tab='미매칭 후보군', version=321)
+        app = self.app(tab='미매칭 후보군', version=322)
         app.session_state['unmatched_candidate_recommendations'] = [
             {'term': '보습', 'source_terms': '보습', 'occurrences': 2},
             {'term': '진정', 'source_terms': '진정', 'occurrences': 1},
@@ -135,7 +135,7 @@ class SharedUnmatchedUITests(unittest.TestCase):
         self.assertEqual(app.session_state['unmatched_recommendation_selected_ids'], [])
 
     def test_keyword_editor_has_select_all_header_checkbox(self):
-        app = self.app(role='admin', tab='키워드 관리', version=321).run()
+        app = self.app(role='admin', tab='키워드 관리', version=322).run()
         self.assertFalse(app.exception)
         app.checkbox(key='keyword_editor_select_all_dropdown').check().run()
         self.assertFalse(app.exception)

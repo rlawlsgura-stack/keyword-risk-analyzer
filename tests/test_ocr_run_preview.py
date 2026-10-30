@@ -7,7 +7,7 @@ from streamlit.testing.v1 import AppTest
 
 class OCRRunPreviewTests(unittest.TestCase):
     def test_scan_is_ready_immediately_after_ocr_click(self):
-        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed321.py').read_text(
+        source = (Path(__file__).resolve().parents[1] / 'keyword_app2_fixed322.py').read_text(
             encoding='utf-8')
         names = {
             '_ocr_normalize', '_ocr_select_options', '_ocr_options_for_column',
