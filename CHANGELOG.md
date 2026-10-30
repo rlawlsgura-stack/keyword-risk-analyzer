@@ -1,3 +1,7 @@
+## FIXED323 - Fix the OCR selection column width
+
+- Fix the first column at 56 pixels and center the header checkbox to match the row checkboxes.
+
 ## FIXED322 - Keep the OCR selection column compact
 
 - Set the OCR selection column to the smallest width and position its header checkbox in normal document flow so it moves with the table.
