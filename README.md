@@ -5,7 +5,14 @@ Current local development version: **FIXED317** (`keyword_app2_fixed317.py`).
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed317.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed317.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
+
+```powershell
+py -3.13 -m venv .venv-ocr313
+.\.venv-ocr313\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
+```
+
+For Streamlit Community Cloud, select Python 3.13 in the app's Advanced settings because its runtime version is managed by Streamlit rather than repository files. Changing the Python version of an already deployed app requires deleting and redeploying it.
 Cloud login survives a page refresh in the same browser tab by keeping only the Supabase refresh token in session storage. Closing the tab clears that browser storage; access tokens continue to use Supabase's default roughly one-hour lifetime and refresh five minutes before expiry.
 
 ### Shared unmatched-expression collection

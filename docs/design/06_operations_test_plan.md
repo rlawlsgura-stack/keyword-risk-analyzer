@@ -10,7 +10,7 @@
 
 | 구성 | 현재 직접 의존 버전 | 역할 |
 |---|---|---|
-| Python | 로컬 검증 3.14, Render 설정 3.14.0 | 서버 런타임 |
+| Python | 로컬 검증 3.14, Render 설정 3.13.15 | 서버 런타임 |
 | Streamlit | 1.66.0 | 화면 |
 | pandas | 3.0.6 | 원장과 리포트 처리 |
 | FastAPI | 0.152.0 | 별도 API |
@@ -34,7 +34,7 @@
 | ADMIN_PASSWORD | 로컬 관리자 비밀번호 자리표시자 | CSV 개발 모드 | 비밀 |
 | APP_ADMIN_EMAIL | 최초 계정 생성 시 보관한 이메일 | 운영자가 확인하는 초기 자료 | 개인정보 |
 | APP_ADMIN_INITIAL_PASSWORD | 초기 비밀번호 자리표시자 | 초기 자료, 앱 인증 코드에서 읽지 않음 | 비밀 |
-| PYTHON_VERSION | 3.14.0 | Render 런타임 설정 | 아니오 |
+| PYTHON_VERSION | 3.13.15 | Render 런타임 설정 | 아니오 |
 
 프로세스 환경 변수가 우선이고 로컬 `.env`는 없는 값만 채웁니다. Streamlit Secrets도 이미 설정된 환경 값을 덮어쓰지 않습니다. 따라서 `.env`에 빈 키가 있으면 Secrets의 같은 이름이 덮어쓰지 못할 수 있습니다. 운영에서는 한 가지 주 설정 방식을 정하고 중복된 빈 값을 제거합니다.
 
@@ -46,6 +46,13 @@
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 Copy-Item .env.example .env
+```
+
+PaddleOCR requires Python 3.13 or earlier. Use a separate Python 3.13 environment and install both requirements files:
+
+```powershell
+py -3.13 -m venv .venv-ocr313
+.\.venv-ocr313\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
 ```
 
 기존 `.env`가 있으면 복사로 덮어쓰지 않습니다. 필요한 값을 직접 설정하고 두 터미널에서 실행합니다.
