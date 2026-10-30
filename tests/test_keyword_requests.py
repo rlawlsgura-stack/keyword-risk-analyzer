@@ -44,6 +44,16 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
             'POST', 'https://project.example.supabase.co/auth/v1/token?grant_type=refresh_token'))
         self.assertEqual(request.call_args.kwargs['json'], {'refresh_token': 'old-refresh'})
 
+    def test_unmatched_page_rejects_unknown_sort_and_passes_registered_sort(self):
+        repo = SupabaseRepository()
+        with patch.object(repo, 'rpc', return_value={'rows': [], 'total': 0}) as rpc:
+            repo.load_unmatched_terms(100, 100, '보습', 'registered')
+        rpc.assert_called_once_with(
+            'unmatched_term_page', p_offset=100, p_limit=100,
+            p_search='보습', p_sort='registered')
+        with self.assertRaises(ValueError):
+            repo.load_unmatched_terms(sort='invalid')
+
     def test_request_list_and_notification_settings_use_user_jwt(self):
         with patch('repository.requests.request', side_effect=[
             self.response([]), self.response([{'email_notifications_enabled': True}]),

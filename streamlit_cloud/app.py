@@ -1,4 +1,4 @@
-"""Streamlit Community Cloud entrypoint for FIXED307."""
+"""Streamlit Community Cloud entrypoint for FIXED308."""
 from pathlib import Path
 import runpy
 import sys
@@ -28,4 +28,4 @@ if cached_repository is not None:
             or any(not hasattr(repository_class, method) for method in required_methods)):
         sys.modules.pop("repository", None)
 
-runpy.run_path(str(ROOT / "keyword_app2_fixed307.py"), run_name="__main__")
+runpy.run_path(str(ROOT / "keyword_app2_fixed308.py"), run_name="__main__")

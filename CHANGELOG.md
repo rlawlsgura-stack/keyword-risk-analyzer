@@ -1,3 +1,7 @@
+## FIXED308 - Sort unmatched candidates by registration order
+
+- Add a list sort control for frequency or registration time; registration order uses the earliest collection timestamp across the full search result before pagination.
+
 ## FIXED307 - Restore login after page refresh
 
 - Persist only the Supabase refresh token in the current browser tab's session storage and restore the authenticated session after a page reload.

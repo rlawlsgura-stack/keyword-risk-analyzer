@@ -280,8 +280,11 @@ class SupabaseRepository:
         return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))),
                         p_terms=terms)
 
-    def load_unmatched_terms(self, offset=0, limit=100, search=''):
-        return self.rpc('unmatched_term_page', p_offset=offset, p_limit=limit, p_search=search)
+    def load_unmatched_terms(self, offset=0, limit=100, search='', sort='occurrences'):
+        if sort not in {'occurrences', 'registered'}:
+            raise ValueError('Invalid unmatched-term sort order')
+        return self.rpc('unmatched_term_page', p_offset=offset, p_limit=limit,
+                        p_search=search, p_sort=sort)
 
     def export_unmatched_terms(self):
         return self.rpc('unmatched_term_export')

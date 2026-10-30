@@ -1,11 +1,11 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED307** (`keyword_app2_fixed307.py`).
+Current local development version: **FIXED308** (`keyword_app2_fixed308.py`).
 `run_latest.ps1` checks Supabase Auth connectivity first, then selects and runs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed307.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
+Streamlit Community Cloud's entrypoint (`streamlit_cloud/app.py`) launches `keyword_app2_fixed308.py`. `run_latest.ps1` selects the highest numbered FIXED app file; local OCR runs with the Python 3.13 `.venv-ocr313` environment.
 Cloud login survives a page refresh in the same browser tab by keeping only the Supabase refresh token in session storage. Closing the tab clears that browser storage; access tokens continue to use Supabase's default roughly one-hour lifetime and refresh five minutes before expiry.
 
 ### Shared unmatched-expression collection
@@ -23,11 +23,13 @@ there. Approved accounts share the same statistics after logout or restart.
 The candidate tab provides search, pages of 100 entries and a full CSV export.
 Each page can be selectively reviewed: select table rows for analysis, edit a selected expression, and remove selected rows from the review. These review edits do not change shared statistics; administrators can permanently delete shared expressions after confirmation.
 Members can submit normalization candidates into a separate server-only registration queue. Administrators see the queue in the normalization and classification editor; approved rows are removed after the keyword database save. These requests do not create keyword inquiry history.
+The unmatched list can be sorted by frequency or registration order (earliest collection first), across search results and pages.
 Review-input reset preserves the accumulated data. Administrators can permanently
 delete selected expressions and their observations after confirmation; newly
 performed analyses can collect those expressions again.
 
 Registration queue upgrade: apply `supabase/unmatched_registration_requests_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
+Candidate sort upgrade: apply `supabase/unmatched_candidate_sort_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
 Database upgrades: apply `supabase/persistent_unmatched_setup.sql` after the
 existing `supabase/unmatched_term_pool_setup.sql`. Fresh installations use
 `supabase/schema.sql`. All collection tables and RPCs remain server-only with

@@ -58,8 +58,10 @@ begin
 end;
 $$;
 
-create function public.kra_unmatched_term_page(
-    p_offset integer default 0, p_limit integer default 100, p_search text default '')
+drop function if exists public.kra_unmatched_term_page(integer, integer, text);
+create or replace function public.kra_unmatched_term_page(
+    p_offset integer default 0, p_limit integer default 100, p_search text default '',
+    p_sort text default 'occurrences')
 returns jsonb
 language sql stable security invoker set search_path = '' as $$
     with filtered as (
@@ -73,9 +75,15 @@ language sql stable security invoker set search_path = '' as $$
     select jsonb_build_object(
         'total', (select count(*) from filtered),
         'rows', coalesce((select jsonb_agg(to_jsonb(page)
-                    order by page.total_occurrences desc, page.analysis_count desc, page.term_norm)
+                    order by case when p_sort = 'registered' then page.first_seen end,
+                             case when coalesce(p_sort, 'occurrences') <> 'registered' then page.total_occurrences end desc,
+                             case when coalesce(p_sort, 'occurrences') <> 'registered' then page.analysis_count end desc,
+                             page.term_norm)
             from (select * from filtered
-                  order by total_occurrences desc, analysis_count desc, term_norm
+                  order by case when p_sort = 'registered' then first_seen end,
+                           case when coalesce(p_sort, 'occurrences') <> 'registered' then total_occurrences end desc,
+                           case when coalesce(p_sort, 'occurrences') <> 'registered' then analysis_count end desc,
+                           term_norm
                   limit least(greatest(coalesce(p_limit, 100), 1), 1000)
                   offset greatest(coalesce(p_offset, 0), 0)) page), '[]'::jsonb));
 $$;
@@ -113,10 +121,10 @@ end;
 $$;
 
 revoke all on function public.kra_collect_unmatched_terms(uuid, jsonb) from public, anon, authenticated;
-revoke all on function public.kra_unmatched_term_page(integer, integer, text) from public, anon, authenticated;
+revoke all on function public.kra_unmatched_term_page(integer, integer, text, text) from public, anon, authenticated;
 revoke all on function public.kra_unmatched_term_export() from public, anon, authenticated;
 revoke all on function public.kra_delete_unmatched_terms(text[]) from public, anon, authenticated;
 grant execute on function public.kra_collect_unmatched_terms(uuid, jsonb) to service_role;
-grant execute on function public.kra_unmatched_term_page(integer, integer, text) to service_role;
+grant execute on function public.kra_unmatched_term_page(integer, integer, text, text) to service_role;
 grant execute on function public.kra_unmatched_term_export() to service_role;
 grant execute on function public.kra_delete_unmatched_terms(text[]) to service_role;

@@ -46,6 +46,15 @@ begin
     assert (select count(*) from jsonb_array_elements(public.kra_unmatched_term_export()) item
             where item->>'term_norm' like prefix || '%') = 1006, 'export truncated';
 
+    insert into public.kra_unmatched_term_candidates
+        (term_norm, display_term, total_occurrences, analysis_count, first_seen, last_seen)
+    values
+        (prefix || '-order-old', prefix || '-order-old', 1, 1, now() - interval '2 days', now()),
+        (prefix || '-order-new', prefix || '-order-new', 1, 1, now() - interval '1 day', now());
+    page := public.kra_unmatched_term_page(0, 10, prefix || '-order-', 'registered');
+    assert page->'rows'->0->>'term_norm' = prefix || '-order-old',
+        'registration sort did not place the earliest collection first';
+
     begin
         perform public.kra_collect_unmatched_terms(invalid_event,
             jsonb_build_array(jsonb_build_object('term_norm', term,
