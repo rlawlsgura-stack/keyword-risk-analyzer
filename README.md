@@ -37,6 +37,7 @@ performed analyses can collect those expressions again.
 
 Registration queue upgrade: apply `supabase/unmatched_registration_requests_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
 Candidate sort upgrade: apply `supabase/unmatched_candidate_sort_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
+Latest-first candidate sort upgrade: apply `supabase/unmatched_candidate_latest_first_setup.sql` to existing projects. New installations include it in `supabase/schema.sql`.
 Database upgrades: apply `supabase/persistent_unmatched_setup.sql` after the
 existing `supabase/unmatched_term_pool_setup.sql`. Fresh installations use
 `supabase/schema.sql`. All collection tables and RPCs remain server-only with

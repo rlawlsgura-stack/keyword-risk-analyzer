@@ -4547,7 +4547,7 @@ def render_unmatched_candidate_pool():
             st.session_state['unmatched_last_search'] = search
         page = int(st.session_state.get('unmatched_page', 0))
         try:
-            snapshot = SupabaseRepository().load_unmatched_terms(page * 100, 100, search)
+            snapshot = SupabaseRepository().load_unmatched_terms(page * 100, 100, search, 'registered')
         except Exception as exc:
             logging.exception('Could not load shared unmatched candidates')
             st.error('공용 미매칭 후보를 불러오지 못했습니다. 잠시 후 새로고침하세요.')
