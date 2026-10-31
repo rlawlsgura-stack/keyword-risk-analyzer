@@ -4603,11 +4603,11 @@ def render_unmatched_candidate_pool():
             st.download_button('로컬 후보 CSV 다운로드',
                 pd.DataFrame(surface_rows).to_csv(index=False).encode('utf-8-sig'),
                 'unmatched_candidates.csv', 'text/csv', key='download_unmatched_surfaces')
-    review = st.session_state.setdefault('unmatched_candidate_review', {'edits': {}, 'deleted': []})
+    review = st.session_state.setdefault('unmatched_candidate_review', {'edits': {}})
     review_revision = int(st.session_state.get('unmatched_candidate_review_revision', 0))
     review_rows = [
         {**row, 'surface': review['edits'].get(row['surface_key'], row.get('surface', ''))}
-        for row in surface_rows if row['surface_key'] not in review['deleted']
+        for row in surface_rows
     ]
     if review_rows:
         candidate_df = pd.DataFrame([
@@ -4661,13 +4661,6 @@ def render_unmatched_candidate_pool():
                     st.rerun()
                 except (StorageError, PermissionError):
                     st.error('영구 삭제에 실패했습니다. 관리자 권한과 연결 상태를 확인하세요.')
-        elif st.button('선택 행 숨기기 (현재 화면)', key='delete_selected_unmatched_review_rows',
-                       disabled=not selected_ids):
-            review['deleted'].extend(identity for identity in selected_ids if identity not in review['deleted'])
-            for identity in selected_ids:
-                review['edits'].pop(identity, None)
-            st.session_state['unmatched_candidate_review_revision'] = review_revision + 1
-            st.rerun()
         if st.button("선택후보군 정규화 작업", type="primary", key="analyze_unmatched_candidate_pool"):
             if not selected_rows:
                 st.warning('분석할 행을 표에서 선택하세요.')
@@ -4692,11 +4685,6 @@ def render_unmatched_candidate_pool():
                     st.success(f"정규화 추천 {len(recommendations)}건을 만들었습니다. 검토 후 승인하세요.")
                 except Exception as pool_error:
                     st.error(f"미매칭 후보군 분석에 실패했습니다: {pool_error}")
-    elif surface_rows:
-        st.info('현재 검토 목록에서 모두 제외된 상태입니다. 검토 입력 초기화로 다시 불러올 수 있습니다.')
-        if st.button("검토 입력 초기화", key="clear_unmatched_candidate_pool"):
-            _clear_unmatched_review()
-            st.rerun()
     else:
         st.info("아직 후보가 없습니다. 텍스트 분석 또는 한국어 OCR을 실행하면 자동으로 수집됩니다.")
 
