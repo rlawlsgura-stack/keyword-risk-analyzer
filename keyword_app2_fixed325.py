@@ -4879,9 +4879,19 @@ def render_unmatched_candidate_pool():
                         SupabaseRepository().submit_unmatched_registration_requests(
                             candidates, st.session_state.auth_session['access_token']
                         )
-                    except (StorageError, PermissionError, KeyError, ValueError) as exc:
+                    except ValueError as exc:
+                        st.warning(str(exc))
+                    except (StorageError, PermissionError) as exc:
                         st.error('DB \ub4f1\ub85d \uc694\uccad\uc744 \uc811\uc218\ud558\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uace0 \ub2e4\uc2dc \uc2dc\ub3c4\ud558\uc138\uc694.')
                         st.caption(str(exc))
+                    except (KeyError, TypeError) as exc:
+                        logging.exception('Invalid unmatched registration candidate data')
+                        st.error('\uc120\ud0dd\ud55c \ub4f1\ub85d \ud6c4\ubcf4 \uc785\ub825\uc744 \ud655\uc778\ud558\uc138\uc694.')
+                        st.caption(str(exc))
+                    except Exception as exc:
+                        logging.exception('Could not submit unmatched registration candidates')
+                        st.error('\ub4f1\ub85d \uc694\uccad \ucc98\ub9ac\uc911 \uc608\uc0c1\ud558\uc9c0 \ubabb\ud55c \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4.')
+                        st.caption(type(exc).__name__)
                     else:
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(selected['recommendation_id'].astype(str).tolist())
