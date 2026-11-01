@@ -494,6 +494,11 @@ def _dropdown_with_input_option(lst):
     tmp.append("-")
     return tmp + ["(직접 입력)"]
 
+
+def _include_empty_option(options):
+    """Keep blank cells selectable in table dropdowns."""
+    return [""] + [option for option in options if option != ""]
+
 # -----------------------------
 # Persistence helpers (with encoding fallbacks)
 # -----------------------------
@@ -4792,7 +4797,7 @@ def render_unmatched_candidate_pool():
                 "리스크 등급": st.column_config.SelectboxColumn("리스크 등급", options=[""] + list(st.session_state.opt_risks), required=True),
                 "리스크 등급별 세부 심의기준": st.column_config.SelectboxColumn("세부 심의기준", options=[""] + list(st.session_state.opt_details), required=True),
                 "증빙자료유형": st.column_config.SelectboxColumn("증빙자료유형", options=[""] + list(st.session_state.opt_evidences), required=True),
-                "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=list(st.session_state.opt_alt_terms), required=False),
+                "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=_include_empty_option(list(st.session_state.opt_alt_terms)), required=False),
                 "request_date": st.column_config.TextColumn("요청 접수일", disabled=True),
                 "request_id": None,
                 "term_norm": None,
@@ -5241,7 +5246,8 @@ if is_admin():
             alt_opts = _dropdown_with_input_option(list(set((st.session_state.opt_alt_terms or []) + (db_alt_opts or []))))
             risk_opts = _ko_sorted(set((st.session_state.opt_risks or []) + (db_risk_opts or []))) or _ko_sorted(st.session_state.opt_risks)
             cat_opts = _ko_sorted(set((st.session_state.opt_categories or []) + (db_cat_opts or []))) or _ko_sorted(st.session_state.opt_categories)
-            evidence_opts = _ko_sorted(st.session_state.opt_evidences)
+            db_evidence_opts = unique_values_from_db("증빙자료유형")
+            evidence_opts = _ko_sorted(set((st.session_state.opt_evidences or []) + db_evidence_opts))
             edited_df = st.data_editor(_rename_fcol(
                 base_df),
                 alt="Editable keyword database",
@@ -5249,11 +5255,11 @@ if is_admin():
                 args=(editor_key, base_key, draft_key, checkbox_key, selection_column),
                 column_config={
                     selection_column: cc.CheckboxColumn(label=selection_column),
-                    "상품카테고리": cc.SelectboxColumn(options=cat_opts, required=False),
-                    "리스크 등급": cc.SelectboxColumn(options=risk_opts, required=False),
-                    DISPLAY_F_COL: cc.SelectboxColumn(options=detail_opts, required=False, label=DISPLAY_F_COL),
-                    "증빙자료유형": cc.SelectboxColumn(options=evidence_opts, required=False),
-                    "대체키워드": cc.SelectboxColumn(options=alt_opts, required=False),
+                    "상품카테고리": cc.SelectboxColumn(options=_include_empty_option(cat_opts), required=False),
+                    "리스크 등급": cc.SelectboxColumn(options=_include_empty_option(risk_opts), required=False),
+                    DISPLAY_F_COL: cc.SelectboxColumn(options=_include_empty_option(detail_opts), required=False, label=DISPLAY_F_COL),
+                    "증빙자료유형": cc.SelectboxColumn(options=_include_empty_option(evidence_opts), required=False),
+                    "대체키워드": cc.SelectboxColumn(options=_include_empty_option(alt_opts), required=False),
                 },
                 width="stretch",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
