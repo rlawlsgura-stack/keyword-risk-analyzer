@@ -2923,31 +2923,16 @@ def _clear_ocr_results_on_upload(candidates_key, editor_version_key, file_result
     st.session_state.pop('ocr_keyword_collection_id', None)
 
 
-def _persist_ocr_candidate_edits(editor_key, candidates_key, select_all_key):
-    """Copy data-editor changes into durable per-session candidate data."""
-    widget_state = st.session_state.get(editor_key) or {}
-    edited_rows = widget_state.get("edited_rows", {})
-    candidates = st.session_state.get(candidates_key, [])
-    editable_columns = {"term", "category", "risk", "detail", "evidence", "alternative", "approved"}
-    for index, changes in edited_rows.items():
-        if not 0 <= index < len(candidates):
-            continue
-        for column, value in changes.items():
-            if column in editable_columns:
-                candidates[index][column] = bool(value) if column == "approved" else value
-    st.session_state[candidates_key] = candidates
-    st.session_state[select_all_key] = bool(candidates) and all(
-        bool(row.get("approved", False)) for row in candidates)
-
-
-def _set_unmatched_select_all(recommendation_ids, checkbox_key):
+def _set_unmatched_select_all(
+        recommendation_ids, checkbox_key, editor_key, recommendations, selection_column):
+    _persist_unmatched_editor_state(editor_key, recommendations, selection_column)
     selected_ids = recommendation_ids if st.session_state.get(checkbox_key, False) else []
     st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
     st.session_state['unmatched_recommendation_version'] = int(
         st.session_state.get('unmatched_recommendation_version', 0)) + 1
 
 
-def _persist_unmatched_editor(editor_key, recommendations, selection_column, checkbox_key):
+def _persist_unmatched_editor_state(editor_key, recommendations, selection_column):
     edited_rows = (st.session_state.get(editor_key) or {}).get('edited_rows') or {}
     saved_edits = st.session_state.setdefault('unmatched_recommendation_edits', {})
     selected_ids = set(st.session_state.get('unmatched_recommendation_selected_ids', []))
@@ -2965,8 +2950,6 @@ def _persist_unmatched_editor(editor_key, recommendations, selection_column, che
                 selected_ids.discard(recommendation_id)
     selected_ids.intersection_update(recommendation_ids)
     st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
-    st.session_state[checkbox_key] = bool(recommendation_ids) and all(
-        recommendation_id in selected_ids for recommendation_id in recommendation_ids)
 
 
 def _persist_keyword_editor(editor_key, base_key, draft_key, checkbox_key, selection_column):
@@ -2993,9 +2976,13 @@ def _persist_keyword_editor(editor_key, base_key, draft_key, checkbox_key, selec
         bool(row.get(selection_column, False)) for row in draft)
 
 
-def _set_keyword_editor_select_all(draft_key, base_key, selection_column, version_key, checkbox_key):
-    rows = [dict(row) for row in st.session_state.get(draft_key, st.session_state.get(base_key, []))]
+def _set_keyword_editor_select_all(
+        draft_key, base_key, selection_column, version_key, checkbox_key, editor_key):
     selected = bool(st.session_state.get(checkbox_key, False))
+    _persist_keyword_editor(
+        editor_key, base_key, draft_key, checkbox_key, selection_column)
+    st.session_state[checkbox_key] = selected
+    rows = [dict(row) for row in st.session_state.get(draft_key, st.session_state.get(base_key, []))]
     for row in rows:
         row[selection_column] = selected
     st.session_state[draft_key] = rows
@@ -3436,8 +3423,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         df,
         alt="OCR-extracted keyword candidates",
         key=editor_key,
-        on_change=_persist_ocr_candidate_edits,
-        args=(editor_key, "ocr_keyword_candidates", select_all_key),
+        on_change="ignore",
         width="stretch",
         hide_index=True,
         disabled=["confidence"],
@@ -4776,7 +4762,7 @@ def render_unmatched_candidate_pool():
             "\uC120\uD0DD",
             key=select_all_key,
             on_change=_set_unmatched_select_all,
-            args=(recommendation_ids, select_all_key),
+            args=(recommendation_ids, select_all_key, editor_key, recommendations, select_column),
             help="\uB204\uB974\uBA74 \uD45C\uC758 \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC120\uD0DD\uD558\uAC70\uB098 \uD574\uC81C\uD569\uB2C8\uB2E4.",
             label_visibility="collapsed",
         )
@@ -4786,8 +4772,7 @@ def render_unmatched_candidate_pool():
             hide_index=True,
             width="stretch",
             num_rows="fixed",
-            on_change=_persist_unmatched_editor,
-            args=(editor_key, recommendations, select_column, select_all_key),
+            on_change="ignore",
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
@@ -4811,6 +4796,7 @@ def render_unmatched_candidate_pool():
             if selected_for_exclusion.empty:
                 st.warning('목록에서 제외할 항목을 선택하세요.')
             else:
+                _persist_unmatched_editor_state(editor_key, recommendations, select_column)
                 hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                 hidden.extend(selected_for_exclusion['recommendation_id'].astype(str).tolist())
                 st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
@@ -4890,6 +4876,7 @@ def render_unmatched_candidate_pool():
                     except (StorageError, PermissionError, ValueError) as exc:
                         st.error(f'등록 요청을 거절하지 못했습니다: {exc}')
                     else:
+                        _persist_unmatched_editor_state(editor_key, recommendations, select_column)
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(f'request:{request_id}' for request_id in request_ids)
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
@@ -5199,9 +5186,21 @@ if is_admin():
 
         st.markdown("---")
 
-        mode = st.radio("편집 모드 선택", ["드롭다운(제한 입력)", "자유 입력"], horizontal=True, key="edit_mode")
         selection_column = "선택"
+        previous_mode_id = st.session_state.get("keyword_editor_active_mode", "dropdown")
+        previous_editor_key = (
+            f"editor_{previous_mode_id}_{int(st.session_state.get('keyword_editor_version', 0))}"
+        )
+        previous_draft_key = f"keyword_editor_draft_{previous_mode_id}"
+        previous_checkbox_key = f"keyword_editor_select_all_{previous_mode_id}"
+        mode = st.radio(
+            "편집 모드 선택", ["드롭다운(제한 입력)", "자유 입력"], horizontal=True,
+            key="edit_mode", on_change=_persist_keyword_editor,
+            args=(previous_editor_key, f"{previous_editor_key}_base", previous_draft_key,
+                  previous_checkbox_key, selection_column),
+        )
         mode_id = "dropdown" if mode == "드롭다운(제한 입력)" else "free"
+        st.session_state["keyword_editor_active_mode"] = mode_id
         draft_key = f"keyword_editor_draft_{mode_id}"
         version_key = "keyword_editor_version"
         if st.session_state.get('keyword_editor_reset_select_all'):
@@ -5230,7 +5229,7 @@ if is_admin():
             "Select all rows",
             key=checkbox_key,
             on_change=_set_keyword_editor_select_all,
-            args=(draft_key, base_key, selection_column, version_key, checkbox_key),
+            args=(draft_key, base_key, selection_column, version_key, checkbox_key, editor_key),
             label_visibility="collapsed",
             help="Select or clear all rows in this table.",
         )
@@ -5251,8 +5250,7 @@ if is_admin():
             edited_df = st.data_editor(_rename_fcol(
                 base_df),
                 alt="Editable keyword database",
-                on_change=_persist_keyword_editor,
-                args=(editor_key, base_key, draft_key, checkbox_key, selection_column),
+                on_change="ignore",
                 column_config={
                     selection_column: cc.CheckboxColumn(label=selection_column),
                     "상품카테고리": cc.SelectboxColumn(options=_include_empty_option(cat_opts), required=False),
@@ -5274,8 +5272,7 @@ if is_admin():
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
                 column_config={selection_column: st.column_config.CheckboxColumn(label=selection_column)},
-                on_change=_persist_keyword_editor,
-                args=(editor_key, base_key, draft_key, checkbox_key, selection_column),
+                on_change="ignore",
                 key=editor_key,
             )
 
