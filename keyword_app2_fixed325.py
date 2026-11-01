@@ -4857,14 +4857,33 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         recommendation_df.at[row_index, column] = value
             editor_key = (f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
                           + ids_hash)
-        st.checkbox(
+        table_key = f"unmatched_recommendation_table_{ids_hash}_{st.session_state.get('unmatched_recommendation_version', 0)}"
+        st.markdown(
+            f"""
+<style>
+div.st-key-{table_key} {{ position: relative; }}
+div.st-key-{table_key} div.st-key-{select_all_key} {{
+    position: relative !important;
+    top: 40px;
+    left: 6px;
+    z-index: 20;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+}}
+</style>
+""",
+            unsafe_allow_html=True,
+        )
+        selection_table = st.container(key=table_key)
+        selection_table.checkbox(
             "\uC120\uD0DD",
             key=select_all_key,
             on_change="ignore",
             help="\uB204\uB974\uBA74 \uD45C\uC758 \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC120\uD0DD\uD558\uAC70\uB098 \uD574\uC81C\uD569\uB2C8\uB2E4.",
             label_visibility="collapsed",
         )
-        edited_recommendations = st.data_editor(
+        edited_recommendations = selection_table.data_editor(
             recommendation_df,
             alt="Unmatched keyword normalization recommendations",
             hide_index=True,
