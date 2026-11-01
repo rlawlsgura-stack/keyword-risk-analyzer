@@ -4742,6 +4742,13 @@ def render_unmatched_candidate_pool():
             for column, value in saved_edits.get(recommendation_id, {}).items():
                 if column in recommendation_df.columns:
                     recommendation_df.at[index, column] = value
+        # SelectboxColumn requires every cell value to match one of its
+        # options. Nulls render as "None" and can make mouse selection flaky.
+        for column in (
+                "\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC", "\uB9AC\uC2A4\uD06C \uB4F1\uAE09",
+                "\uB9AC\uC2A4\uD06C \uB4F1\uAE09\uBCC4 \uC138\uBD80 \uC2EC\uC758\uAE30\uC900",
+                "\uC99D\uBE59\uC790\uB8CC\uC720\uD615", "\uB300\uCCB4\uD0A4\uC6CC\uB4DC"):
+            recommendation_df[column] = recommendation_df[column].fillna("")
         selected_ids = set(st.session_state.get('unmatched_recommendation_selected_ids', []))
         recommendation_df[select_column] = [
             recommendation_id in selected_ids for recommendation_id in recommendation_ids
