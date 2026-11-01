@@ -4845,6 +4845,12 @@ def render_unmatched_candidate_pool():
                         except (StorageError, PermissionError, ValueError) as exc:
                             st.error(f"DB \uc800\uc7a5\uc740 \uc644\ub8cc\ud588\uc9c0\ub9cc \ubbf8\ub9e4\uce6d \ud45c\ud604\uacfc \uc694\uccad \uc815\ub9ac\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4: {exc}")
                             return
+                        st.session_state.pop("keyword_editor_draft_dropdown", None)
+                        st.session_state.pop("keyword_editor_draft_free", None)
+                        st.session_state["keyword_editor_version"] = int(
+                            st.session_state.get("keyword_editor_version", 0)
+                        ) + 1
+                        st.session_state["keyword_editor_reset_select_all"] = True
                         st.session_state["unmatched_candidate_recommendations"] = []
                         st.session_state["unmatched_recommendation_version"] = int(
                             st.session_state.get("unmatched_recommendation_version", 0)
