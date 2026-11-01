@@ -80,7 +80,8 @@ export default function (component) {
       content.style.transform = '';
       const textWidth = content.getBoundingClientRect().width;
       if (textWidth > 0) {
-        content.style.transform = `scaleX(${line.getBoundingClientRect().width / textWidth})`;
+        const availableWidth = Math.max(0, line.getBoundingClientRect().width - 2);
+        content.style.transform = `scaleX(${availableWidth / textWidth})`;
       }
     }
   };
