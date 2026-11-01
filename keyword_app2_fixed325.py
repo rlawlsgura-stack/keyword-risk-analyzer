@@ -134,7 +134,7 @@ from service import load_matching_config
 from approved_matching import match_text, validate_expressions, SETTING_NAME
 
 def _selectable_dataframe(*args, **kwargs):
-    kwargs.setdefault("on_select", "rerun")
+    kwargs.setdefault("on_select", "ignore")
     kwargs.setdefault("selection_mode", "multi-row")
     return st.dataframe(*args, **kwargs)
 
@@ -2747,7 +2747,7 @@ def render_user_management():
     token = st.session_state['auth_session']['access_token']
     repository = SupabaseRepository()
     page = st.number_input('페이지', min_value=1, max_value=100000, value=1,
-                           step=1, key='user_admin_page')
+                           step=1, key='user_admin_page', on_change='ignore')
     if st.button('사용자 목록 불러오기 / 새로고침', key='user_admin_load'):
         st.session_state.pop('managed_users', None)
         try:
@@ -3649,10 +3649,12 @@ with tabs['analysis']:
         cf1, cf2, cf3 = st.columns([1,1,1])
         with cf1:
             db_cats = unique_values_from_db("상품카테고리")
-            pre_cats = st.multiselect("상품카테고리", options=db_cats, key="pre_cats")
+            pre_cats = st.multiselect(
+                "상품카테고리", options=db_cats, key="pre_cats", on_change="ignore")
         with cf2:
             db_risks = unique_values_from_db("리스크 등급")
-            pre_risks = st.multiselect("리스크 등급", options=db_risks, key="pre_risks")
+            pre_risks = st.multiselect(
+                "리스크 등급", options=db_risks, key="pre_risks", on_change="ignore")
         with cf3:
             match_mode = st.radio(
                 "키워드 매칭 방식",
@@ -4926,7 +4928,7 @@ if is_admin():
         upload_col, delete_col = st.columns([1.15, 1])
         with upload_col:
             st.markdown('<div class="kw-admin-section-title">📂 키워드 업로드 (.csv / .xlsx)</div>', unsafe_allow_html=True)
-            upload_mode = st.radio("\uc5c5\ub85c\ub4dc \ubaa8\ub4dc", ["\uae30\uc874 \uc720\uc9c0 + \uc0c8\ub85c \ucd94\uac00", "\uc644\uc804 \ub36e\uc5b4\uc4f0\uae30"], horizontal=False, key="upload_mode")
+            upload_mode = st.radio("\uc5c5\ub85c\ub4dc \ubaa8\ub4dc", ["\uae30\uc874 \uc720\uc9c0 + \uc0c8\ub85c \ucd94\uac00", "\uc644\uc804 \ub36e\uc5b4\uc4f0\uae30"], horizontal=False, key="upload_mode", on_change="ignore")
             st.markdown("""
             <style>
             .kw-admin-section-title {
@@ -4999,7 +5001,7 @@ if is_admin():
             del_targets = st.multiselect(
                 "삭제할 항목 선택 (kwd_no 기준)",
                 options=sorted(st.session_state.kw_df["kwd_no"].tolist(), key=lambda value: str(value).casefold()),
-                key="del_targets"
+                key="del_targets", on_change="ignore"
             )
             if st.button("선택 삭제", type="secondary", key="btn_delete_rows"):
                 if not del_targets:
@@ -5054,7 +5056,7 @@ if is_admin():
             cat_choice = st.selectbox("\uc0c1\ud488\uce74\ud14c\uace0\ub9ac", _ko_sorted(db_cat_opts) + ["(\uc9c1\uc811 \uc785\ub825)"])
         with c3:
             db_risk_opts = unique_values_from_db("\ub9ac\uc2a4\ud06c \ub4f1\uae09")
-            risk_choice = st.selectbox("\ub9ac\uc2a4\ud06c \ub4f1\uae09", _ko_sorted(db_risk_opts))
+            risk_choice = st.selectbox("\ub9ac\uc2a4\ud06c \ub4f1\uae09", _ko_sorted(db_risk_opts), on_change="ignore")
 
         c4, c5, c6 = st.columns(3)
         with c4:
@@ -5160,10 +5162,16 @@ if is_admin():
                 }
 
                 current = options_map.get(target_list, [])
-                to_del = st.selectbox("삭제할 값 선택", _ko_sorted(current), key="del_value") if current else None
+                to_del = st.selectbox(
+                    "삭제할 값 선택", _ko_sorted(current), key="del_value",
+                    on_change="ignore",
+                ) if current else None
 
-            if to_del is not None and st.button("삭제", key="btn_del_value"):
-                st.session_state['__del_request__'] = (target_list, to_del)
+            if st.button("삭제", key="btn_del_value"):
+                if to_del is None:
+                    st.warning("삭제할 값을 선택하세요.")
+                else:
+                    st.session_state['__del_request__'] = (target_list, to_del)
 
             if st.session_state.get('__del_request__'):
                 tgt, val = st.session_state['__del_request__']
