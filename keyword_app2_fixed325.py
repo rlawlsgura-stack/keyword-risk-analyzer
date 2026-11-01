@@ -2042,8 +2042,9 @@ def render_admin_login():
 
     with st.sidebar.expander("🔐 관리자 로그인", expanded=False):
         st.caption("키워드 관리 탭은 관리자 전용입니다. 관리자만 비밀번호를 알고 있어야 합니다.")
-        input_id = st.text_input("관리자 ID", key="admin_id")
-        input_pw = st.text_input("관리자 비밀번호", type="password", key="admin_pw")
+        input_id = st.text_input("관리자 ID", key="admin_id", on_change="ignore")
+        input_pw = st.text_input(
+            "관리자 비밀번호", type="password", key="admin_pw", on_change="ignore")
 
         c_login, c_logout = st.columns(2)
         with c_login:
@@ -3640,7 +3641,10 @@ with tabs['analysis']:
     sample = "\uc774 \ubb38\uc7a5\uc5d0\ub294 \ud544\ub7ec\uc640 \uc548\ud2f0\uc5d0\uc774\uc9d5\uc774\ub77c\ub294 \ud0a4\uc6cc\ub4dc\uac00 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4."
     if "analysis_input_text" not in st.session_state:
         st.session_state.analysis_input_text = sample
-    text = st.text_area("\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8", key="analysis_input_text", height=180, max_chars=20000)
+    text = st.text_area(
+        "\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8", key="analysis_input_text", height=180,
+        max_chars=20000, on_change="ignore",
+    )
 
     st.markdown("---")
     # ②) 분석 실행
@@ -4541,7 +4545,7 @@ def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
     if cloud_enabled():
         st.caption('모든 승인 계정의 공용 누적 통계입니다. 로그아웃 후에도 유지됩니다. OCR은 신뢰도 60% 이상만 수집합니다.')
-        search = st.text_input('미매칭 표현 검색', key='unmatched_search', max_chars=100).strip()
+        search = st.text_input('미매칭 표현 검색', key='unmatched_search', max_chars=100, on_change='ignore').strip()
         if search != st.session_state.get('unmatched_last_search', ''):
             st.session_state['unmatched_page'] = 0
             st.session_state['unmatched_last_search'] = search
@@ -4572,7 +4576,10 @@ def render_unmatched_candidate_pool():
         if following.button('다음', key='unmatched_next', disabled=(page + 1) * 100 >= total):
             st.session_state['unmatched_page'] = page + 1
             st.rerun()
-        refresh.button('목록 새로고침', key='unmatched_refresh')
+        refresh.button(
+            '목록 새로고침', key='unmatched_refresh',
+            help='\uac80\uc0c9\uc5b4 \uc785\ub825 \ud6c4 \ubaa9\ub85d \uc0c8\ub85c\uace0\uce68\uc744 \ub20c\ub7ec \uc801\uc6a9\ud558\uc138\uc694.',
+        )
         if st.button('전체 누적 CSV 만들기', key='make_unmatched_export'):
             try:
                 exported = SupabaseRepository().export_unmatched_terms()
@@ -5050,7 +5057,10 @@ if is_admin():
 
         c1, c2, c3 = st.columns(3)
         with c1:
-            term_in = st.text_input("\ud0a4\uc6cc\ub4dc\uba85 *", placeholder="\uc608: \ud544\ub7ec")
+            term_in = st.text_input(
+                "\ud0a4\uc6cc\ub4dc\uba85 *", placeholder="\uc608: \ud544\ub7ec",
+                on_change="ignore",
+            )
         with c2:
             db_cat_opts = unique_values_from_db("\uc0c1\ud488\uce74\ud14c\uace0\ub9ac")
             cat_choice = st.selectbox("\uc0c1\ud488\uce74\ud14c\uace0\ub9ac", _ko_sorted(db_cat_opts) + ["(\uc9c1\uc811 \uc785\ub825)"])
@@ -5075,16 +5085,16 @@ if is_admin():
         if cat_choice == "(직접 입력)":
             cols_nc = st.columns([2,1])
             with cols_nc[0]:
-                new_cat = st.text_input("새 카테고리 입력", key="new_cat_input")
+                new_cat = st.text_input("새 카테고리 입력", key="new_cat_input", on_change="ignore")
             with cols_nc[1]:
-                new_kwd = st.text_input("키워드NO (선택, 예: P001)", key="new_kwd_input")
+                new_kwd = st.text_input("키워드NO (선택, 예: P001)", key="new_kwd_input", on_change="ignore")
 
         if detail_choice == "(직접 입력)":
-            new_detail = st.text_input("새 세부 심의기준 입력", key="new_detail_input")
+            new_detail = st.text_input("새 세부 심의기준 입력", key="new_detail_input", on_change="ignore")
         if evidence_choice == "(직접 입력)":
-            new_evid = st.text_input("새 증빙자료유형 입력", key="new_evid_input")
+            new_evid = st.text_input("새 증빙자료유형 입력", key="new_evid_input", on_change="ignore")
         if alt_choice == "(직접 입력)":
-            new_alt = st.text_input("새 대체키워드 입력", key="new_alt_input")
+            new_alt = st.text_input("새 대체키워드 입력", key="new_alt_input", on_change="ignore")
 
         if add_click:
             if not term_in.strip():
