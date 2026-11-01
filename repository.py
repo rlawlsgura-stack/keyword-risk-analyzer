@@ -460,4 +460,9 @@ class SupabaseRepository:
         return _user_summary(updated)
 
     def logout(self, token):
-        self.request('POST', '/auth/v1/logout', token=token)
+        try:
+            self.request('POST', '/auth/v1/logout', token=token)
+        except PermissionError:
+            # An expired or revoked token is already unusable; local logout
+            # should still complete even when Supabase cannot revoke it again.
+            pass
