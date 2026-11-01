@@ -2741,31 +2741,59 @@ def render_common_matching_rules():
                 st.error('저장하지 못했습니다. 연결과 권한을 확인하세요.')
 
 
+def _change_user_admin_page(delta):
+    page = int(st.session_state.get('user_admin_page', 1))
+    if delta > 0 and not st.session_state.get('managed_users_has_next', False):
+        return
+    st.session_state['user_admin_page'] = max(1, page + delta)
+
+
 def render_user_management():
     """Load account data only on demand and keep it in this admin's session."""
-    st.subheader('사용자 관리')
-    st.caption('이 Supabase 프로젝트의 계정을 조회하고 앱 사용 역할을 변경합니다.\n\n한 페이지에 최대 50개 계정을 표시합니다.')
+    st.subheader('\uC0AC\uC6A9\uC790 \uAD00\uB9AC')
+    st.caption('\uC774 Supabase \uD504\uB85C\uC81D\uD2B8\uC758 \uACC4\uC815\uC744 \uC870\uD68C\uD558\uACE0 \uC571 \uC0AC\uC6A9 \uC5ED\uD560\uC744 \uBCC0\uACBD\uD569\uB2C8\uB2E4.\n\n\uD55C \uD398\uC774\uC9C0\uC5D0 \uCD5C\uB300 1,000\uAC1C \uACC4\uC815\uC744 \uD45C\uC2DC\uD569\uB2C8\uB2E4.')
     token = st.session_state['auth_session']['access_token']
     repository = SupabaseRepository()
-    page = st.number_input('페이지', min_value=1, max_value=100000, value=1,
-                           step=1, key='user_admin_page', on_change='ignore')
-    if st.button('사용자 목록 불러오기 / 새로고침', key='user_admin_load'):
-        st.session_state.pop('managed_users', None)
+    users = st.session_state.get('managed_users')
+    page = int(st.session_state.get('user_admin_page', 1))
+    should_load = users is None
+
+    if users is None:
+        should_load = st.button('\uC0AC\uC6A9\uC790 \uBAA9\uB85D \uBD88\uB7EC\uC624\uAE30', key='user_admin_load')
+    else:
+        with st.container(horizontal=True, gap='small'):
+            has_pagination = page > 1 or st.session_state.get('managed_users_has_next', False)
+            if has_pagination:
+                st.button('\uC774\uC804', key='user_admin_previous',
+                          on_click=_change_user_admin_page, args=(-1,), disabled=page <= 1)
+                st.button('\uB2E4\uC74C', key='user_admin_next',
+                          on_click=_change_user_admin_page, args=(1,),
+                          disabled=not st.session_state.get('managed_users_has_next', False))
+                st.caption(f'{page}\uD398\uC774\uC9C0')
+            refresh_clicked = st.button('\uBAA9\uB85D \uC0C8\uB85C\uACE0\uCE68', key='user_admin_refresh')
+        should_load = refresh_clicked or page != int(
+            st.session_state.get('managed_users_page', 0))
+
+    if should_load:
         try:
-            st.session_state.managed_users = repository.list_users(token, page=int(page))
-            st.session_state.managed_users_page = int(page)
+            users = repository.list_users(token, page=page, per_page=1000)
+            has_next = len(users) == 1000 and repository.has_users_page(token, page + 1)
+            st.session_state.managed_users = users
+            st.session_state.managed_users_page = page
+            st.session_state.managed_users_has_next = has_next
         except (StorageError, PermissionError, ValueError) as e:
             st.error(str(e))
             return
+
     users = st.session_state.get('managed_users')
     if users is None:
-        st.info('사용자 목록을 불러와 역할을 변경하세요.')
+        st.info('\uC0AC\uC6A9\uC790 \uBAA9\uB85D\uC744 \uBD88\uB7EC\uC624\uB824\uBA74 \uBC84\uD2BC\uC744 \uB204\uB974\uC138\uC694.')
         return
-    if st.session_state.get('managed_users_page') != int(page):
-        st.info('선택한 페이지의 사용자 목록을 다시 불러오세요.')
+    if st.session_state.get('managed_users_page') != page:
+        st.info('\uC120\uD0DD\uD55C \uD398\uC774\uC9C0\uB97C \uBD88\uB7EC\uC624\uACE0 \uC788\uC2B5\uB2C8\uB2E4.')
         return
     if not users:
-        st.info('이 페이지에 계정이 없습니다.')
+        st.info('\uC774 \uD398\uC774\uC9C0\uC5D0 \uACC4\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.')
         return
     labels = {'member': '일반 사용자', 'admin': '관리자'}
     _selectable_dataframe(pd.DataFrame([{
@@ -3000,11 +3028,50 @@ def _reset_ocr_analysis(candidates_key, editor_version_key, image_version_key, f
     st.session_state.pop('ocr_keyword_collection_id', None)
 
 
-def _set_unmatched_candidate_select_all(editor_version_key):
+def _set_unmatched_candidate_select_all(editor_version_key, selection_state_key=None):
+    if selection_state_key:
+        st.session_state[selection_state_key] = {
+            'all': bool(st.session_state.get(f'unmatched_candidate_select_all_{editor_version_key}', False)),
+            'ids': {},
+        }
     st.session_state[editor_version_key] = int(st.session_state.get(editor_version_key, 0)) + 1
 
 
+def _load_unmatched_selection_rows(search, selection_state, row_cache, edits):
+    if not selection_state.get('all'):
+        return [row_cache[key] for key, selected in selection_state.get('ids', {}).items()
+                if selected is True and key in row_cache]
+    if not cloud_enabled():
+        return [row for key, row in row_cache.items()
+                if selection_state.get('ids', {}).get(key) is not False]
+    repository = SupabaseRepository()
+    selected = []
+    offset = 0
+    while True:
+        snapshot = repository.load_unmatched_terms(offset, 1000, search, 'registered')
+        rows = snapshot.get('rows', [])
+        for item in rows:
+            key = item['term_norm']
+            if selection_state.get('ids', {}).get(key) is False:
+                continue
+            selected.append({
+                'surface_key': key,
+                'surface': edits.get(key, item['display_term']),
+                'occurrences': item['total_occurrences'],
+                'analysis_count': item.get('analysis_count', 0),
+                'first_seen': item.get('first_seen'),
+                'status': item.get('review_status', ''),
+            })
+        offset += len(rows)
+        if not rows or offset >= int(snapshot.get('total', 0)):
+            break
+    return selected
+
+
 def _clear_unmatched_review():
+    for key in list(st.session_state):
+        if key.startswith(('unmatched_selection_state_', 'unmatched_selected_rows_')):
+            st.session_state.pop(key, None)
     st.session_state['unmatched_candidate_recommendations'] = []
     st.session_state['unmatched_recommendation_hidden_ids'] = []
     st.session_state['unmatched_recommendation_selected_ids'] = []
@@ -4555,13 +4622,14 @@ def render_unmatched_candidate_pool():
         if search != st.session_state.get('unmatched_last_search', ''):
             st.session_state['unmatched_page'] = 0
             st.session_state['unmatched_last_search'] = search
+        page_size = 1000
         page = int(st.session_state.get('unmatched_page', 0))
         try:
-            snapshot = SupabaseRepository().load_unmatched_terms(page * 100, 100, search, 'registered')
+            snapshot = SupabaseRepository().load_unmatched_terms(page * page_size, page_size, search, 'registered')
         except Exception as exc:
             logging.exception('Could not load shared unmatched candidates')
-            st.error('공용 미매칭 후보를 불러오지 못했습니다. 잠시 후 새로고침하세요.')
-            st.caption(f'진단 정보: {type(exc).__name__}: {str(exc)[:200]}')
+            st.error('\uACF5\uC6A9 \uBBF8\uB9E4\uCE6D \uD6C4\uBCF4\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC7A0\uC2DC \uD6C4 \uC0C8\uB85C\uACE0\uCE68\uD558\uC138\uC694.')
+            st.caption(f'\uC9C4\uB2E8 \uC815\uBCF4: {type(exc).__name__}: {str(exc)[:200]}')
             return
         rows, total = snapshot['rows'], int(snapshot['total'])
         if page and not rows:
@@ -4571,21 +4639,21 @@ def render_unmatched_candidate_pool():
                          'occurrences': row['total_occurrences'],
                          'analysis_count': row.get('analysis_count', 0),
                          'first_seen': row.get('first_seen'),
-                         'status': {'registration_requested': '신규키워드 등록요청',
-                                    'ignored': '관리자 거절'}.get(row.get('review_status'), '')}
+                         'status': {'registration_requested': '\uC2E0\uADDC \uD0A4\uC6CC\uB4DC \uB4F1\uB85D \uC694\uCCAD',
+                                    'ignored': '\uAD00\uB9AC\uC790 \uAC70\uC808'}.get(row.get('review_status'), '')}
                         for row in rows]
-        st.caption(f'검색 결과 {total:,}종 · {page + 1}/{max(1, (total + 99) // 100)} 페이지')
-        previous, following, refresh = st.columns(3)
-        if previous.button('이전', key='unmatched_previous', disabled=page == 0):
-            st.session_state['unmatched_page'] = page - 1
-            st.rerun()
-        if following.button('다음', key='unmatched_next', disabled=(page + 1) * 100 >= total):
-            st.session_state['unmatched_page'] = page + 1
-            st.rerun()
-        refresh.button(
-            '목록 새로고침', key='unmatched_refresh',
-            help='\uac80\uc0c9\uc5b4 \uc785\ub825 \ud6c4 \ubaa9\ub85d \uc0c8\ub85c\uace0\uce68\uc744 \ub20c\ub7ec \uc801\uc6a9\ud558\uc138\uc694.',
-        )
+        if total > page_size:
+            st.caption(f'\uAC80\uC0C9 \uACB0\uACFC {total:,}\uC885 \u00B7 {page + 1}/{(total + page_size - 1) // page_size} \uD398\uC774\uC9C0')
+            with st.container(horizontal=True, gap='small'):
+                st.button('\uC774\uC804', key='unmatched_previous',
+                          on_click=lambda: st.session_state.__setitem__('unmatched_page', max(0, int(st.session_state.get('unmatched_page', 0)) - 1)),
+                          disabled=page == 0)
+                st.button('\uB2E4\uC74C', key='unmatched_next',
+                          on_click=lambda: st.session_state.__setitem__('unmatched_page', int(st.session_state.get('unmatched_page', 0)) + 1),
+                          disabled=(page + 1) * page_size >= total)
+                st.button('\uBAA9\uB85D \uC0C8\uB85C\uACE0\uCE68', key='unmatched_refresh')
+        else:
+            st.button('\uBAA9\uB85D \uC0C8\uB85C\uACE0\uCE68', key='unmatched_refresh')
         if st.button('전체 누적 CSV 만들기', key='make_unmatched_export'):
             try:
                 exported = SupabaseRepository().export_unmatched_terms()
@@ -4636,16 +4704,23 @@ def render_unmatched_candidate_pool():
         search_scope = hashlib.sha256(
             str(st.session_state.get('unmatched_search', '')).encode('utf-8')
         ).hexdigest()[:10]
-        selection_version_key = (
-            f"unmatched_candidate_selector_version_{page if cloud_enabled() else 'local'}_"
-            f"{search_scope}_{review_revision}"
-        )
+        selection_state_key = f"unmatched_selection_state_{search_scope}"
+        selection_state = st.session_state.setdefault(selection_state_key, {'all': False, 'ids': {}})
+        if not isinstance(selection_state.get('ids'), dict):
+            selection_state['ids'] = {}
+        selection_version_key = f"unmatched_candidate_selector_version_{search_scope}_{review_revision}"
         selection_version = int(st.session_state.get(selection_version_key, 0))
         select_all_key = f"unmatched_candidate_select_all_{selection_version_key}"
-        editor_key = f"unmatched_candidate_selector_{selection_version_key}_{selection_version}"
-        st.session_state.setdefault(select_all_key, False)
-        candidate_df.insert(0, selection_column, bool(st.session_state[select_all_key]))
-        table_key = f"unmatched_candidate_table_{selection_version_key}_{selection_version}"
+        st.session_state[select_all_key] = bool(selection_state.get('all'))
+        editor_key = f"unmatched_candidate_selector_{selection_version_key}_{page}_{selection_version}"
+        table_key = f"unmatched_candidate_table_{selection_version_key}_{page}_{selection_version}"
+        candidate_df.insert(0, selection_column, [
+            bool(selection_state['all']) ^ (selection_state['ids'].get(row['surface_key']) is False)
+            if selection_state['all'] else bool(selection_state['ids'].get(row['surface_key'], False))
+            for row in review_rows
+        ])
+        st.session_state.setdefault(f'unmatched_selected_rows_{search_scope}', {}).update(
+            {row['surface_key']: row for row in review_rows})
         st.markdown(
             f"""
 <style>
@@ -4668,8 +4743,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             "\uC804\uCCB4 \uC120\uD0DD/\uD574\uC81C",
             key=select_all_key,
             on_change=_set_unmatched_candidate_select_all,
-            args=(selection_version_key,),
-            label_visibility="collapsed",
+            args=(selection_version_key, selection_state_key),
+            label_visibility='collapsed',
             disabled=not review_rows,
         )
         selection = selection_table.data_editor(
@@ -4683,14 +4758,27 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             disabled=[column for column in candidate_df.columns if column != selection_column],
             key=editor_key,
         )
-        selected_positions = [
-            index for index, selected in enumerate(selection[selection_column].fillna(False))
-            if selected
-        ]
-        selected_rows = [review_rows[index] for index in selected_positions if 0 <= index < len(review_rows)]
+        row_cache = st.session_state.setdefault(f'unmatched_selected_rows_{search_scope}', {})
+        for index, row in enumerate(review_rows):
+            selected = bool(selection[selection_column].fillna(False).iloc[index])
+            key = row['surface_key']
+            if selection_state['all']:
+                if selected:
+                    selection_state['ids'].pop(key, None)
+                else:
+                    selection_state['ids'][key] = False
+            elif selected:
+                selection_state['ids'][key] = True
+            else:
+                selection_state['ids'].pop(key, None)
+        selected_rows = [row_cache[key] for key, value in selection_state['ids'].items()
+                         if value is True and key in row_cache]
+        if selection_state['all']:
+            selected_rows = [row for key, row in row_cache.items()
+                             if selection_state['ids'].get(key) is not False]
         selected_ids = [row['surface_key'] for row in selected_rows]
-        st.caption('표에서 행을 선택해 선택 항목만 분석할 수 있습니다. 한 행을 선택하면 표현을 수정할 수 있습니다. 관리자는 선택한 공용 후보를 영구 삭제할 수 있습니다.')
-        if len(selected_rows) == 1:
+        st.caption('\uD398\uC774\uC9C0\uAC00 \uBC14\uB00C\uC5B4\uB3C4 \uC120\uD0DD\uC740 \uC720\uC9C0\uB429\uB2C8\uB2E4. \uC804\uCCB4 \uC120\uD0DD\uC740 \uD604\uC7AC \uAC80\uC0C9\uACB0\uACFC \uC804\uCCB4\uC5D0 \uC801\uC6A9\uB429\uB2C8\uB2E4.')
+        if len(selected_rows) == 1 and not selection_state['all']:
             selected_row = selected_rows[0]
             with st.form(f"unmatched_candidate_edit_{selected_row['surface_key']}"):
                 edited_surface = st.text_input('선택 후보 표현 수정', value=selected_row['surface'])
@@ -4705,6 +4793,14 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 '현재 누적 통계와 관측 기록을 삭제합니다. 이후 새 분석에서는 다시 수집될 수 있습니다.',
                 key='confirm_selected_unmatched_delete', on_change='ignore')
             if st.button('\uc120\ud0dd \ud45c\ud604 \uc601\uad6c \uc0ad\uc81c', key='delete_selected_unmatched_review_rows'):
+                try:
+                    action_rows = _load_unmatched_selection_rows(
+                        search, selection_state, row_cache, review.get('edits', {}))
+                    selected_ids = [row['surface_key'] for row in action_rows]
+                except Exception:
+                    logging.exception('Could not load selected unmatched candidates')
+                    st.error('\uc120\ud0dd\ud55c \ud45c\ud604\uc744 \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4.')
+                    selected_ids = []
                 if not selected_ids:
                     st.warning('\uc0ad\uc81c\ud560 \ubbf8\ub9e4\uce6d \ud45c\ud604\uc744 \uc120\ud0dd\ud558\uc138\uc694.')
                 elif not st.session_state.get('confirm_selected_unmatched_delete', False):
@@ -4720,7 +4816,14 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                     except (StorageError, PermissionError):
                         st.error('\uc601\uad6c \uc0ad\uc81c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \uad00\ub9ac\uc790 \uad8c\ud55c\uacfc \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uc138\uc694.')
         if st.button("선택후보군 정규화 작업", type="primary", key="analyze_unmatched_candidate_pool"):
-            if not selected_rows:
+            try:
+                action_rows = _load_unmatched_selection_rows(
+                    search, selection_state, row_cache, review.get('edits', {}))
+            except Exception as selection_error:
+                logging.exception('Could not load selected unmatched candidates')
+                st.error(f"\ubbf8\ub9e4\uce6d \ud6c4\ubcf4\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4: {selection_error}")
+                action_rows = []
+            if not action_rows:
                 st.warning('분석할 행을 표에서 선택하세요.')
             else:
                 try:
@@ -4730,7 +4833,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                     analysis_rows = [
                         {'surface': row['surface'],
                          'occurrences': int(row.get('occurrences', 0) or 0)}
-                        for row in selected_rows
+                        for row in action_rows
                     ]
                     recommendations = normalize_candidates(analysis_rows)
                     st.session_state["unmatched_candidate_recommendations"] = recommendations

@@ -431,12 +431,21 @@ class SupabaseRepository:
             raise PermissionError('사용자 관리는 관리자만 이용할 수 있습니다.')
         return actor
 
-    def list_users(self, token, page=1):
+    def list_users(self, token, page=1, per_page=1000):
         self._require_app_admin(token)
         if not isinstance(page, int) or not 1 <= page <= 100000:
             raise ValueError('올바른 페이지 번호를 입력하세요.')
-        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page=50')
+        if not isinstance(per_page, int) or not 1 <= per_page <= 1000:
+            raise ValueError('페이지당 조회 수는 1~1,000이어야 합니다.')
+        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page={per_page}')
         return [_user_summary(user) for user in result['users']]
+
+    def has_users_page(self, token, page):
+        self._require_app_admin(token)
+        if not isinstance(page, int) or not 1 <= page <= 100000:
+            raise ValueError('올바른 페이지 번호를 입력하세요.')
+        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page=1')
+        return bool(result.get('users'))
 
     def set_user_role(self, token, user_id, role, expected_role):
         if role not in {'admin', 'member'}:

@@ -420,7 +420,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(updated['role'], 'admin')
         calls = request.call_args_list
         self.assertEqual(calls[0].kwargs['headers']['Authorization'], 'Bearer verified-admin-token')
-        self.assertTrue(calls[1].args[1].endswith('/admin/users?page=2&per_page=50'))
+        self.assertTrue(calls[1].args[1].endswith('/admin/users?page=2&per_page=1000'))
         for call in (calls[1], calls[3], calls[4]):
             self.assertEqual(call.kwargs['headers']['apikey'], 'sb_secret_test')
             self.assertNotIn('Authorization', call.kwargs['headers'])
