@@ -3006,10 +3006,6 @@ def _reset_ocr_analysis(candidates_key, editor_version_key, image_version_key, f
     st.session_state.pop('ocr_keyword_collection_id', None)
 
 
-def _set_unmatched_candidate_select_all(editor_version_key):
-    st.session_state[editor_version_key] = int(st.session_state.get(editor_version_key, 0)) + 1
-
-
 def _clear_unmatched_review():
     st.session_state['unmatched_candidate_recommendations'] = []
     st.session_state['unmatched_recommendation_hidden_ids'] = []
@@ -3064,14 +3060,17 @@ def _collect_unmatched_text(text, coverage_matches=None, analysis_id=None):
     return True
 
 
-def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label):
+def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label, select_all_key, select_all_applied_key):
     widget_state = st.session_state.get(editor_key) or {}
     edited_rows = widget_state.get("edited_rows", {})
     terms = []
     candidates = st.session_state.get(candidates_key, [])
     for index, row in enumerate(candidates):
         changes = edited_rows.get(index, {})
-        if not bool(changes.get("approved", row.get("approved", False))):
+        approved = bool(changes.get("approved", row.get("approved", False)))
+        if st.session_state.get(select_all_key) != st.session_state.get(select_all_applied_key):
+            approved = bool(st.session_state.get(select_all_key))
+        if not approved:
             continue
         term = str(changes.get("term", row.get("term", ""))).strip()
         if term:
@@ -3397,6 +3396,20 @@ def render_image_ocr_tab():
         select_all_key,
         bool(candidates) and all(bool(row.get("approved", False)) for row in candidates),
     )
+    select_all_applied_key = f"{select_all_key}_applied"
+    st.session_state.setdefault(select_all_applied_key, st.session_state[select_all_key])
+    if st.session_state[select_all_key] != st.session_state[select_all_applied_key]:
+        _update_ocr_editor_approvals(
+            editor_key, "ocr_keyword_candidates", "ocr_keyword_editor_version", select_all_key)
+        candidates = st.session_state["ocr_keyword_candidates"]
+        df["approved"] = [bool(row.get("approved", False)) for row in candidates]
+        version = st.session_state["ocr_keyword_editor_version"]
+        editor_key = f"ocr_keyword_editor_{version}"
+        select_all_key = f"ocr_keyword_select_all_{version}"
+        st.session_state.setdefault(select_all_key, bool(candidates) and all(
+            bool(row.get("approved", False)) for row in candidates))
+        select_all_applied_key = f"{select_all_key}_applied"
+        st.session_state.setdefault(select_all_applied_key, st.session_state[select_all_key])
     st.button(
         "OCR \ubd84\uc11d \ucd08\uae30\ud654",
         key=f"ocr_keyword_reset_{version}",
@@ -3425,8 +3438,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
     ocr_table.checkbox(
         "OCR 후보 전체 선택/해제",
         key=select_all_key,
-        on_change=_update_ocr_editor_approvals,
-        args=(editor_key, "ocr_keyword_candidates", "ocr_keyword_editor_version", select_all_key),
+        on_change="ignore",
         disabled=not candidates,
         label_visibility="collapsed",
     )
@@ -3466,7 +3478,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         "OCR 후보 텍스트 분석 및 하이라이트 미리보기",
         key="ocr_keyword_preview_analysis",
         on_click=_prepare_ocr_candidate_analysis,
-        args=(editor_key, "ocr_keyword_candidates", analysis_tab_label),
+        args=(editor_key, "ocr_keyword_candidates", analysis_tab_label,
+              select_all_key, select_all_applied_key),
         help="승인 체크된 OCR 후보만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.",
     )
     if st.button("선택 후보 승인 및 DB 저장", type="primary", key="ocr_keyword_save"):
@@ -4650,6 +4663,13 @@ def render_unmatched_candidate_pool():
         select_all_key = f"unmatched_candidate_select_all_{selection_version_key}"
         editor_key = f"unmatched_candidate_selector_{selection_version_key}_{selection_version}"
         st.session_state.setdefault(select_all_key, False)
+        select_all_applied_key = f"{select_all_key}_applied"
+        st.session_state.setdefault(select_all_applied_key, st.session_state[select_all_key])
+        if st.session_state[select_all_key] != st.session_state[select_all_applied_key]:
+            selection_version = int(st.session_state.get(selection_version_key, 0)) + 1
+            st.session_state[selection_version_key] = selection_version
+            st.session_state[select_all_applied_key] = st.session_state[select_all_key]
+            editor_key = f"unmatched_candidate_selector_{selection_version_key}_{selection_version}"
         candidate_df.insert(0, selection_column, bool(st.session_state[select_all_key]))
         table_key = f"unmatched_candidate_table_{selection_version_key}_{selection_version}"
         st.markdown(
@@ -4673,8 +4693,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         selection_table.checkbox(
             "\uC804\uCCB4 \uC120\uD0DD/\uD574\uC81C",
             key=select_all_key,
-            on_change=_set_unmatched_candidate_select_all,
-            args=(selection_version_key,),
+            on_change="ignore",
             label_visibility="collapsed",
             disabled=not review_rows,
         )
