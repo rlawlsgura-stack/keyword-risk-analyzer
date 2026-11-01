@@ -1726,6 +1726,10 @@ def render_cloud_login():
         try:
             if session:
                 repository.logout(session['access_token'])
+        except PermissionError:
+            # An expired or revoked access token cannot be remotely logged out,
+            # but the local session still needs to be cleared below.
+            pass
         finally:
             st.session_state.clear()
             st.session_state['_auth_persistence_action'] = 'clear'
