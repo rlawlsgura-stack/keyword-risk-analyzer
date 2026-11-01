@@ -1,3 +1,8 @@
+## FIXED326 - Add CI and keep OCR overlay text inside its boxes
+
+- Add a secret-free GitHub Actions pipeline for dependency, lint, test, and syntax checks.
+- Fit selectable OCR text inside the detected box with a small rendering margin.
+
 ## FIXED325 - Release the latest app version
 
 - Publish the current OCR selection layout and shared local/cloud launcher as FIXED325.
