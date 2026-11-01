@@ -4626,20 +4626,22 @@ def render_unmatched_candidate_pool():
              **({'분석 횟수': int(row.get('analysis_count', 0) or 0)} if cloud_enabled() else {})}
             for row in review_rows
         ])
-        selection = _selectable_dataframe(
+        selection_column = "\uC120\uD0DD"
+        candidate_df.insert(0, selection_column, False)
+        selection = st.data_editor(
             candidate_df, hide_index=True, width='stretch',
-            alt='Shared unmatched-expression review list',
+            alt='Shared unmatched-expression review list', num_rows='fixed',
+            on_change='ignore',
             column_config={
-                '미매칭 표현': st.column_config.TextColumn('미매칭 표현'),
-                '\uB4F1\uB85D\uC77C\uC2DC': st.column_config.DatetimeColumn('\uB4F1\uB85D\uC77C\uC2DC', format='YYYY-MM-DD HH:mm'),
-                '처리상태': st.column_config.TextColumn('처리상태'),
-                '검출횟수(중복포함)': st.column_config.NumberColumn('검출횟수(중복포함)'),
-                **({'분석 횟수': st.column_config.NumberColumn('분석 횟수')} if cloud_enabled() else {}),
+                selection_column: st.column_config.CheckboxColumn(selection_column),
             },
-            on_select='rerun', selection_mode='multi-row',
+            disabled=[column for column in candidate_df.columns if column != selection_column],
             key=f"unmatched_candidate_selector_{page if cloud_enabled() else 'local'}_{st.session_state.get('unmatched_search', '')}_{review_revision}",
         )
-        selected_positions = selection.selection.rows
+        selected_positions = [
+            index for index, selected in enumerate(selection[selection_column].fillna(False))
+            if selected
+        ]
         selected_rows = [review_rows[index] for index in selected_positions if 0 <= index < len(review_rows)]
         selected_ids = [row['surface_key'] for row in selected_rows]
         st.caption('표에서 행을 선택해 선택 항목만 분석할 수 있습니다. 한 행을 선택하면 표현을 수정할 수 있습니다. 관리자는 선택한 공용 후보를 영구 삭제할 수 있습니다.')
