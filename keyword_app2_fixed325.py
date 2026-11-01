@@ -3459,7 +3459,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             "detail": st.column_config.SelectboxColumn("심의기준", options=detail_options, required=True),
             "evidence": st.column_config.SelectboxColumn("증빙자료 유형", options=evidence_options, required=True),
             "alternative": st.column_config.SelectboxColumn("대체키워드", options=alt_options),
-            "approved": st.column_config.CheckboxColumn("\u200b", width=56, pinned=True, default=False),
+            "approved": st.column_config.CheckboxColumn("\u200b", width=44, pinned=True, default=False),
         },
     )
     candidate_pairs = [(_ocr_normalize(row.term), _ocr_normalize(row.category)) for row in edited.itertuples()]
@@ -4703,7 +4703,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             on_change='ignore',
             column_config={
                 selection_column: st.column_config.CheckboxColumn(
-                    selection_column, width='small', alignment='center'),
+                    "\u200b", width=44, alignment='center'),
             },
             disabled=[column for column in candidate_df.columns if column != selection_column],
             key=editor_key,
@@ -4872,7 +4872,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             num_rows="fixed",
             on_change="ignore",
             column_config={
-                "선택": st.column_config.CheckboxColumn("선택"),
+                "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=44, alignment="center"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
                 "source_terms": st.column_config.TextColumn("원본 표현"),
                 "occurrences": st.column_config.NumberColumn("출현 횟수", disabled=True),
@@ -5371,7 +5371,7 @@ if is_admin():
                 alt="Editable keyword database",
                 on_change="ignore",
                 column_config={
-                    selection_column: cc.CheckboxColumn(label=selection_column),
+                    selection_column: cc.CheckboxColumn(label="\u200b", width=44, alignment="center"),
                     "상품카테고리": cc.SelectboxColumn(options=_include_empty_option(cat_opts), required=False),
                     "리스크 등급": cc.SelectboxColumn(options=_include_empty_option(risk_opts), required=False),
                     DISPLAY_F_COL: cc.SelectboxColumn(options=_include_empty_option(detail_opts), required=False, label=DISPLAY_F_COL),
@@ -5390,7 +5390,8 @@ if is_admin():
                 width="stretch",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
-                column_config={selection_column: st.column_config.CheckboxColumn(label=selection_column)},
+                column_config={selection_column: st.column_config.CheckboxColumn(
+                    label="\u200b", width=44, alignment="center")},
                 on_change="ignore",
                 key=editor_key,
             )
