@@ -3447,7 +3447,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         alt="OCR-extracted keyword candidates",
         key=editor_key,
         on_change="ignore",
-        width="stretch",
+        width="content",
         hide_index=True,
         disabled=["confidence"],
         column_order=["approved", "term", "confidence", "category", "risk", "detail", "evidence", "alternative"],
@@ -4698,7 +4698,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             disabled=not review_rows,
         )
         selection = selection_table.data_editor(
-            candidate_df, hide_index=True, width='stretch',
+            candidate_df, hide_index=True, width='content',
             alt='Shared unmatched-expression review list', num_rows='fixed',
             on_change='ignore',
             column_config={
@@ -4868,7 +4868,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             recommendation_df,
             alt="Unmatched keyword normalization recommendations",
             hide_index=True,
-            width="stretch",
+            width="content",
             num_rows="fixed",
             on_change="ignore",
             column_config={
@@ -5378,7 +5378,7 @@ if is_admin():
                     "증빙자료유형": cc.SelectboxColumn(options=_include_empty_option(evidence_opts), required=False),
                     "대체키워드": cc.SelectboxColumn(options=_include_empty_option(alt_opts), required=False),
                 },
-                width="stretch",
+                width="content",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
                 key=editor_key,
@@ -5387,7 +5387,7 @@ if is_admin():
             edited_df = st.data_editor(
                 _rename_fcol(base_df),
                 alt="Editable keyword database",
-                width="stretch",
+                width="content",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
                 column_config={selection_column: st.column_config.CheckboxColumn(
