@@ -3447,7 +3447,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         alt="OCR-extracted keyword candidates",
         key=editor_key,
         on_change="ignore",
-        width="content",
+        width="stretch",
         hide_index=True,
         disabled=["confidence"],
         column_order=["approved", "term", "confidence", "category", "risk", "detail", "evidence", "alternative"],
@@ -4698,12 +4698,12 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             disabled=not review_rows,
         )
         selection = selection_table.data_editor(
-            candidate_df, hide_index=True, width='content',
+            candidate_df, hide_index=True, width='stretch',
             alt='Shared unmatched-expression review list', num_rows='fixed',
             on_change='ignore',
             column_config={
                 selection_column: st.column_config.CheckboxColumn(
-                    "\u200b", width=32, alignment='center'),
+                    "\u200b", width=32, pinned=True, alignment='center'),
             },
             disabled=[column for column in candidate_df.columns if column != selection_column],
             key=editor_key,
@@ -4868,11 +4868,11 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             recommendation_df,
             alt="Unmatched keyword normalization recommendations",
             hide_index=True,
-            width="content",
+            width="stretch",
             num_rows="fixed",
             on_change="ignore",
             column_config={
-                "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=32, alignment="center"),
+                "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=32, pinned=True, alignment="center"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
                 "source_terms": st.column_config.TextColumn("원본 표현"),
                 "occurrences": st.column_config.NumberColumn("출현 횟수", disabled=True),
@@ -5371,14 +5371,14 @@ if is_admin():
                 alt="Editable keyword database",
                 on_change="ignore",
                 column_config={
-                    selection_column: cc.CheckboxColumn(label="\u200b", width=32, alignment="center"),
+                    selection_column: cc.CheckboxColumn(label="\u200b", width=32, pinned=True, alignment="center"),
                     "상품카테고리": cc.SelectboxColumn(options=_include_empty_option(cat_opts), required=False),
                     "리스크 등급": cc.SelectboxColumn(options=_include_empty_option(risk_opts), required=False),
                     DISPLAY_F_COL: cc.SelectboxColumn(options=_include_empty_option(detail_opts), required=False, label=DISPLAY_F_COL),
                     "증빙자료유형": cc.SelectboxColumn(options=_include_empty_option(evidence_opts), required=False),
                     "대체키워드": cc.SelectboxColumn(options=_include_empty_option(alt_opts), required=False),
                 },
-                width="content",
+                width="stretch",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
                 key=editor_key,
@@ -5387,11 +5387,11 @@ if is_admin():
             edited_df = st.data_editor(
                 _rename_fcol(base_df),
                 alt="Editable keyword database",
-                width="content",
+                width="stretch",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
                 disabled=['kwd_no', '키워드 조회 수(누적카운트)', LAST_SEARCH_LABEL] if cloud_enabled() else [],
                 column_config={selection_column: st.column_config.CheckboxColumn(
-                    label="\u200b", width=32, alignment="center")},
+                    label="\u200b", width=32, pinned=True, alignment="center")},
                 on_change="ignore",
                 key=editor_key,
             )
