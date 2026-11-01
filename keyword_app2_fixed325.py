@@ -2971,6 +2971,12 @@ def _persist_keyword_editor(editor_key, base_key, draft_key, checkbox_key, selec
         frame = pd.concat([frame, pd.DataFrame(added_rows)], ignore_index=True)
     if selection_column in frame.columns:
         frame[selection_column] = frame[selection_column].fillna(False).astype(bool)
+        select_all_applied_key = f"{checkbox_key}_applied"
+        select_all_value = bool(st.session_state.get(checkbox_key, False))
+        if (select_all_applied_key in st.session_state
+                and select_all_value != st.session_state[select_all_applied_key]):
+            frame[selection_column] = select_all_value
+            st.session_state[select_all_applied_key] = select_all_value
     draft = frame.to_dict('records')
     st.session_state[draft_key] = draft
     st.session_state[checkbox_key] = bool(draft) and all(
@@ -3054,14 +3060,17 @@ def _collect_unmatched_text(text, coverage_matches=None, analysis_id=None):
     return True
 
 
-def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label):
+def _prepare_ocr_candidate_analysis(editor_key, candidates_key, analysis_tab_label, select_all_key, select_all_applied_key):
     widget_state = st.session_state.get(editor_key) or {}
     edited_rows = widget_state.get("edited_rows", {})
     terms = []
     candidates = st.session_state.get(candidates_key, [])
     for index, row in enumerate(candidates):
         changes = edited_rows.get(index, {})
-        if not bool(changes.get("approved", row.get("approved", False))):
+        approved = bool(changes.get("approved", row.get("approved", False)))
+        if st.session_state.get(select_all_key) != st.session_state.get(select_all_applied_key):
+            approved = bool(st.session_state.get(select_all_key))
+        if not approved:
             continue
         term = str(changes.get("term", row.get("term", ""))).strip()
         if term:
@@ -3387,6 +3396,18 @@ def render_image_ocr_tab():
         select_all_key,
         bool(candidates) and all(bool(row.get("approved", False)) for row in candidates),
     )
+    select_all_applied_key = "ocr_keyword_select_all_applied"
+    st.session_state.setdefault(select_all_applied_key, st.session_state[select_all_key])
+    if st.session_state[select_all_key] != st.session_state[select_all_applied_key]:
+        _update_ocr_editor_approvals(
+            editor_key, "ocr_keyword_candidates", "ocr_keyword_editor_version", select_all_key)
+        st.session_state[select_all_applied_key] = st.session_state[select_all_key]
+        candidates = st.session_state["ocr_keyword_candidates"]
+        version = st.session_state["ocr_keyword_editor_version"]
+        editor_key = f"ocr_keyword_editor_{version}"
+        select_all_key = f"ocr_keyword_select_all_{version}"
+        st.session_state.setdefault(select_all_key, bool(candidates) and all(
+            bool(row.get("approved", False)) for row in candidates))
     st.button(
         "OCR \ubd84\uc11d \ucd08\uae30\ud654",
         key=f"ocr_keyword_reset_{version}",
@@ -3415,8 +3436,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
     ocr_table.checkbox(
         "OCR 후보 전체 선택/해제",
         key=select_all_key,
-        on_change=_update_ocr_editor_approvals,
-        args=(editor_key, "ocr_keyword_candidates", "ocr_keyword_editor_version", select_all_key),
+        on_change="ignore",
         disabled=not candidates,
         label_visibility="collapsed",
     )
@@ -3456,48 +3476,51 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         "OCR 후보 텍스트 분석 및 하이라이트 미리보기",
         key="ocr_keyword_preview_analysis",
         on_click=_prepare_ocr_candidate_analysis,
-        args=(editor_key, "ocr_keyword_candidates", analysis_tab_label),
-        disabled=not analysis_text or len(analysis_text) > 20000,
+        args=(editor_key, "ocr_keyword_candidates", analysis_tab_label,
+              select_all_key, select_all_applied_key),
         help="승인 체크된 OCR 후보만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.",
     )
-    if st.button("선택 후보 승인 및 DB 저장", type="primary", key="ocr_keyword_save", disabled=approved.empty):
-        approved["term"] = approved["term"].fillna("").astype(str).str.strip()
-        for column in ["category", "risk", "detail", "evidence"]:
-            approved[column] = approved[column].fillna("").astype(str).str.strip()
-        missing = approved[
-            approved[["term", "category", "risk", "detail", "evidence"]].eq("").any(axis=1)
-        ]
-        if not missing.empty:
-            st.error("승인한 모든 행에 키워드명·카테고리·리스크 등급·심의기준·증빙자료 유형을 입력하세요.")
+    if st.button("선택 후보 승인 및 DB 저장", type="primary", key="ocr_keyword_save"):
+        if approved.empty:
+            st.warning("\uB4F1\uB85D\uD560 OCR \ud6c4\ubcf4\ub97c \uba3c\uc800 \uc120\ud0dd\ud558\uc138\uc694.")
         else:
-            approved_pairs = [(_ocr_normalize(r.term), _ocr_normalize(r.category)) for r in approved.itertuples()]
-            duplicate_pairs = len(approved_pairs) != len(set(approved_pairs)) or any(pair in existing_pairs for pair in approved_pairs)
-            if duplicate_pairs:
-                st.error("승인 후보에 기존 DB 또는 후보끼리 중복된 키워드가 있습니다. 중복을 수정하거나 승인 해제하세요.")
+            approved["term"] = approved["term"].fillna("").astype(str).str.strip()
+            for column in ["category", "risk", "detail", "evidence"]:
+                approved[column] = approved[column].fillna("").astype(str).str.strip()
+            missing = approved[
+                approved[["term", "category", "risk", "detail", "evidence"]].eq("").any(axis=1)
+            ]
+            if not missing.empty:
+                st.error("승인한 모든 행에 키워드명·카테고리·리스크 등급·심의기준·증빙자료 유형을 입력하세요.")
             else:
-                rows = []
-                working_df = base_df.copy()
-                try:
-                    for row in approved.to_dict("records"):
-                        st.session_state.kw_df = working_df
-                        kwd_no = next_kwd_no(row["category"])
-                        values = [kwd_no, row["term"], row["category"], row["risk"], row["alternative"], row["detail"], row["evidence"], "0", ""]
-                        new_row = dict(zip(DB_COLS, values))
-                        rows.append(new_row)
-                        working_df = pd.concat([working_df, pd.DataFrame([new_row])], ignore_index=True)
-                finally:
-                    st.session_state.kw_df = base_df
-                incoming = pd.DataFrame(rows, columns=DB_COLS)
-                merged, _, _ = merge_or_overwrite(base_df, incoming, "merge")
-                st.session_state.kw_df = merged
-                save_db(merged, Path(st.session_state.storage_path), allow_ocr_member=True)
-                st.session_state.ocr_keyword_candidates = []
-                st.session_state.ocr_keyword_editor_version = version + 1
-                st.session_state[image_version_key] = int(st.session_state.get(image_version_key, 0)) + 1
-                st.session_state[stored_uploads_key] = []
-                st.session_state.pop('ocr_keyword_collection_id', None)
-                st.success(f"관리자 승인 키워드 {len(rows)}건을 등록했습니다.")
-                st.rerun()
+                approved_pairs = [(_ocr_normalize(r.term), _ocr_normalize(r.category)) for r in approved.itertuples()]
+                duplicate_pairs = len(approved_pairs) != len(set(approved_pairs)) or any(pair in existing_pairs for pair in approved_pairs)
+                if duplicate_pairs:
+                    st.error("승인 후보에 기존 DB 또는 후보끼리 중복된 키워드가 있습니다. 중복을 수정하거나 승인 해제하세요.")
+                else:
+                    rows = []
+                    working_df = base_df.copy()
+                    try:
+                        for row in approved.to_dict("records"):
+                            st.session_state.kw_df = working_df
+                            kwd_no = next_kwd_no(row["category"])
+                            values = [kwd_no, row["term"], row["category"], row["risk"], row["alternative"], row["detail"], row["evidence"], "0", ""]
+                            new_row = dict(zip(DB_COLS, values))
+                            rows.append(new_row)
+                            working_df = pd.concat([working_df, pd.DataFrame([new_row])], ignore_index=True)
+                    finally:
+                        st.session_state.kw_df = base_df
+                    incoming = pd.DataFrame(rows, columns=DB_COLS)
+                    merged, _, _ = merge_or_overwrite(base_df, incoming, "merge")
+                    st.session_state.kw_df = merged
+                    save_db(merged, Path(st.session_state.storage_path), allow_ocr_member=True)
+                    st.session_state.ocr_keyword_candidates = []
+                    st.session_state.ocr_keyword_editor_version = version + 1
+                    st.session_state[image_version_key] = int(st.session_state.get(image_version_key, 0)) + 1
+                    st.session_state[stored_uploads_key] = []
+                    st.session_state.pop('ocr_keyword_collection_id', None)
+                    st.success(f"관리자 승인 키워드 {len(rows)}건을 등록했습니다.")
+                    st.rerun()
 
 
 def render_regulation_chat_tab():
@@ -3674,8 +3697,8 @@ with tabs['analysis']:
                                 help=_numbered_help('예시) 등록 `안티에이징` / 입력 `에이징 관리가 필요하다`\n\n- O · 최소 3글자 → `에이징` 검출\n- X · 최소 4글자 → 미검출\n\n옵션에 따라 공백·기호를 처리한 뒤의 글자수를 기준으로 합니다.\n\n등록 키워드 자체가 최소 글자수보다 짧으면 검색하지 않습니다.'))
             with st.expander('키워드 매칭 옵션', expanded=False):
                 for name, (label, description) in MATCH_NORMALIZATION_OPTIONS.items():
-                    st.checkbox(label, key=name, help=_numbered_help(description), on_change=invalidate_analysis_result)
-                st.caption('옵션을 변경하면 이전 결과를 숨깁니다.\n\n텍스트 분석하기를 눌러 새 조건으로 검사하세요.')
+                    st.checkbox(label, key=name, help=_numbered_help(description), on_change="ignore")
+                st.caption('\uc635\uc158\uc740 \ud14d\uc2a4\ud2b8 \ubd84\uc11d\ud558\uae30\ub97c \ub20c\ub7ec \uc801\uc6a9\ud558\uc138\uc694.')
                 if match_mode == MATCH_MODES['exact'] and not st.session_state.strip_bracket_notes:
                     st.info('현재는 괄호까지 포함한 등록명을 찾습니다.\n\n안티에이징(anti-aging)을 안티에이징으로에서도 찾으려면 괄호 설명 제외를 켜세요.')
             rules_summary = st.empty()
@@ -4773,11 +4796,24 @@ def render_unmatched_candidate_pool():
             select_all_key,
             bool(recommendation_ids) and all(item in selected_ids for item in recommendation_ids),
         )
+        select_all_applied_key = f"{select_all_key}_applied"
+        st.session_state.setdefault(select_all_applied_key, st.session_state[select_all_key])
+        if st.session_state[select_all_key] != st.session_state[select_all_applied_key]:
+            _set_unmatched_select_all(
+                recommendation_ids, select_all_key, editor_key, recommendations, select_column)
+            st.session_state[select_all_applied_key] = st.session_state[select_all_key]
+            recommendation_df[select_column] = bool(st.session_state[select_all_key])
+            saved_edits = st.session_state.get('unmatched_recommendation_edits', {})
+            for row_index, recommendation_id in enumerate(recommendation_ids):
+                for column, value in saved_edits.get(recommendation_id, {}).items():
+                    if column in recommendation_df.columns:
+                        recommendation_df.at[row_index, column] = value
+            editor_key = (f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
+                          + ids_hash)
         st.checkbox(
             "\uC120\uD0DD",
             key=select_all_key,
-            on_change=_set_unmatched_select_all,
-            args=(recommendation_ids, select_all_key, editor_key, recommendations, select_column),
+            on_change="ignore",
             help="\uB204\uB974\uBA74 \uD45C\uC758 \uD56D\uBAA9\uC744 \uBAA8\uB450 \uC120\uD0DD\uD558\uAC70\uB098 \uD574\uC81C\uD569\uB2C8\uB2E4.",
             label_visibility="collapsed",
         )
@@ -5249,11 +5285,23 @@ if is_admin():
             checkbox_key,
             bool(len(base_df)) and bool(base_df[selection_column].fillna(False).all()),
         )
+        select_all_applied_key = f"{checkbox_key}_applied"
+        st.session_state.setdefault(select_all_applied_key, st.session_state[checkbox_key])
+        if st.session_state[checkbox_key] != st.session_state[select_all_applied_key]:
+            _set_keyword_editor_select_all(
+                draft_key, base_key, selection_column, version_key, checkbox_key, editor_key)
+            st.session_state[select_all_applied_key] = st.session_state[checkbox_key]
+            base_df = pd.DataFrame(st.session_state[draft_key]).rename(
+                columns={DISPLAY_F_COL: RAW_F_COL, LAST_SEARCH_LABEL: LAST_HIT_COL})
+            editor_version = int(st.session_state.get(version_key, 0))
+            editor_key = f"editor_{mode_id}_{editor_version}"
+            base_key = f"{editor_key}_base"
+            display_base_df = _rename_fcol(base_df)
+            st.session_state[base_key] = display_base_df.to_dict('records')
         st.checkbox(
             "Select all rows",
             key=checkbox_key,
-            on_change=_set_keyword_editor_select_all,
-            args=(draft_key, base_key, selection_column, version_key, checkbox_key, editor_key),
+            on_change="ignore",
             label_visibility="collapsed",
             help="Select or clear all rows in this table.",
         )
