@@ -4658,18 +4658,22 @@ def render_unmatched_candidate_pool():
         if cloud_enabled() and is_admin():
             confirm_selected_delete = st.checkbox(
                 '현재 누적 통계와 관측 기록을 삭제합니다. 이후 새 분석에서는 다시 수집될 수 있습니다.',
-                key='confirm_selected_unmatched_delete')
-            if st.button('선택 표현 영구 삭제', key='delete_selected_unmatched_review_rows',
-                         disabled=not selected_ids or not confirm_selected_delete):
-                try:
-                    SupabaseRepository().delete_unmatched_terms(
-                        selected_ids, st.session_state['auth_session']['access_token'])
-                    _clear_unmatched_review()
-                    st.session_state['unmatched_page'] = 0
-                    st.session_state.pop('confirm_selected_unmatched_delete', None)
-                    st.rerun()
-                except (StorageError, PermissionError):
-                    st.error('영구 삭제에 실패했습니다. 관리자 권한과 연결 상태를 확인하세요.')
+                key='confirm_selected_unmatched_delete', on_change='ignore')
+            if st.button('\uc120\ud0dd \ud45c\ud604 \uc601\uad6c \uc0ad\uc81c', key='delete_selected_unmatched_review_rows'):
+                if not selected_ids:
+                    st.warning('\uc0ad\uc81c\ud560 \ubbf8\ub9e4\uce6d \ud45c\ud604\uc744 \uc120\ud0dd\ud558\uc138\uc694.')
+                elif not st.session_state.get('confirm_selected_unmatched_delete', False):
+                    st.warning('\uc0ad\uc81c \ud655\uc778\ub780\uc744 \uba3c\uc800 \uc120\ud0dd\ud558\uc138\uc694.')
+                else:
+                    try:
+                        SupabaseRepository().delete_unmatched_terms(
+                            selected_ids, st.session_state['auth_session']['access_token'])
+                        _clear_unmatched_review()
+                        st.session_state['unmatched_page'] = 0
+                        st.session_state.pop('confirm_selected_unmatched_delete', None)
+                        st.rerun()
+                    except (StorageError, PermissionError):
+                        st.error('\uc601\uad6c \uc0ad\uc81c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \uad00\ub9ac\uc790 \uad8c\ud55c\uacfc \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uc138\uc694.')
         if st.button("선택후보군 정규화 작업", type="primary", key="analyze_unmatched_candidate_pool"):
             if not selected_rows:
                 st.warning('분석할 행을 표에서 선택하세요.')
@@ -5401,51 +5405,57 @@ with tabs['report']:
         # 전체 초기화: DB의 누적카운트=0, 마지막 출력일자 공백 (로그는 유지 — 기존 동작 유지)
         col_z1, col_z2 = st.columns([1,1])
         with col_z1:
-            confirm_reset_all = st.checkbox("전체 조회 수를 0으로 초기화하고 '마지막 검색일자'를 비우기", value=False, key="report_reset_ck")
-            if st.button("전체 초기화 실행", disabled=not confirm_reset_all or not is_admin(), key="report_reset_btn"):
-                _require_admin()
-                try:
-                    if cloud_enabled():
-                        SupabaseRepository().reset_counts()
-                        st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
-                        st.success('전체 초기화 완료 (로그 유지)')
-                        st.stop()
-                    if "키워드 조회 수(누적카운트)" in st.session_state.kw_df.columns:
-                        st.session_state.kw_df["키워드 조회 수(누적카운트)"] = "0"
-                    if "마지막 출력일자" in st.session_state.kw_df.columns:
-                        st.session_state.kw_df["마지막 출력일자"] = ""
-                    save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
-                    st.success("전체 초기화 완료 (로그 파일은 유지됩니다)")
-                except Exception as e:
-                    st.error(f"초기화 실패: {e}")
+            confirm_reset_all = st.checkbox("전체 조회 수를 0으로 초기화하고 '마지막 검색일자'를 비우기", value=False, key="report_reset_ck", on_change="ignore")
+            if st.button("전체 초기화 실행", key="report_reset_btn"):
+                if not st.session_state.get('report_reset_ck', False):
+                    st.warning('\uc804\uccb4 \ucd08\uae30\ud654 \ud655\uc778\ub780\uc744 \uba3c\uc800 \uc120\ud0dd\ud558\uc138\uc694.')
+                else:
+                    _require_admin()
+                    try:
+                        if cloud_enabled():
+                            SupabaseRepository().reset_counts()
+                            st.session_state.kw_df = load_db(Path(st.session_state.storage_path))
+                            st.success('전체 초기화 완료 (로그 유지)')
+                            st.stop()
+                        if "키워드 조회 수(누적카운트)" in st.session_state.kw_df.columns:
+                            st.session_state.kw_df["키워드 조회 수(누적카운트)"] = "0"
+                        if "마지막 출력일자" in st.session_state.kw_df.columns:
+                            st.session_state.kw_df["마지막 출력일자"] = ""
+                        save_db(st.session_state.kw_df, Path(st.session_state.storage_path))
+                        st.success("전체 초기화 완료 (로그 파일은 유지됩니다)")
+                    except Exception as e:
+                        st.error(f"초기화 실패: {e}")
 
         # 최근 7일 초기화: 로그에서 최근 7일 기록만 삭제 (DB 누적카운트는 건드리지 않음)
         with col_z2:
-            confirm_reset_week = st.checkbox("최근 7일 조회수 초기화 (로그에서 최근 7일 기록 삭제)", value=False, key="report_reset7_ck")
-            if st.button("최근 7일 초기화 실행", disabled=not confirm_reset_week or not is_admin(), key="report_reset7_btn"):
-                _require_admin()
-                try:
-                    if cloud_enabled():
-                        removed = SupabaseRepository().reset_week()
-                        load_hits_log.clear()
-                        st.success(f'최근 7일 기록 {removed}건을 리포트에서 제외했습니다.')
-                        st.stop()
-                    log_df2 = load_hits_log()
-                    if log_df2.empty:
-                        st.info("삭제할 로그가 없습니다.")
-                    else:
-                        end_dt2 = now_kst()
-                        start_dt2 = end_dt2 - timedelta(days=7)
-                        log_df2["ts_dt"] = pd.to_datetime(log_df2["ts"], errors="coerce")
-                        before_cnt = len(log_df2)
-                        # keep records outside the last 7 days or with NaT (safety)
-                        keep_mask = (log_df2["ts_dt"].isna()) | (log_df2["ts_dt"] < start_dt2) | (log_df2["ts_dt"] > end_dt2)
-                        new_log = log_df2.loc[keep_mask, ["ts","kwd_no"]].reset_index(drop=True)
-                        overwrite_hits_log(new_log)
-                        removed = before_cnt - len(new_log)
-                        st.success(f"최근 7일 로그 {removed}건 삭제 완료")
-                except Exception as e:
-                    st.error(f"최근 7일 초기화 실패: {e}")
+            confirm_reset_week = st.checkbox("최근 7일 조회수 초기화 (로그에서 최근 7일 기록 삭제)", value=False, key="report_reset7_ck", on_change="ignore")
+            if st.button("최근 7일 초기화 실행", key="report_reset7_btn"):
+                if not st.session_state.get('report_reset7_ck', False):
+                    st.warning('\ucd5c\uadfc 7\uc77c \ucd08\uae30\ud654 \ud655\uc778\ub780\uc744 \uba3c\uc800 \uc120\ud0dd\ud558\uc138\uc694.')
+                else:
+                    _require_admin()
+                    try:
+                        if cloud_enabled():
+                            removed = SupabaseRepository().reset_week()
+                            load_hits_log.clear()
+                            st.success(f'최근 7일 기록 {removed}건을 리포트에서 제외했습니다.')
+                            st.stop()
+                        log_df2 = load_hits_log()
+                        if log_df2.empty:
+                            st.info("삭제할 로그가 없습니다.")
+                        else:
+                            end_dt2 = now_kst()
+                            start_dt2 = end_dt2 - timedelta(days=7)
+                            log_df2["ts_dt"] = pd.to_datetime(log_df2["ts"], errors="coerce")
+                            before_cnt = len(log_df2)
+                            # keep records outside the last 7 days or with NaT (safety)
+                            keep_mask = (log_df2["ts_dt"].isna()) | (log_df2["ts_dt"] < start_dt2) | (log_df2["ts_dt"] > end_dt2)
+                            new_log = log_df2.loc[keep_mask, ["ts","kwd_no"]].reset_index(drop=True)
+                            overwrite_hits_log(new_log)
+                            removed = before_cnt - len(new_log)
+                            st.success(f"최근 7일 로그 {removed}건 삭제 완료")
+                    except Exception as e:
+                        st.error(f"최근 7일 초기화 실패: {e}")
 
 if show_user_management:
     with tabs['user_admin']:
