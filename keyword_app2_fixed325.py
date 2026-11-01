@@ -2883,7 +2883,7 @@ def _ocr_options_for_column(frame, column, configured_options):
     values = []
     if column in frame.columns:
         values = frame[column].dropna().astype(str).str.strip().tolist()
-    return _ocr_select_options(values + list(configured_options or []))
+    return [""] + _ocr_select_options(values + list(configured_options or []))
 
 
 def _update_ocr_editor_approvals(editor_key, candidates_key, version_key, select_all_key):
@@ -3372,6 +3372,9 @@ def render_image_ocr_tab():
 
     df = pd.DataFrame(candidates)
     df["confidence"] = (df["confidence"] * 100).round().astype(int)
+    for column in ("category", "risk", "detail", "evidence", "alternative"):
+        values = df[column].fillna("").astype(str).str.strip()
+        df[column] = values.mask(values.str.casefold().isin({"none", "nan"}), "")
     base_df = st.session_state.kw_df.copy()
     # DB_COLS order: kwd_no, keyword, category, risk, alternative, detail, evidence, ...
     _, term_col, category_col, risk_col, alt_col, detail_col, evidence_col = DB_COLS[:7]
