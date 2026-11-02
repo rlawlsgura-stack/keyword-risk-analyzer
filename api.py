@@ -482,6 +482,8 @@ def delete_admin_unmatched_terms(
         raise HTTPException(403, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    except StorageError as exc:
+        raise HTTPException(502, 'Could not delete unmatched candidates from storage') from exc
     return {'deleted': deleted}
 
 

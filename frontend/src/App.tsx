@@ -2115,7 +2115,11 @@ function App() {
               </form>
               <div className="catalog-meta">
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedDeleteBusy}
-                  onClick={() => setUnmatchedRefresh(value => value + 1)}>목록 새로고침</button>
+                  onClick={() => {
+                    setDeleteSelectedUnmatched({})
+                    setUnmatchedDeleteConfirm(false)
+                    setUnmatchedRefresh(value => value + 1)
+                  }}>목록 새로고침</button>
                 <span>{unmatchedBusy ? '목록을 불러오는 중…' : `${unmatchedPage?.total ?? 0}개 표현`}</span>
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedExportBusy || !unmatchedPage?.total}
                   onClick={exportUnmatchedCsv}>{unmatchedExportBusy ? 'CSV 준비 중…' : '전체 누적 CSV'}</button>
