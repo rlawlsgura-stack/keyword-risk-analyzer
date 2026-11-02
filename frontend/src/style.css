@@ -206,7 +206,7 @@ textarea::placeholder { color: #a6b0c0; }
 .admin-keyword-table input { width: 145px; border: 1px solid #dce2eb; border-radius: 6px; padding: 8px; font-size: 11px; }
 .admin-keyword-table textarea { width: 250px; min-height: 85px; padding: 8px; font-size: 11px; line-height: 1.5; }
 .admin-dirty-note { margin: 13px 0 0; color: #986a36; font-size: 11px; }
-.catalog-meta { display: flex; justify-content: space-between; gap: 12px; margin: 19px 0 10px; color: #8793a6; font-size: 11px; }
+.catalog-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 19px 0 10px; color: #8793a6; font-size: 11px; }
 .catalog-panel td:nth-child(6) { min-width: 260px; white-space: pre-wrap; }
 .catalog-panel td:nth-child(5), .catalog-panel td:nth-child(7) { min-width: 150px; white-space: pre-wrap; }
 .catalog-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding-top: 17px; color: #718099; font-size: 12px; }

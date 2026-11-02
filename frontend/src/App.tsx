@@ -1176,7 +1176,8 @@ function App() {
       const headers = ['미매칭 표현', '누적 출현 횟수', '분석 횟수', '상태', '최초 수집 시각', '최근 수집 시각']
       const labels: Record<string, string> = { pending: '검토 대기', approved: '등록 완료',
         registration_requested: '신규 키워드 등록 요청', ignored: '관리자 거절' }
-      const formatDate = (value: string) => value ? new Date(value).toLocaleString('ko-KR') : ''
+      const formatDate = (value: string) => value
+        ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : ''
       const csvRows = [headers, ...rows.map(row => [row.display_term, String(row.total_occurrences),
         String(row.analysis_count), labels[row.review_status] ?? row.review_status,
         formatDate(row.first_seen), formatDate(row.last_seen)])]
