@@ -5183,8 +5183,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             hide_index=True,
             width="stretch",
             num_rows="add",
-            on_change=_save_unmatched_recommendation_editor,
-            args=(editor_key, recommendations, select_column),
+            on_change="ignore",
             column_config={
                 "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=32, pinned=True, alignment="center"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
