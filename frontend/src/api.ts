@@ -104,6 +104,15 @@ export type NormalizationRecommendation = {
   recommendation_id: string; term: string; source_terms: string; occurrences: number
   category: string; risk: string; criteria: string; evidence_type: string; alternative: string
 }
+export type OCRCandidate = {
+  term: string; confidence: number; occurrences: number; source_files: string[]
+  category: string; risk: string; detail: string; evidence: string; alternative: string; approved: boolean
+}
+export type OCRFileResult = {
+  index: number; name: string; count: number; error: string; truncated?: boolean
+  lines: { text: string; confidence: number; bbox: number[] | null }[]
+  preview_data?: string | null; image_width?: number; image_height?: number; preview_error?: string
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -114,7 +123,7 @@ async function requestApi(path: string, init?: RequestInit) {
     ...init,
     headers: {
       Authorization: `Bearer ${data.session.access_token}`,
-      'Content-Type': 'application/json',
+      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
     },
   })
   if (!response.ok) {
@@ -214,6 +223,21 @@ export async function loadUnmatchedRecommendationDraft(): Promise<{ payload: Rec
 export async function saveUnmatchedRecommendationDraft(payload: Record<string, unknown>): Promise<void> {
   await requestApi('/api/v1/unmatched-terms/recommendation-draft', {
     method: 'PUT', body: JSON.stringify({ payload }),
+  })
+}
+
+export async function extractOCRImages(files: File[]): Promise<{ files: OCRFileResult[]; candidates: OCRCandidate[] }> {
+  const form = new FormData()
+  files.forEach(file => form.append('files', file))
+  return requestApi('/api/v1/ocr/extract', { method: 'POST', body: form })
+}
+
+export async function saveOCRKeywords(revision: number, candidates: Pick<OCRCandidate,
+  'term' | 'category' | 'risk' | 'detail' | 'evidence' | 'alternative'>[]): Promise<{
+  added: string[]; revision: number
+}> {
+  return requestApi('/api/v1/ocr/keywords', {
+    method: 'POST', body: JSON.stringify({ revision, candidates }),
   })
 }
 

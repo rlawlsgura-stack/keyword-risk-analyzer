@@ -1,3 +1,8 @@
+## React preview - Add OCR keyword import
+
+- Add Korean OCR image upload, text preview, candidate classification and keyword registration.
+- Reuse the existing PaddleOCR adapter with file-count and upload-size limits.
+
 ## React preview - Add unmatched normalization review
 
 - Generate keyword-form recommendations from selected unmatched candidates using the existing Kiwi normalizer.

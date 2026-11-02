@@ -1,6 +1,6 @@
 # React transition preview
 
-FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts and password recovery, recorded text analysis through `/api/v2/analyses` with clickable highlights and match details, read-only keyword catalog search, filters, and full CSV export through `/api/v1/keywords`, rolling-period Top N reports through `/api/v1/reports/top-keywords`, official-source regulation lookup through `/api/v1/regulation/questions`, unmatched-candidate review, Kiwi-based normalization recommendations and per-user drafts, and registration requests through `/api/v1/unmatched-terms`, existing-keyword inquiries, history, and admin responses through `/api/v1/keyword-requests`, admin-only user role management through `/api/v1/admin/users`, keyword editing and additions through `/api/v1/admin/keywords`, admin review, approval, and rejection of unmatched registration requests through `/api/v1/admin/unmatched-registration-requests`, and shared normalization settings through `/api/v1/admin/normalization-settings`. The Streamlit app remains the operational UI for OCR, keyword deletion, and other administration.
+FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts and password recovery, recorded text analysis through `/api/v2/analyses` with clickable highlights and match details, read-only keyword catalog search, filters, and full CSV export through `/api/v1/keywords`, rolling-period Top N reports through `/api/v1/reports/top-keywords`, Korean OCR image extraction and keyword registration through `/api/v1/ocr`, official-source regulation lookup through `/api/v1/regulation/questions`, unmatched-candidate review, Kiwi-based normalization recommendations and per-user drafts, and registration requests through `/api/v1/unmatched-terms`, existing-keyword inquiries, history, and admin responses through `/api/v1/keyword-requests`, admin-only user role management through `/api/v1/admin/users`, keyword editing and additions through `/api/v1/admin/keywords`, admin review, approval, and rejection of unmatched registration requests through `/api/v1/admin/unmatched-registration-requests`, and shared normalization settings through `/api/v1/admin/normalization-settings`. The Streamlit app remains the operational UI for keyword deletion and other administration.
 
 ## Local setup
 
@@ -8,6 +8,8 @@ FIXED328 starts a separate React/TypeScript interface. The preview supports exis
 2. Add the frontend origin to Supabase Auth's allowed redirect URLs so password recovery emails can return to the React app.
 3. Run `npm ci` and `npm run dev` in this directory.
 4. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include `http://localhost:5173` and `http://127.0.0.1:5173`.
+
+Korean OCR additionally requires Python 3.9–3.13 and the dependencies in [`requirements-ocr.txt`](../requirements-ocr.txt). Install these in the same Python environment that runs FastAPI; the OCR model is initialized on the first OCR request.
 
 ## Deploying this preview
 
@@ -17,4 +19,4 @@ Each explicit analysis click uses an anonymous UUID. The v2 API uses the current
 
 The connected Supabase project has the v2 RPC installed. Apply [`supabase/record_analysis_with_unmatched_setup.sql`](../supabase/record_analysis_with_unmatched_setup.sql) before deploying the v2 API against another existing project; fresh installations include it in `supabase/schema.sql`.
 
-The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, and OCR. Reports are read-only rolling-period summaries. Deploy it separately until the remaining screens are migrated and compared with the existing app.
+The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, and several lower-use administration screens. Reports are read-only rolling-period summaries. Deploy it separately until the remaining screens are migrated and compared with the existing app.

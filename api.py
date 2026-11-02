@@ -4,15 +4,17 @@ import secrets
 import logging
 import re
 import unicodedata
+from threading import Lock
 from typing import Literal
 from uuid import UUID
 
 import requests
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from app_config import configure, cloud_enabled
 from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, SupabaseRepository
@@ -34,6 +36,7 @@ app.add_middleware(
 )
 bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
+_ocr_request_lock = Lock()
 
 
 def get_repository():
@@ -198,6 +201,22 @@ class UnmatchedRecommendationDraft(BaseModel):
     payload: dict
 
 
+class OCRKeywordCandidate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    term: str = Field(min_length=1, max_length=500)
+    category: str = Field(min_length=1, max_length=500)
+    risk: str = Field(min_length=1, max_length=500)
+    detail: str = Field(min_length=1, max_length=5000)
+    evidence: str = Field(min_length=1, max_length=500)
+    alternative: str = Field(default='-', max_length=2000)
+
+
+class OCRKeywordSave(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    revision: int = Field(ge=0)
+    candidates: list[OCRKeywordCandidate] = Field(min_length=1, max_length=1000)
+
+
 def _next_keyword_code(category: str, rows: list[dict]) -> str:
     category_rows = [row for row in rows if str(row.get(DB_COLS[2], '')).strip() == category]
     pattern = re.compile(r'^([A-Z]+)(\d{3,})$')
@@ -246,6 +265,121 @@ def health():
 def ready(repository=Depends(get_repository)):
     repository.load_keywords()
     return {'status': 'ready'}
+
+
+def _process_ocr_images(images):
+    from ocr_keyword_import import extract_text_lines, load_korean_ocr, make_image_preview_data
+
+    os.environ['PADDLE_PDX_EAGER_INIT'] = 'False'
+    os.environ['PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT'] = 'False'
+    try:
+        engine = load_korean_ocr()
+    except (ImportError, OSError, RuntimeError) as exc:
+        raise HTTPException(503,
+            '한국어 OCR을 사용할 수 없습니다. Python 3.9–3.13 환경에 requirements-ocr.txt를 설치하세요.') from exc
+    file_results, unique = [], {}
+    for index, (name, image_bytes) in enumerate(images):
+        try:
+            with _ocr_request_lock:
+                lines = extract_text_lines(image_bytes, engine)
+            try:
+                preview, width, height = make_image_preview_data(image_bytes)
+                preview_error = ''
+            except Exception:
+                preview, width, height = None, 1, 1
+                preview_error = '미리보기 이미지를 만들지 못했습니다.'
+            file_results.append({
+                'index': index, 'name': name, 'count': len(lines), 'error': '',
+                'lines': lines[:2000], 'truncated': len(lines) > 2000,
+                'preview_data': preview, 'image_width': width, 'image_height': height,
+                'preview_error': preview_error,
+            })
+            for line in lines:
+                term = unicodedata.normalize('NFKC', str(line['text'])).strip()
+                normalized = ' '.join(term.split()).casefold()
+                if not normalized:
+                    continue
+                confidence = float(line.get('confidence', 0))
+                candidate = unique.setdefault(normalized, {
+                    'term': term, 'confidence': confidence, 'occurrences': 0, 'source_files': [],
+                })
+                if confidence >= 0.60:
+                    candidate['occurrences'] += 1
+                if confidence > candidate['confidence']:
+                    candidate.update(term=term, confidence=confidence)
+                if name not in candidate['source_files']:
+                    candidate['source_files'].append(name)
+        except Exception as exc:
+            logger.exception('OCR failed for uploaded image %s', name)
+            file_results.append({'index': index, 'name': name, 'count': 0,
+                                 'error': str(exc)[:300], 'lines': []})
+    candidates = [{**row, 'category': '', 'risk': '', 'detail': '', 'evidence': '',
+                   'alternative': '-', 'approved': row['confidence'] >= 0.60}
+                  for row in unique.values()]
+    return {'files': file_results, 'candidates': candidates}
+
+
+@app.post('/api/v1/ocr/extract')
+async def extract_ocr_candidates(
+        files: list[UploadFile] = File(...), actor=Depends(current_actor)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to run OCR')
+    if not 1 <= len(files) <= 5:
+        raise HTTPException(422, 'Upload between 1 and 5 images.')
+    images, total_bytes = [], 0
+    for upload in files:
+        image_bytes = await upload.read(20 * 1024 * 1024 + 1)
+        if len(image_bytes) > 20 * 1024 * 1024:
+            raise HTTPException(413, f'{upload.filename or "Image"} exceeds 20 MB.')
+        total_bytes += len(image_bytes)
+        if total_bytes > 50 * 1024 * 1024:
+            raise HTTPException(413, 'Combined image size exceeds 50 MB.')
+        images.append((str(upload.filename or f'image-{len(images) + 1}')[:255], image_bytes))
+    try:
+        return await run_in_threadpool(_process_ocr_images, images)
+    except HTTPException:
+        raise
+    except ImportError as exc:
+        raise HTTPException(503,
+            '한국어 OCR 의존성이 설치되지 않았습니다. Python 3.9–3.13 환경에 requirements-ocr.txt를 설치하세요.') from exc
+
+
+@app.post('/api/v1/ocr/keywords')
+def save_ocr_keywords(body: OCRKeywordSave, actor=Depends(current_actor),
+                      repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to register OCR keywords')
+    current = repository.load_keywords()
+    if current.attrs.get('revision') != body.revision:
+        raise HTTPException(409, 'Keyword data changed. Reload it before saving OCR candidates.')
+    current_rows = current.to_dict('records')
+    existing = {(unicodedata.normalize('NFKC', str(row[DB_COLS[1]])).casefold().strip(),
+                 unicodedata.normalize('NFKC', str(row[DB_COLS[2]])).casefold().strip())
+                for row in current_rows}
+    candidates = [item.model_dump() for item in body.candidates]
+    pairs = [(unicodedata.normalize('NFKC', item['term']).casefold().strip(),
+              unicodedata.normalize('NFKC', item['category']).casefold().strip())
+             for item in candidates]
+    if len(set(pairs)) != len(pairs) or any(pair in existing for pair in pairs):
+        raise HTTPException(422, 'OCR candidates contain duplicate keywords. Review and remove duplicates first.')
+    rows = list(current_rows)
+    codes = []
+    for item in candidates:
+        code = _next_keyword_code(item['category'].strip(), rows)
+        codes.append(code)
+        rows.append({
+            DB_COLS[0]: code, DB_COLS[1]: item['term'].strip(), DB_COLS[2]: item['category'].strip(),
+            DB_COLS[3]: item['risk'].strip(), DB_COLS[4]: item['alternative'].strip() or '-',
+            DB_COLS[5]: item['detail'].strip(), DB_COLS[6]: item['evidence'].strip(),
+            COUNT_COL: '0', LAST_COL: '',
+        })
+    import pandas as pd
+    frame = pd.DataFrame(rows, columns=DB_COLS).fillna('').astype(str)
+    try:
+        revision = repository.save_keywords(frame, body.revision)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'added': codes, 'revision': revision}
 
 
 @app.post('/api/v1/analyses')

@@ -11,7 +11,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
   saveAdminNormalizationSettings, type NormalizationSettings,
   type NormalizationRecommendation, normalizeUnmatchedTerms,
-  loadUnmatchedRecommendationDraft, saveUnmatchedRecommendationDraft } from './api'
+  loadUnmatchedRecommendationDraft, saveUnmatchedRecommendationDraft,
+  extractOCRImages, saveOCRKeywords, type OCRCandidate, type OCRFileResult } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -142,7 +143,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin' | 'registration-admin' | 'normalization-admin'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin' | 'registration-admin' | 'normalization-admin' | 'ocr'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -238,6 +239,13 @@ function App() {
   const [recommendationDraftError, setRecommendationDraftError] = useState('')
   const [recommendationDraftMessage, setRecommendationDraftMessage] = useState('')
   const [recommendationDraftRefresh, setRecommendationDraftRefresh] = useState(0)
+  const [ocrSelectedFiles, setOcrSelectedFiles] = useState<File[]>([])
+  const [ocrFileResults, setOcrFileResults] = useState<OCRFileResult[]>([])
+  const [ocrCandidates, setOcrCandidates] = useState<OCRCandidate[]>([])
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const [ocrSaveBusy, setOcrSaveBusy] = useState(false)
+  const [ocrError, setOcrError] = useState('')
+  const [ocrMessage, setOcrMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -825,6 +833,68 @@ function App() {
     }
   }
 
+  async function runOCR() {
+    if (!ocrSelectedFiles.length) return
+    const total = ocrSelectedFiles.reduce((sum, file) => sum + file.size, 0)
+    if (ocrSelectedFiles.length > 5 || ocrSelectedFiles.some(file => file.size > 20 * 1024 * 1024) || total > 50 * 1024 * 1024) {
+      setOcrError('이미지는 최대 5장, 파일당 20MB, 전체 50MB까지 업로드할 수 있습니다.')
+      return
+    }
+    setOcrBusy(true)
+    setOcrError('')
+    setOcrMessage('')
+    setOcrCandidates([])
+    setOcrFileResults([])
+    try {
+      const result = await extractOCRImages(ocrSelectedFiles)
+      setOcrFileResults(result.files)
+      setOcrCandidates(result.candidates)
+      setOcrMessage(`이미지 ${result.files.length}장 처리 완료 · 후보 ${result.candidates.length}건`)
+    } catch (error) {
+      setOcrError(error instanceof Error ? error.message : 'OCR 분석에 실패했습니다.')
+    } finally {
+      setOcrBusy(false)
+    }
+  }
+
+  function updateOCRCandidate(index: number, field: keyof OCRCandidate, value: string | boolean) {
+    setOcrCandidates(previous => previous.map((row, rowIndex) => rowIndex === index ? { ...row, [field]: value } : row))
+  }
+
+  async function saveApprovedOCRCandidates() {
+    const selected = ocrCandidates.filter(candidate => candidate.approved)
+    if (!selected.length) return
+    const incomplete = selected.some(row => !row.term.trim() || !row.category.trim() || !row.risk.trim() || !row.detail.trim() || !row.evidence.trim())
+    if (incomplete) {
+      setOcrError('선택한 후보의 키워드명, 카테고리, 리스크, 심의 기준과 증빙 유형을 입력하세요.')
+      return
+    }
+    setOcrSaveBusy(true)
+    setOcrError('')
+    setOcrMessage('')
+    try {
+      const snapshot = await loadKeywordSnapshot()
+      const result = await saveOCRKeywords(snapshot.revision, selected)
+      setOcrMessage(`키워드 ${result.added.length}건을 원장에 등록했습니다: ${result.added.join(', ')}`)
+      setOcrCandidates([])
+      setOcrFileResults([])
+      setOcrSelectedFiles([])
+    } catch (error) {
+      setOcrError(error instanceof Error ? error.message : 'OCR 후보를 원장에 저장하지 못했습니다.')
+    } finally {
+      setOcrSaveBusy(false)
+    }
+  }
+
+  function analyzeApprovedOCRCandidates() {
+    const terms = ocrCandidates.filter(candidate => candidate.approved).map(candidate => candidate.term.trim()).filter(Boolean)
+    if (!terms.length) return
+    setText(terms.join('\n'))
+    setResult(null)
+    setMessage('OCR 후보를 분석 입력에 복사했습니다. 옵션을 확인하고 분석을 실행하세요.')
+    setPage('analysis')
+  }
+
   async function searchRequestKeywords(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!requestSearch.trim()) return
@@ -962,6 +1032,9 @@ function App() {
       <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>
         <span className="nav-icon">⌕</span> 텍스트 분석
       </button>
+      <button className={`nav-item nav-button ${page === 'ocr' ? 'active' : ''}`} onClick={() => setPage('ocr')}>
+        <span className="nav-icon">▧</span> 이미지 OCR
+      </button>
       <button className={`nav-item nav-button ${page === 'keywords' ? 'active' : ''}`} onClick={() => setPage('keywords')}>
         <span className="nav-icon">▤</span> 키워드 원장
       </button>
@@ -997,7 +1070,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : page === 'normalization-admin' ? '정규화 설정' : '키워드 관리'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'ocr' ? '이미지 OCR' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : page === 'normalization-admin' ? '정규화 설정' : '키워드 관리'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -1561,6 +1634,81 @@ function App() {
                 </tr>)}</tbody>
               </table></div> : <p className="empty-result">해당 기간에 분석 기록이 없습니다.</p>)}
             </div>
+          </section>
+        </> : page === 'ocr' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">IMPORT / OCR</div><h1>이미지 OCR</h1>
+              <p>제품 이미지에서 키워드 후보를 추출하고 분류 정보를 검토한 뒤 원장에 저장합니다.</p></div>
+            <div className="preview-pill"><span /> 한국어 OCR</div>
+          </div>
+          <section className="catalog-section ocr-section">
+            <div className="panel ocr-upload-panel">
+              <label className="normalization-setting-field">이미지 선택
+                <input type="file" accept="image/*" multiple disabled={ocrBusy || ocrSaveBusy}
+                  onChange={event => { setOcrSelectedFiles(Array.from(event.target.files ?? [])); setOcrError(''); setOcrCandidates([]); setOcrFileResults([]) }} />
+                <small>한 번에 최대 5장, 파일당 20MB, 전체 50MB까지 처리합니다. OCR은 CPU로 순차 실행됩니다.</small>
+              </label>
+              {ocrSelectedFiles.length > 0 && <ul className="ocr-file-list">{ocrSelectedFiles.map(file =>
+                <li key={`${file.name}-${file.size}-${file.lastModified}`}>{file.name} · {(file.size / 1024 / 1024).toFixed(1)} MB</li>)}</ul>}
+              <button className="primary-button" disabled={!ocrSelectedFiles.length || ocrBusy || ocrSaveBusy}
+                onClick={runOCR}>{ocrBusy ? '이미지를 분석하는 중…' : '한국어 OCR 실행'}</button>
+              {ocrError && <p className="error-message" role="alert">{ocrError}</p>}
+              {ocrMessage && <p className="success-message" role="status">{ocrMessage}</p>}
+            </div>
+            {ocrFileResults.length > 0 && <div className="ocr-file-previews">
+              {ocrFileResults.map(file => <article className="panel ocr-preview-card" key={`${file.index}-${file.name}`}>
+                <h2>{file.name}</h2>
+                {file.error ? <p className="error-message">OCR 처리 실패: {file.error}</p> : <>
+                  {file.preview_data && <img src={file.preview_data} alt={`${file.name} OCR 미리보기`} />}
+                  <p>{file.count}개 텍스트 인식{file.truncated ? ' · 미리보기는 처음 2,000줄까지 표시' : ''}</p>
+                  {file.preview_error && <small>{file.preview_error}</small>}
+                  <details><summary>인식한 텍스트와 신뢰도</summary><ul>
+                    {file.lines.map((line, index) => <li key={`${index}-${line.text}`}>{line.text} · {Math.round(line.confidence * 100)}%</li>)}
+                  </ul></details>
+                </>}
+              </article>)}
+            </div>}
+            {ocrCandidates.length > 0 && <div className="panel ocr-candidates-panel">
+              <div className="request-history-heading"><div><h2>후보 검토</h2>
+                <p>신뢰도 60% 이상만 기본 선택됩니다. 기존 원장 또는 후보끼리 중복이면 저장이 거절됩니다.</p></div>
+                <span>{ocrCandidates.filter(row => row.approved).length} / {ocrCandidates.length} 선택</span></div>
+              <div className="admin-keyword-toolbar">
+                <button className="secondary-button" disabled={ocrSaveBusy}
+                  onClick={analyzeApprovedOCRCandidates}>선택 후보 분석 미리보기</button>
+                <button className="primary-button" disabled={ocrSaveBusy || !ocrCandidates.some(row => row.approved) || ocrCandidates.filter(row => row.approved).length > 1000}
+                  onClick={saveApprovedOCRCandidates}>{ocrSaveBusy ? '원장 저장 중…' : '선택 후보 승인 및 저장'}</button>
+              </div>
+              {ocrCandidates.filter(row => row.approved).length > 1000 && <p className="error-message">한 번에 최대 1,000개 후보를 저장할 수 있습니다.</p>}
+              <div className="table-scroll admin-keyword-table"><table>
+                <thead><tr><th><input type="checkbox" aria-label="OCR 후보 전체 선택"
+                  checked={ocrCandidates.length > 0 && ocrCandidates.every(row => row.approved)}
+                  onChange={event => setOcrCandidates(previous => previous.map(row => ({ ...row, approved: event.target.checked })))} /></th>
+                  <th>키워드명</th><th>신뢰도</th><th>출처</th><th>카테고리</th><th>리스크</th><th>심의 기준</th><th>증빙 유형</th><th>대체 키워드</th></tr></thead>
+                <tbody>{ocrCandidates.map((candidate, index) => <tr key={`${candidate.term}-${index}`}>
+                  <td><input type="checkbox" aria-label={`${candidate.term} OCR 후보 선택`} checked={candidate.approved}
+                    disabled={ocrSaveBusy} onChange={event => updateOCRCandidate(index, 'approved', event.target.checked)} /></td>
+                  <td><input aria-label="OCR 키워드명" value={candidate.term} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'term', event.target.value)} /></td>
+                  <td>{Math.round(candidate.confidence * 100)}%</td><td>{candidate.source_files.join(', ')}</td>
+                  <td><select aria-label="OCR 카테고리" value={candidate.category} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'category', event.target.value)}>
+                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><select aria-label="OCR 리스크 등급" value={candidate.risk} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'risk', event.target.value)}>
+                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><textarea aria-label="OCR 심의 기준" value={candidate.detail} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'detail', event.target.value)} /></td>
+                  <td><select aria-label="OCR 증빙 유형" value={candidate.evidence} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'evidence', event.target.value)}>
+                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><input aria-label="OCR 대체 키워드" value={candidate.alternative} disabled={ocrSaveBusy}
+                    onChange={event => updateOCRCandidate(index, 'alternative', event.target.value)} /></td>
+                </tr>)}</tbody>
+              </table></div>
+            </div>}
           </section>
         </> : page === 'keywords' ? <>
           <div className="page-heading">
