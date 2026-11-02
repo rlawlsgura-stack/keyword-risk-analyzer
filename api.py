@@ -103,6 +103,23 @@ class CurrentAnalysisRequest(BaseModel):
     risks: list[str] = Field(default_factory=list, max_length=20)
 
 
+class UnmatchedRegistrationCandidate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    term: str = Field(min_length=1, max_length=150)
+    source_terms: str = Field(default='', max_length=500)
+    occurrences: int = Field(default=0, ge=0, le=1_000_000_000)
+    category: str = Field(default='', max_length=500)
+    risk: str = Field(default='', max_length=500)
+    criteria: str = Field(default='', max_length=500)
+    evidence_type: str = Field(default='', max_length=500)
+    alternative: str = Field(default='-', max_length=500)
+
+
+class UnmatchedRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    candidates: list[UnmatchedRegistrationCandidate] = Field(min_length=1, max_length=1000)
+
+
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -160,6 +177,23 @@ def unmatched_terms(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, 
 @app.get('/api/v1/unmatched-terms/export')
 def export_unmatched_terms(actor=Depends(current_actor), repository=Depends(get_repository)):
     return {'items': repository.export_unmatched_terms()}
+
+
+@app.post('/api/v1/unmatched-terms/registration-requests')
+def submit_unmatched_registration_requests(
+        body: UnmatchedRegistrationRequest, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to submit registration requests')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    candidates = [candidate.model_dump() for candidate in body.candidates]
+    try:
+        items = repository.submit_unmatched_registration_requests(candidates, credentials.credentials)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'items': items or []}
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

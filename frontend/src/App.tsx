@@ -3,7 +3,8 @@ import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
-  type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms } from './api'
+  type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
+  submitUnmatchedRegistrationRequests } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -110,6 +111,10 @@ function App() {
   const [unmatchedBusy, setUnmatchedBusy] = useState(false)
   const [unmatchedExportBusy, setUnmatchedExportBusy] = useState(false)
   const [unmatchedError, setUnmatchedError] = useState('')
+  const [unmatchedRefresh, setUnmatchedRefresh] = useState(0)
+  const [selectedUnmatched, setSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
+  const [unmatchedSubmitBusy, setUnmatchedSubmitBusy] = useState(false)
+  const [unmatchedActionMessage, setUnmatchedActionMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -203,7 +208,7 @@ function App() {
       if (active) setUnmatchedError(error instanceof Error ? error.message : '미매칭 후보를 불러오지 못했습니다.')
     }).finally(() => { if (active) setUnmatchedBusy(false) })
     return () => { active = false }
-  }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort])
+  }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort, unmatchedRefresh])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -272,6 +277,7 @@ function App() {
 
   const role = user?.app_metadata?.role
   const allowed = role === 'member' || role === 'admin'
+  const selectedUnmatchedCount = Object.keys(selectedUnmatched).length
 
   function toggleFilter(value: string, selected: string[], setSelected: (values: string[]) => void) {
     setSelected(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value])
@@ -366,6 +372,47 @@ function App() {
     }
   }
 
+  function toggleUnmatchedRow(row: UnmatchedTerm, checked: boolean) {
+    setSelectedUnmatched(previous => {
+      const next = { ...previous }
+      if (checked) next[row.term_norm] = row
+      else delete next[row.term_norm]
+      return next
+    })
+  }
+
+  function toggleUnmatchedPage(checked: boolean) {
+    const selectable = (unmatchedPage?.rows ?? []).filter(row => row.review_status === 'pending')
+    setSelectedUnmatched(previous => {
+      const next = { ...previous }
+      for (const row of selectable) {
+        if (checked) next[row.term_norm] = row
+        else delete next[row.term_norm]
+      }
+      return next
+    })
+  }
+
+  async function submitUnmatchedRequests() {
+    const rows = Object.values(selectedUnmatched)
+    if (!rows.length) return
+    setUnmatchedSubmitBusy(true)
+    setUnmatchedError('')
+    setUnmatchedActionMessage('')
+    try {
+      const result = await submitUnmatchedRegistrationRequests(rows.map(row => ({
+        term: row.display_term, source_terms: row.display_term, occurrences: row.total_occurrences,
+      })))
+      setSelectedUnmatched({})
+      setUnmatchedActionMessage(`${result.items.length}개 후보를 관리자 검토 요청으로 접수했습니다.`)
+      setUnmatchedRefresh(value => value + 1)
+    } catch (error) {
+      setUnmatchedError(error instanceof Error ? error.message : '등록 요청을 접수하지 못했습니다.')
+    } finally {
+      setUnmatchedSubmitBusy(false)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -454,13 +501,27 @@ function App() {
               <p className="unmatched-note">후보 목록에는 표현과 집계 횟수만 표시됩니다. 계정이나 원문 문서는 포함하지 않습니다.</p>
               {unmatchedError && <p className="error-message" role="alert">{unmatchedError}</p>}
               {!unmatchedError && (unmatchedPage?.rows.length ? <div className="table-scroll"><table>
-                <thead><tr><th>미매칭 표현</th><th>누적 횟수</th><th>분석 횟수</th><th>상태</th><th>최초 수집</th><th>최근 수집</th></tr></thead>
+                <thead><tr><th><input type="checkbox" aria-label="현재 페이지의 요청 가능 후보 선택"
+                  checked={Boolean(unmatchedPage?.rows.some(row => row.review_status === 'pending')) &&
+                    (unmatchedPage?.rows.filter(row => row.review_status === 'pending').every(row => selectedUnmatched[row.term_norm]) ?? false)}
+                  onChange={event => toggleUnmatchedPage(event.target.checked)} /></th>
+                  <th>미매칭 표현</th><th>누적 횟수</th><th>분석 횟수</th><th>상태</th><th>최초 수집</th><th>최근 수집</th></tr></thead>
                 <tbody>{unmatchedPage.rows.map(row => <tr key={row.term_norm}>
+                  <td><input type="checkbox" aria-label={`${row.display_term} 선택`}
+                    checked={Boolean(selectedUnmatched[row.term_norm])} disabled={row.review_status !== 'pending'}
+                    onChange={event => toggleUnmatchedRow(row, event.target.checked)} /></td>
                   <td><strong>{row.display_term}</strong></td><td>{row.total_occurrences.toLocaleString()}</td>
                   <td>{row.analysis_count.toLocaleString()}</td><td>{unmatchedStatusLabels[row.review_status] ?? row.review_status}</td>
                   <td>{new Date(row.first_seen).toLocaleDateString('ko-KR')}</td><td>{new Date(row.last_seen).toLocaleDateString('ko-KR')}</td>
                 </tr>)}</tbody>
               </table></div> : !unmatchedBusy && <p className="empty-result">표시할 미매칭 후보가 없습니다.</p>)}
+              {selectedUnmatchedCount > 0 && <div className="unmatched-actions">
+                <span>{selectedUnmatchedCount}개 후보 선택됨 · 요청 후 관리자 검토 대기열로 이동합니다.
+                  {selectedUnmatchedCount > 1000 && ' 한 번에 최대 1,000개까지 요청할 수 있습니다.'}</span>
+                <button className="primary-button" disabled={unmatchedSubmitBusy || unmatchedBusy || selectedUnmatchedCount > 1000}
+                  onClick={submitUnmatchedRequests}>{unmatchedSubmitBusy ? '요청 접수 중…' : '선택 후보 등록 요청'}</button>
+              </div>}
+              {unmatchedActionMessage && <p className="success-message" role="status">{unmatchedActionMessage}</p>}
               {unmatchedPage && <div className="catalog-pagination">
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedOffset === 0}
                   onClick={() => setUnmatchedOffset(Math.max(0, unmatchedOffset - 100))}>이전</button>

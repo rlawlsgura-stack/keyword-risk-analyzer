@@ -1,3 +1,8 @@
+## React preview - Submit unmatched registration requests
+
+- Let members submit selected pending unmatched terms to the server-side admin review queue.
+- Validate request size and candidate fields at the API boundary.
+
 ## React preview - Add unmatched candidate review
 
 - Add authenticated search, sort, pagination, status display, and full CSV export for unmatched terms.
