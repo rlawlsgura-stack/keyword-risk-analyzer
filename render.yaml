@@ -35,10 +35,12 @@ services:
         sync: false
       - key: LEGISLATION_API_KEY
         sync: false
+      - key: API_CORS_ORIGINS
+        value: https://keyword-risk-react-preview.onrender.com
   - type: web
     name: keyword-risk-react-preview
     runtime: static
-    autoDeployTrigger: off
+    autoDeployTrigger: commit
     buildCommand: cd frontend && npm ci --ignore-scripts && npm run build
     staticPublishPath: frontend/dist
     envVars:
@@ -47,6 +49,6 @@ services:
       - key: VITE_SUPABASE_URL
         value: https://qmhdwfqcihpfjfvcjcwa.supabase.co
       - key: VITE_SUPABASE_PUBLISHABLE_KEY
-        sync: false
+        value: sb_publishable_HTILfxgoBJT8GpY9Gebu0w_7C5SKyWi
       - key: VITE_API_BASE_URL
-        sync: false
+        value: https://keyword-risk-api.onrender.com
