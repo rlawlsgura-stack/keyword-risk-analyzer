@@ -5005,17 +5005,32 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             },
             key=editor_key,
         )
-        if st.button('선택 항목 현재 목록에서 제외', key='exclude_unmatched_recommendations'):
+        if st.button("선택 항목 삭제", key='exclude_unmatched_recommendations'):
             selected_for_exclusion = edited_recommendations[
                 edited_recommendations['선택'].fillna(False)]
             if selected_for_exclusion.empty:
-                st.warning('목록에서 제외할 항목을 선택하세요.')
+                st.warning("삭제할 항목을 선택하세요.")
             else:
-                _persist_unmatched_editor_state(editor_key, recommendations, select_column)
-                hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
-                hidden.extend(selected_for_exclusion['recommendation_id'].astype(str).tolist())
-                st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
-                st.rerun()
+                request_ids = selected_for_exclusion['request_id'].fillna('').astype(str).str.strip()
+                request_ids = request_ids[request_ids.ne('')].tolist()
+                local_ids = selected_for_exclusion.loc[
+                    ~selected_for_exclusion['request_id'].fillna('').astype(str).str.strip().ne(''),
+                    'recommendation_id',
+                ].astype(str).tolist()
+                try:
+                    if request_ids:
+                        if not is_admin():
+                            raise PermissionError('관리자만 요청을 삭제할 수 있습니다.')
+                        SupabaseRepository().delete_unmatched_registration_requests(
+                            request_ids, st.session_state['auth_session']['access_token'])
+                    _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                    if local_ids:
+                        hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
+                        hidden.extend(local_ids)
+                        st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                    st.rerun()
+                except (StorageError, ValueError, PermissionError) as exc:
+                    st.error(f"선택한 항목을 삭제하지 못했습니다: {exc}")
         if is_admin():
             if st.button("선택 후보 승인 및 DB 등록", type="primary", key="approve_unmatched_recommendations"):
                 selected = edited_recommendations[edited_recommendations["선택"].fillna(False)].copy()
