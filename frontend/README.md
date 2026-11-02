@@ -1,6 +1,6 @@
 # React transition preview
 
-FIXED328 starts a separate React/TypeScript interface. This slice supports existing Supabase accounts and recorded text analysis through the FastAPI `/api/v2/analyses` endpoint. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, and administration.
+FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts, recorded text analysis through `/api/v2/analyses`, and read-only keyword catalog search through `/api/v1/keywords`. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, and administration.
 
 ## Local setup
 
@@ -16,4 +16,4 @@ Each explicit analysis click uses an anonymous UUID. The v2 API uses the current
 
 The connected Supabase project has the v2 RPC installed. Apply [`supabase/record_analysis_with_unmatched_setup.sql`](../supabase/record_analysis_with_unmatched_setup.sql) before deploying the v2 API against another existing project; fresh installations include it in `supabase/schema.sql`.
 
-The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, OCR, normalization review, keyword requests, reports, and administration. Deploy it separately until those screens are migrated and compared with the existing app.
+The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, OCR, normalization review, keyword requests, reports, and administration. The catalog is read-only; administrators continue editing keywords in Streamlit. Deploy it separately until those screens are migrated and compared with the existing app.

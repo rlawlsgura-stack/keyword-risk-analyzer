@@ -45,6 +45,18 @@ export type AnalysisInput = {
   risks: string[]
 }
 
+export type KeywordRow = {
+  kwd_no: string
+  키워드명: string
+  상품카테고리: string
+  '리스크 등급': string
+  대체키워드: string
+  리스크 등급별 세부 심의기준: string
+  증빙자료유형: string
+  '키워드 조회 수(누적카운트)': string
+  마지막 출력일자: string
+}
+
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
   const { data, error } = await supabase.auth.getSession()
@@ -73,4 +85,13 @@ export async function analyzeText(input: AnalysisInput, analysisId: string): Pro
     method: 'POST',
     body: JSON.stringify({ ...input, analysis_id: analysisId }),
   })
+}
+
+export async function loadKeywords(offset: number, query: string): Promise<{
+  total: number
+  revision: string | null
+  items: KeywordRow[]
+}> {
+  const params = new URLSearchParams({ offset: String(offset), limit: '100', q: query })
+  return requestApi(`/api/v1/keywords?${params}`)
 }

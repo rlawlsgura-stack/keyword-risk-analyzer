@@ -13,6 +13,8 @@ button:disabled { cursor: wait; opacity: .6; }
 .sidebar-label { color: #8c99b5; font-size: 10px; font-weight: 700; letter-spacing: .18em; margin: 0 12px 13px; }
 .nav-item { border-radius: 10px; padding: 12px 14px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 12px; }
 .nav-item.active { color: #fff; background: #283752; }
+.nav-button { width: 100%; border: 0; color: #aeb9ce; background: transparent; text-align: left; }
+.nav-button:hover { color: #fff; background: #202c45; }
 .nav-icon { font-size: 23px; font-weight: 400; line-height: 14px; }
 .sidebar-bottom { margin-top: auto; padding: 0 9px; color: #8996af; font-size: 11px; line-height: 1.6; }
 .version-chip { display: inline-block; padding: 6px 9px; border: 1px solid #39435a; border-radius: 6px; color: #c3cbdc; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
@@ -68,6 +70,14 @@ textarea::placeholder { color: #a6b0c0; }
 .analyze-button { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: auto; transform: translateY(2px); }
 .analyze-button span { font-size: 18px; font-weight: 400; }
 .results-section { padding: 39px 36px 60px; }
+.catalog-section { max-width: 1230px; margin: 0 auto; padding: 0 36px 60px; }
+.catalog-panel { padding: 22px; }
+.catalog-search { display: flex; gap: 9px; max-width: 560px; }
+.catalog-search input { flex: 1; min-width: 0; border: 1px solid #dce2eb; border-radius: 8px; padding: 11px 12px; }
+.catalog-meta { display: flex; justify-content: space-between; gap: 12px; margin: 19px 0 10px; color: #8793a6; font-size: 11px; }
+.catalog-panel td:nth-child(6) { min-width: 260px; white-space: pre-wrap; }
+.catalog-panel td:nth-child(5), .catalog-panel td:nth-child(7) { min-width: 150px; white-space: pre-wrap; }
+.catalog-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding-top: 17px; color: #718099; font-size: 12px; }
 .results-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 16px; }
 .results-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
 .results-heading h2 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
@@ -116,6 +126,8 @@ td strong { color: #2d3a52; }
   .page-heading { padding: 30px 17px 22px; }
   .analysis-grid { padding: 0 17px; }
   .results-section { padding: 30px 17px 45px; }
+  .catalog-section { padding: 0 17px 45px; }
+  .catalog-panel { padding: 15px; }
   .preview-pill { display: none; }
   .editor-panel, .settings-panel { padding: 18px; }
   .state-card, .login-card { margin: 25px 17px; padding: 25px; }

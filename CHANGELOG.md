@@ -1,3 +1,8 @@
+## React preview - Add the keyword catalog
+
+- Add authenticated, paginated, read-only keyword search to the React preview.
+- Keep catalog editing in the existing Streamlit administrator screen.
+
 ## FIXED329 - Connect the React analysis to current app rules
 
 - Add authenticated category and risk filters, current matching rules, and idempotent analysis recording to the React preview.

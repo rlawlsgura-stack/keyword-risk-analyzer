@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
-  type AnalysisInput, type AnalysisMode, type AnalysisResult, type Match } from './api'
+  loadKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult, type KeywordRow,
+  type Match } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -47,6 +48,13 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
+  const [page, setPage] = useState<'analysis' | 'keywords'>('analysis')
+  const [keywordSearch, setKeywordSearch] = useState('')
+  const [keywordQuery, setKeywordQuery] = useState('')
+  const [keywordOffset, setKeywordOffset] = useState(0)
+  const [keywordPage, setKeywordPage] = useState<{ total: number; revision: string | null; items: KeywordRow[] } | null>(null)
+  const [keywordBusy, setKeywordBusy] = useState(false)
+  const [keywordError, setKeywordError] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -102,6 +110,19 @@ function App() {
   }, [user?.id])
 
   useEffect(() => { setResult(null) }, [text, mode, partialMinLen, options, categories, risks])
+
+  useEffect(() => {
+    if (page !== 'keywords' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    let active = true
+    setKeywordBusy(true)
+    setKeywordError('')
+    void loadKeywords(keywordOffset, keywordQuery).then(data => {
+      if (active) setKeywordPage(data)
+    }).catch(error => {
+      if (active) setKeywordError(error instanceof Error ? error.message : '키워드 목록을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setKeywordBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, keywordOffset, keywordQuery])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -181,16 +202,21 @@ function App() {
       <div className="brand-name">Keyword Risk<br />Analyzer</div>
       <div className="sidebar-divider" />
       <div className="sidebar-label">WORKSPACE</div>
-      <div className="nav-item active"><span className="nav-icon">⌕</span> 텍스트 분석</div>
+      <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>
+        <span className="nav-icon">⌕</span> 텍스트 분석
+      </button>
+      <button className={`nav-item nav-button ${page === 'keywords' ? 'active' : ''}`} onClick={() => setPage('keywords')}>
+        <span className="nav-icon">▤</span> 키워드 원장
+      </button>
       <div className="sidebar-bottom">
-        <div className="version-chip">REACT PREVIEW · FIXED328</div>
+        <div className="version-chip">REACT PREVIEW · CATALOG</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
       </div>
     </aside>
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> 텍스트 분석</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : '키워드 원장'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -218,7 +244,47 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
-        </section> : <>
+        </section> : page === 'keywords' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">CATALOG / 02</div><h1>키워드 원장</h1>
+              <p>등록된 키워드와 분류 정보를 조회합니다. 원장 수정은 기존 관리자 화면에서 할 수 있습니다.</p></div>
+            <div className="preview-pill"><span /> 읽기 전용</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel catalog-panel">
+              <form className="catalog-search" onSubmit={event => {
+                event.preventDefault()
+                setKeywordOffset(0)
+                setKeywordQuery(keywordSearch.trim())
+              }}>
+                <label className="sr-only" htmlFor="keyword-search">키워드명 검색</label>
+                <input id="keyword-search" value={keywordSearch} maxLength={200}
+                  placeholder="키워드명 검색" onChange={event => setKeywordSearch(event.target.value)} />
+                <button className="primary-button" type="submit" disabled={keywordBusy}>검색</button>
+              </form>
+              <div className="catalog-meta">
+                <span>{keywordBusy ? '목록을 불러오는 중…' : `${keywordPage?.total ?? 0}개 키워드`}</span>
+                {keywordPage?.revision && <span>원장 버전 {keywordPage.revision}</span>}
+              </div>
+              {keywordError && <p className="error-message" role="alert">{keywordError}</p>}
+              {!keywordError && <div className="table-scroll"><table>
+                <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 자료</th></tr></thead>
+                <tbody>{keywordPage?.items.map(row => <tr key={row.kwd_no}>
+                  <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td><td>{row.상품카테고리 || '—'}</td>
+                  <td>{row['리스크 등급'] || '—'}</td><td>{row.대체키워드 || '—'}</td>
+                  <td>{row.리스크 등급별 세부 심의기준 || '—'}</td><td>{row.증빙자료유형 || '—'}</td>
+                </tr>)}</tbody>
+              </table></div>}
+              {keywordPage && <div className="catalog-pagination">
+                <button className="secondary-button" disabled={keywordBusy || keywordOffset === 0}
+                  onClick={() => setKeywordOffset(Math.max(0, keywordOffset - 100))}>이전</button>
+                <span>{keywordPage.total ? `${keywordOffset + 1}–${Math.min(keywordOffset + 100, keywordPage.total)} / ${keywordPage.total}` : '0개'}</span>
+                <button className="secondary-button" disabled={keywordBusy || keywordOffset + 100 >= keywordPage.total}
+                  onClick={() => setKeywordOffset(keywordOffset + 100)}>다음</button>
+              </div>}
+            </div>
+          </section>
+        </> : <>
           <div className="page-heading">
             <div><div className="eyebrow">ANALYSIS / 01</div><h1>텍스트 분석</h1>
               <p>입력한 문장에서 등록된 키워드와 리스크 정보를 확인합니다.</p></div>
