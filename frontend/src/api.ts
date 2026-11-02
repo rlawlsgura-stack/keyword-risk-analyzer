@@ -91,14 +91,24 @@ export async function analyzeText(input: AnalysisInput, analysisId: string): Pro
 }
 
 export async function loadKeywords(offset: number, query: string,
-  filters: { category: string; risk: string; evidenceType: string }): Promise<{
+  filters: { category: string; risk: string; evidenceType: string }, limit = 100): Promise<{
   total: number
   revision: string | null
   items: KeywordRow[]
 }> {
-  const params = new URLSearchParams({ offset: String(offset), limit: '100', q: query,
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit), q: query,
     category: filters.category, risk: filters.risk, evidence_type: filters.evidenceType })
   return requestApi(`/api/v1/keywords?${params}`)
+}
+
+export async function loadAllKeywords(): Promise<KeywordRow[]> {
+  const all: KeywordRow[] = []
+  const noFilters = { category: '', risk: '', evidenceType: '' }
+  while (true) {
+    const page = await loadKeywords(all.length, '', noFilters, 500)
+    all.push(...page.items)
+    if (all.length >= page.total || page.items.length === 0) return all
+  }
 }
 
 export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {

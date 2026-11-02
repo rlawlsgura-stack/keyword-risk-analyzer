@@ -1,3 +1,7 @@
+## React preview - Export the full keyword catalog
+
+- Add a paginated full-catalog CSV export that is independent of the current search and filters.
+
 ## React preview - Show keyword match details
 
 - Reveal the matched keyword's category, risk, and review criteria from the result highlight.

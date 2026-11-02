@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
-  loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult,
+  loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult,
   type AnalysisFilters, type KeywordRow, type Match, type TopKeyword } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
@@ -81,6 +81,7 @@ function App() {
   const [keywordFilter, setKeywordFilter] = useState({ category: '', risk: '', evidenceType: '' })
   const [keywordPage, setKeywordPage] = useState<{ total: number; revision: string | null; items: KeywordRow[] } | null>(null)
   const [keywordBusy, setKeywordBusy] = useState(false)
+  const [keywordExportBusy, setKeywordExportBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
   const [reportDays, setReportDays] = useState(7)
   const [reportLimit, setReportLimit] = useState(10)
@@ -257,6 +258,33 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  async function exportKeywordCatalog() {
+    setKeywordExportBusy(true)
+    setKeywordError('')
+    try {
+      const rows = await loadAllKeywords()
+      const headers = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드',
+        '리스크 등급별 세부 심의기준', '증빙자료유형', '키워드 조회 수(누적카운트)', '마지막 출력일자']
+      const csvRows = [headers, ...rows.map(row => [row.kwd_no, row.키워드명, row.상품카테고리,
+        row['리스크 등급'], row.대체키워드, row.리스크 등급별 세부 심의기준,
+        row.증빙자료유형, row['키워드 조회 수(누적카운트)'], row.마지막 출력일자]
+        .map(value => String(value ?? '')))]
+      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'keyword_catalog.csv'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      setKeywordError(error instanceof Error ? error.message : '원장 CSV를 만들지 못했습니다.')
+    } finally {
+      setKeywordExportBusy(false)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -374,6 +402,8 @@ function App() {
               <div className="catalog-meta">
                 <span>{keywordBusy ? '목록을 불러오는 중…' : `${keywordPage?.total ?? 0}개 키워드`}</span>
                 {keywordPage?.revision && <span>원장 버전 {keywordPage.revision}</span>}
+                <button className="secondary-button" disabled={keywordBusy || keywordExportBusy}
+                  onClick={exportKeywordCatalog}>{keywordExportBusy ? 'CSV 준비 중…' : '전체 원장 CSV'}</button>
               </div>
               {keywordError && <p className="error-message" role="alert">{keywordError}</p>}
               {!keywordError && <div className="table-scroll"><table>
