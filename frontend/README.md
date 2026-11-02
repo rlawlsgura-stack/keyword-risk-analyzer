@@ -19,4 +19,4 @@ Each explicit analysis click uses an anonymous UUID. The v2 API uses the current
 
 The connected Supabase project has the v2 RPC installed. Apply [`supabase/record_analysis_with_unmatched_setup.sql`](../supabase/record_analysis_with_unmatched_setup.sql) before deploying the v2 API against another existing project; fresh installations include it in `supabase/schema.sql`.
 
-The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, and several lower-use administration screens. Reports are read-only rolling-period summaries. Deploy it separately until the remaining screens are migrated and compared with the existing app.
+The React preview now includes Korean OCR with selectable text over the recognized image, keyword classification and registration, detailed match highlights, and CSV/XLSX keyword import templates. The main Streamlit tabs have React counterparts. The reports page remains read-only and does not yet include the Streamlit administrator count-reset actions; keep Streamlit as the production UI until those controls and the final interaction parity review are complete.

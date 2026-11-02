@@ -26,6 +26,7 @@
 ## React preview - Add OCR keyword import
 
 - Add Korean OCR image upload, text preview, candidate classification and keyword registration.
+- Add a selectable text layer over each OCR image using the recognized line bounds.
 - Reuse the existing PaddleOCR adapter with file-count and upload-size limits.
 
 ## React preview - Add unmatched normalization review

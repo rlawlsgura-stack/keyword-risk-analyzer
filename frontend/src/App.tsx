@@ -157,6 +157,46 @@ function HighlightedText({ text, matches }: { text: string; matches: Match[] }) 
   </div>
 }
 
+function OCRSelectableImage({ file }: { file: OCRFileResult }) {
+  const stage = useRef<HTMLDivElement>(null)
+  const width = Math.max(1, file.image_width ?? 1)
+  const height = Math.max(1, file.image_height ?? 1)
+  useEffect(() => {
+    const element = stage.current
+    if (!element) return
+    const fitText = () => element.querySelectorAll<HTMLElement>('.ocr-selectable-line > span').forEach(content => {
+      content.style.transform = ''
+      const line = content.parentElement
+      if (line) {
+        const textWidth = content.getBoundingClientRect().width
+        const availableWidth = Math.max(0, line.getBoundingClientRect().width - 2)
+        if (textWidth > 0) content.style.transform = `scaleX(${availableWidth / textWidth})`
+      }
+    })
+    const observer = new ResizeObserver(fitText)
+    observer.observe(element)
+    fitText()
+    return () => observer.disconnect()
+  }, [file])
+  return <div ref={stage} className="ocr-selectable-image" style={{ aspectRatio: `${width} / ${height}` }}>
+    <img src={file.preview_data ?? ''} alt={`${file.name} OCR preview`} />
+    <div className="ocr-selectable-layer" aria-label="Drag to select recognized text">
+      {file.lines.map((line, index) => {
+        const box = line.bbox
+        if (!box || box.length !== 4) return null
+        const [left, top, right, bottom] = box
+        if (![left, top, right, bottom].every(Number.isFinite) || right <= left || bottom <= top) return null
+        return <span className="ocr-selectable-line" key={`${index}-${line.text}`} title={line.text}
+          style={{ left: `${100 * left / width}%`, top: `${100 * top / height}%`,
+            width: `${100 * (right - left) / width}%`, height: `${100 * (bottom - top) / height}%`,
+            fontSize: `${100 * (bottom - top) * 0.78 / width}cqw` }}>
+          <span>{line.text}</span>
+        </span>
+      })}
+    </div>
+  </div>
+}
+
 function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -2007,7 +2047,8 @@ function App() {
               {ocrFileResults.map(file => <article className="panel ocr-preview-card" key={`${file.index}-${file.name}`}>
                 <h2>{file.name}</h2>
                 {file.error ? <p className="error-message">OCR 처리 실패: {file.error}</p> : <>
-                  {file.preview_data && <img src={file.preview_data} alt={`${file.name} OCR 미리보기`} />}
+                  {file.preview_data && <OCRSelectableImage file={file} />}
+                  {file.preview_data && <small>이미지 위의 인식 문구를 드래그해 선택하고 복사할 수 있습니다.</small>}
                   <p>{file.count}개 텍스트 인식{file.truncated ? ' · 미리보기는 처음 2,000줄까지 표시' : ''}</p>
                   {file.preview_error && <small>{file.preview_error}</small>}
                   <details><summary>인식한 텍스트와 신뢰도</summary><ul>
