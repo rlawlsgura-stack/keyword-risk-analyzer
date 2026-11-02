@@ -3009,28 +3009,6 @@ def _persist_unmatched_editor_state(editor_key, recommendations, selection_colum
     st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
 
 
-@st.fragment(run_every="5s")
-def _poll_unmatched_registration_requests(editor_key, recommendations, selection_column):
-    if not cloud_enabled() or not is_admin():
-        return
-    try:
-        rows = SupabaseRepository().load_unmatched_registration_requests(
-            st.session_state.auth_session['access_token'])
-    except (StorageError, PermissionError):
-        logging.exception('Could not poll unmatched registration requests')
-        return
-    request_ids = tuple(str(row['id']) for row in rows)
-    state_key = 'unmatched_registration_request_ids_seen'
-    previous_ids = st.session_state.get(state_key)
-    if previous_ids is None:
-        st.session_state[state_key] = request_ids
-    elif request_ids != previous_ids:
-        if editor_key:
-            _persist_unmatched_editor_state(editor_key, recommendations, selection_column)
-        st.session_state[state_key] = request_ids
-        st.rerun(scope='app')
-
-
 def _persist_keyword_editor(editor_key, base_key, draft_key, checkbox_key, selection_column):
     frame = pd.DataFrame(st.session_state.get(base_key, []))
     widget_state = st.session_state.get(editor_key) or {}
@@ -5167,8 +5145,12 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             else:
                 st.info("정규화 결과는 검토할 수 있지만, DB 등록은 관리자 승인 후 진행됩니다.")
     if cloud_enabled() and is_admin():
-        st.caption("새 등록 요청은 5초마다 확인해 반영합니다.")
-        _poll_unmatched_registration_requests(editor_key, recommendations, select_column)
+        st.button(
+            "등록 요청 목록 새로고침",
+            key='refresh_unmatched_registration_requests',
+            on_click=_persist_unmatched_editor_state if editor_key else None,
+            args=(editor_key, recommendations, select_column) if editor_key else (),
+        )
 
 with tabs['candidate_pool']:
     if tabs['candidate_pool'].open:
