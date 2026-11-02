@@ -13,7 +13,7 @@ See [`QA_STATUS.md`](./QA_STATUS.md) for completed checks and remaining cutover 
 3. Run `npm ci` and `npm run dev` in this directory.
 4. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include the React dev ports 5173 and 5174 on `localhost` and `127.0.0.1`.
 
-Korean OCR additionally requires Python 3.9–3.13 and the dependencies in [`requirements-ocr.txt`](../requirements-ocr.txt). Install these in the same Python environment that runs FastAPI; the OCR model is initialized on the first OCR request.
+Korean OCR dependencies are installed by the Render API build from [`requirements-ocr.txt`](../requirements-ocr.txt). For local FastAPI use, install that file in the same Python 3.9–3.13 environment as [`requirements.lock.txt`](../requirements.lock.txt); the OCR model is initialized on the first OCR request.
 
 ## Deploying this preview
 
