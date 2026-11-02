@@ -52,6 +52,15 @@ textarea::placeholder { color: #a6b0c0; }
 .mode-copy { display: grid; gap: 4px; }
 .mode-copy strong { font-size: 12px; color: #344059; }
 .mode-copy small { font-size: 10px; color: #97a1b2; line-height: 1.4; }
+.analysis-options { margin-top: 16px; border-top: 1px solid #edf0f4; padding-top: 15px; color: #526078; font-size: 12px; }
+.analysis-options summary { cursor: pointer; font-weight: 600; }
+.filter-label { margin: 17px 0 8px; font-weight: 600; color: #68758a; font-size: 11px; }
+.filter-list { display: flex; flex-wrap: wrap; gap: 7px; max-height: 105px; overflow: auto; }
+.filter-list label, .option-check { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+.filter-list label { border: 1px solid #e4e8ef; border-radius: 6px; padding: 6px 8px; font-size: 11px; }
+.option-check { margin: 9px 0; font-size: 11px; }
+.filter-list input, .option-check input { accent-color: #ef6861; }
+.filter-message { margin: 11px 0; color: #9a493d; font-size: 11px; }
 .number-setting { display: flex; align-items: center; justify-content: space-between; margin-top: 15px; color: #59657a; font-size: 12px; }
 .number-setting input { width: 67px; border: 1px solid #dce2eb; border-radius: 6px; padding: 6px; }
 .primary-button { border: none; background: #f26761; color: #fff; border-radius: 9px; padding: 13px 18px; font-size: 12px; font-weight: 700; }
@@ -60,6 +69,7 @@ textarea::placeholder { color: #a6b0c0; }
 .analyze-button span { font-size: 18px; font-weight: 400; }
 .results-section { padding: 39px 36px 60px; }
 .results-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 16px; }
+.results-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
 .results-heading h2 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
 .result-count { color: #718099; font-size: 12px; }
 .result-count strong { color: #e96560; font-size: 21px; padding-right: 3px; }
@@ -109,4 +119,5 @@ td strong { color: #2d3a52; }
   .preview-pill { display: none; }
   .editor-panel, .settings-panel { padding: 18px; }
   .state-card, .login-card { margin: 25px 17px; padding: 25px; }
+  .results-heading { align-items: start; flex-direction: column; gap: 14px; }
 }

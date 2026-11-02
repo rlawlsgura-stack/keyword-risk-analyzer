@@ -262,7 +262,8 @@ class SupabaseRepository:
         return self.rpc('record_analysis', p_id=analysis_id, p_fingerprint=fingerprint,
                         p_actor=actor, p_revision=revision, p_result=result)
 
-    def collect_unmatched_terms(self, analysis_id, candidates):
+    @staticmethod
+    def _unmatched_terms(candidates):
         terms = []
         for row in candidates or ():
             if not isinstance(row, dict):
@@ -279,8 +280,17 @@ class SupabaseRepository:
                 continue
             terms.append({'term_norm': term_norm, 'display_term': display_term,
                           'occurrences': occurrences})
+        return terms
+
+    def record_analysis_with_unmatched(self, analysis_id, fingerprint, actor,
+                                       revision, result, candidates):
+        return self.rpc('record_analysis_with_unmatched', p_id=str(UUID(str(analysis_id))),
+                        p_fingerprint=fingerprint, p_actor=actor, p_revision=revision,
+                        p_result=result, p_terms=self._unmatched_terms(candidates))
+
+    def collect_unmatched_terms(self, analysis_id, candidates):
         return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))),
-                        p_terms=terms)
+                        p_terms=self._unmatched_terms(candidates))
 
     def load_unmatched_terms(self, offset=0, limit=100, search='', sort='occurrences'):
         if sort not in {'occurrences', 'registered'}:

@@ -64,3 +64,40 @@ def analyze(repository, request, actor):
         return repository.record_analysis(analysis_id, fingerprint, actor,
                                            result['keyword_revision'], result)
     return result
+
+
+def analyze_current(repository, request, actor):
+    """Current Streamlit text rules with one idempotent recorded collection."""
+    from approved_matching import SETTING_NAME, match_text as match_approved
+    from auxiliary_analysis import extract_unmatched_term_surfaces
+
+    payload = dict(request)
+    analysis_id = str(payload.pop('analysis_id'))
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
+                                 ensure_ascii=False).encode()).hexdigest()
+    previous = repository.previous_analysis(analysis_id, actor, fingerprint)
+    if previous is not None:
+        return previous
+
+    keywords = repository.load_keywords()
+    config = load_matching_config(repository, MatchingConfig(
+        mode=payload['mode'], exact_relaxed=True,
+        partial_min_len=payload['partial_min_len'],
+        similar_reverse_single=False, similar_reverse_any=False,
+        **{name: payload[name] for name in NORMALIZATION_OPTIONS},
+    ))
+    approved = repository.load_setting(SETTING_NAME, {}) if config.mode == 'similar' else None
+    text = payload['text']
+    matches = match_approved(text, keywords, config=config,
+                             categories=payload['categories'], risks=payload['risks'],
+                             approved_partials=approved)
+    coverage = (match_approved(text, keywords, config=config, approved_partials=approved)
+                if payload['categories'] or payload['risks'] else matches)
+    candidates = extract_unmatched_term_surfaces(text, coverage, limit=None)
+    result = {'analysis_id': analysis_id, 'matches': [asdict(m) for m in matches],
+              'unique_keywords': sorted({str(m.kwd_no) for m in matches if m.kwd_no}),
+              'keyword_revision': keywords.attrs.get('revision'),
+              'offset_unit': 'unicode_codepoint', 'end_exclusive': True,
+              'recorded': True}
+    return repository.record_analysis_with_unmatched(
+        analysis_id, fingerprint, actor, result['keyword_revision'], result, candidates)

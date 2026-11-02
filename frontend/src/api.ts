@@ -33,22 +33,44 @@ export type AnalysisResult = {
 
 export type AnalysisMode = 'exact' | 'similar' | 'partial'
 
-export async function analyzeText(text: string, mode: AnalysisMode, partialMinLen: number): Promise<AnalysisResult> {
+export type AnalysisInput = {
+  text: string
+  mode: AnalysisMode
+  partial_min_len: number
+  strip_bracket_notes: boolean
+  normalize_whitespace: boolean
+  ignore_case: boolean
+  normalize_symbols: boolean
+  categories: string[]
+  risks: string[]
+}
+
+async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
   const { data, error } = await supabase.auth.getSession()
   if (error || !data.session) throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.')
 
-  const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/v1/analyses`, {
-    method: 'POST',
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}${path}`, {
+    ...init,
     headers: {
       Authorization: `Bearer ${data.session.access_token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ text, mode, partial_min_len: partialMinLen, record: false }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new Error(typeof body?.detail === 'string' ? body.detail : `분석 요청에 실패했습니다 (${response.status}).`)
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `API 요청에 실패했습니다 (${response.status}).`)
   }
-  return response.json() as Promise<AnalysisResult>
+  return response.json()
+}
+
+export async function loadAnalysisFilters(): Promise<{ categories: string[]; risks: string[] }> {
+  return requestApi('/api/v2/analysis-filters')
+}
+
+export async function analyzeText(input: AnalysisInput, analysisId: string): Promise<AnalysisResult> {
+  return requestApi('/api/v2/analyses', {
+    method: 'POST',
+    body: JSON.stringify({ ...input, analysis_id: analysisId }),
+  })
 }

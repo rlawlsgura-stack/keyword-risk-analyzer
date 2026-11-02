@@ -2,6 +2,7 @@
 
 - Preserve the Streamlit app as FIXED328 and start a separate React/TypeScript analysis preview using the existing FastAPI service.
 - Allow explicit React origins on the API through `API_CORS_ORIGINS`.
+- Add a v2 analysis endpoint with current matching rules, filters, and atomic analysis/unmatched recording; prepare a separate Render static preview.
 
 ## FIXED327 - Defer normalization reruns until an action
 

@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
-import { analyzeText, configurationReady, supabase, type AnalysisMode, type AnalysisResult, type Match } from './api'
+import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
+  type AnalysisInput, type AnalysisMode, type AnalysisResult, type Match } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -36,6 +37,13 @@ function App() {
   const [text, setText] = useState('')
   const [mode, setMode] = useState<AnalysisMode>('similar')
   const [partialMinLen, setPartialMinLen] = useState(2)
+  const [options, setOptions] = useState({ strip_bracket_notes: true, normalize_whitespace: true,
+    ignore_case: true, normalize_symbols: true })
+  const [filters, setFilters] = useState({ categories: [] as string[], risks: [] as string[] })
+  const [categories, setCategories] = useState<string[]>([])
+  const [risks, setRisks] = useState<string[]>([])
+  const [filterMessage, setFilterMessage] = useState('')
+  const pending = useRef<{ payload: string; id: string } | null>(null)
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -67,6 +75,7 @@ function App() {
       setUser(null)
       setCheckingUser(false)
       setResult(null)
+      pending.current = null
       return
     }
     const client = supabase
@@ -80,6 +89,19 @@ function App() {
     })
     return () => { active = false }
   }, [session?.access_token])
+
+  useEffect(() => {
+    if (!user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    let active = true
+    void loadAnalysisFilters().then(data => {
+      if (active) { setFilters(data); setFilterMessage('') }
+    }).catch(() => {
+      if (active) setFilterMessage('필터 목록을 불러오지 못했습니다. 분석은 계속할 수 있습니다.')
+    })
+    return () => { active = false }
+  }, [user?.id])
+
+  useEffect(() => { setResult(null) }, [text, mode, partialMinLen, options, categories, risks])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -110,11 +132,17 @@ function App() {
     setMessage('')
     setResult(null)
     try {
-      const data = await analyzeText(text, mode, partialMinLen)
+      const input: AnalysisInput = { text, mode, partial_min_len: partialMinLen,
+        ...options, categories, risks }
+      const payload = JSON.stringify(input)
+      const id = pending.current?.payload === payload ? pending.current.id : crypto.randomUUID()
+      pending.current = { payload, id }
+      const data = await analyzeText(input, id)
       if (data.offset_unit !== 'unicode_codepoint' || !data.end_exclusive) {
         throw new Error('지원하지 않는 분석 위치 형식입니다.')
       }
       setResult({ text, data })
+      pending.current = null
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '분석 중 오류가 발생했습니다.')
     } finally {
@@ -124,6 +152,28 @@ function App() {
 
   const role = user?.app_metadata?.role
   const allowed = role === 'member' || role === 'admin'
+
+  function toggleFilter(value: string, selected: string[], setSelected: (values: string[]) => void) {
+    setSelected(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value])
+  }
+
+  function downloadCsv() {
+    if (!result) return
+    const cells = [
+      ['kwd_no', '키워드명', '상품카테고리', '리스크등급', '심의기준', '시작위치', '끝위치'],
+      ...result.data.matches.map(match => [match.kwd_no ?? '', match.term, match.category,
+        match.risk, match.detail, String(match.start), String(match.end)]),
+    ]
+    const csv = '\uFEFF' + cells.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'analysis_results.csv'
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -193,8 +243,31 @@ function App() {
                 <span className="mode-copy"><strong>{option.label}</strong><small>{option.description}</small></span>
               </label>)}</div>
               {mode === 'partial' && <label className="number-setting">최소 일치 글자 수
-                <input type="number" min={2} max={30} value={partialMinLen} disabled={busy}
+                <input type="number" min={2} max={20} value={partialMinLen} disabled={busy}
                   onChange={event => setPartialMinLen(Number(event.target.value))} /></label>}
+              <details className="analysis-options"><summary>사전 필터 및 매칭 옵션</summary>
+                {filterMessage && <p className="filter-message">{filterMessage}</p>}
+                <div className="filter-label">상품 카테고리</div>
+                <div className="filter-list">{filters.categories.map(value => <label key={value}>
+                  <input type="checkbox" disabled={busy} checked={categories.includes(value)}
+                    onChange={() => toggleFilter(value, categories, setCategories)} />{value}
+                </label>)}</div>
+                <div className="filter-label">리스크 등급</div>
+                <div className="filter-list">{filters.risks.map(value => <label key={value}>
+                  <input type="checkbox" disabled={busy} checked={risks.includes(value)}
+                    onChange={() => toggleFilter(value, risks, setRisks)} />{value}
+                </label>)}</div>
+                <div className="filter-label">매칭 옵션</div>
+                {([
+                  ['strip_bracket_notes', '등록 키워드의 괄호 설명 제외'],
+                  ['normalize_whitespace', '띄어쓰기·줄바꿈 차이 허용'],
+                  ['ignore_case', '영문 대소문자 무시'],
+                  ['normalize_symbols', '설정된 기호를 공백으로 처리'],
+                ] as const).map(([key, label]) => <label className="option-check" key={key}>
+                  <input type="checkbox" disabled={busy} checked={options[key]}
+                    onChange={event => setOptions({ ...options, [key]: event.target.checked })} />{label}
+                </label>)}
+              </details>
               <button type="submit" className="primary-button analyze-button" disabled={busy || !text.trim()}>
                 {busy ? '분석 중…' : '텍스트 분석하기'} <span aria-hidden="true">↗</span>
               </button>
@@ -204,7 +277,9 @@ function App() {
           {message && <div className="error-message inline-error" role="alert">{message}</div>}
           {result && <section className="results-section" aria-live="polite">
             <div className="results-heading"><div><div className="eyebrow">RESULT / 03</div><h2>분석 결과</h2></div>
-              <div className="result-count"><strong>{result.data.matches.length}</strong>건 발견</div></div>
+              <div className="results-actions"><div className="result-count"><strong>{result.data.unique_keywords.length}</strong>개 키워드 · {result.data.matches.length}회 발견</div>
+                {result.data.matches.length > 0 && <button className="secondary-button" onClick={downloadCsv}>CSV 다운로드</button>}
+              </div></div>
             <div className="panel preview-panel"><h3>문장 속 키워드</h3>
               <HighlightedText text={result.text} matches={result.data.matches} /></div>
             {result.data.matches.length > 0 ? <div className="panel table-panel"><div className="table-scroll"><table>
@@ -215,7 +290,7 @@ function App() {
                 <td>{match.start + 1}–{match.end}</td>
               </tr>)}</tbody>
             </table></div></div> : <p className="empty-result">일치하는 등록 키워드가 없습니다.</p>}
-            <p className="result-note">이 프리뷰는 분석 결과 조회만 제공합니다. 기존 앱의 미매칭 후보 수집과 통계 기록은 아직 연결되지 않았습니다.</p>
+            <p className="result-note">분석 기록과 미매칭 후보 수집이 완료되었습니다. 동일 요청 재시도에는 같은 분석 ID를 사용합니다.</p>
           </section>}
         </>}
     </main>

@@ -1,6 +1,6 @@
 # React transition preview
 
-FIXED328 starts a separate React/TypeScript interface. This first slice supports existing Supabase accounts and read-only text analysis through the current FastAPI service. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, administration, and the analysis side effects.
+FIXED328 starts a separate React/TypeScript interface. This slice supports existing Supabase accounts and recorded text analysis through the FastAPI `/api/v2/analyses` endpoint. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, and administration.
 
 ## Local setup
 
@@ -10,6 +10,10 @@ FIXED328 starts a separate React/TypeScript interface. This first slice supports
 
 ## Deploying this preview
 
-Build the `frontend` directory with `npm ci && npm run build`; publish `frontend/dist` as a static site. Set these build-time variables on the static host: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_API_BASE_URL` (the public HTTPS API origin). Set `API_CORS_ORIGINS` on the FastAPI service to the **exact HTTPS origin** of the static site; redeploy the API. Keep the existing Streamlit service and URL active. Do not route existing production users to the preview yet.
+The `render.yaml` Blueprint prepares an independent `keyword-risk-react-preview` static service with automatic deploys disabled. In Render, set its build-time `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_API_BASE_URL` (the public HTTPS API origin), then deploy it. On the FastAPI service set `API_CORS_ORIGINS` to the **exact HTTPS origin** of the static site and redeploy the API. For an existing Blueprint, Render does not populate newly added `sync: false` variables automatically, so set these values in the Dashboard. Keep the existing Streamlit service and URL active.
 
-This preview calls `/api/v1/analyses` with `record: false`: it does not write analysis history, keyword hit counts, or unmatched candidate observations. Its matching rules and visible options do not yet cover every Streamlit setting. Moving those side effects and the remaining screens to authenticated API operations is the next stage.
+Each explicit analysis click uses an anonymous UUID. The v2 API uses the current Streamlit text matching rules, records hit counts and unmatched candidate observations in one idempotent database transaction, and loads the latest common matching settings. Failed requests can be retried without duplicate counts. The existing v1 API behavior remains available to integration clients.
+
+The connected Supabase project has the v2 RPC installed. Apply [`supabase/record_analysis_with_unmatched_setup.sql`](../supabase/record_analysis_with_unmatched_setup.sql) before deploying the v2 API against another existing project; fresh installations include it in `supabase/schema.sql`.
+
+The preview still lacks the Streamlit detailed highlight interactions, auxiliary analysis, OCR, normalization review, keyword requests, reports, and administration. Deploy it separately until those screens are migrated and compared with the existing app.

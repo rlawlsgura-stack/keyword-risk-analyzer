@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app_config import configure, cloud_enabled
 from repository import ConflictError, StorageError, SupabaseRepository
-from service import analyze
+from service import analyze, analyze_current
+from matching_engine import DB_COLS
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 
 configure()
@@ -88,6 +89,20 @@ class RegulationQuestionRequest(BaseModel):
     category: str = Field(default='', max_length=100)
 
 
+class CurrentAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    analysis_id: UUID
+    text: str = Field(min_length=1, max_length=20000)
+    mode: Literal['exact', 'similar', 'partial'] = 'similar'
+    strip_bracket_notes: bool = Field(default=True, strict=True)
+    normalize_whitespace: bool = Field(default=True, strict=True)
+    ignore_case: bool = Field(default=True, strict=True)
+    normalize_symbols: bool = Field(default=True, strict=True)
+    partial_min_len: int = Field(default=2, ge=2, le=20)
+    categories: list[str] = Field(default_factory=list, max_length=100)
+    risks: list[str] = Field(default_factory=list, max_length=20)
+
+
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -114,6 +129,23 @@ def ready(repository=Depends(get_repository)):
 def create_analysis(body: AnalysisRequest, actor=Depends(current_actor),
                     repository=Depends(get_repository)):
     return analyze(repository, body.model_dump(mode='json'), actor)
+
+
+@app.get('/api/v2/analysis-filters')
+def analysis_filters(actor=Depends(current_actor), repository=Depends(get_repository)):
+    df = repository.load_keywords()
+    return {
+        'categories': sorted({value for value in df[DB_COLS[2]].astype(str).str.strip() if value}),
+        'risks': sorted({value for value in df[DB_COLS[3]].astype(str).str.strip() if value}),
+    }
+
+
+@app.post('/api/v2/analyses')
+def create_current_analysis(body: CurrentAnalysisRequest, actor=Depends(current_actor),
+                            repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to record an analysis')
+    return analyze_current(repository, body.model_dump(mode='json'), actor)
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
