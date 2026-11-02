@@ -297,6 +297,16 @@ export async function deleteAdminKeywords(revision: number, kwdNos: string[]): P
   })
 }
 
+export async function uploadAdminKeywords(file: File, revision: number, mode: 'merge' | 'overwrite'): Promise<{
+  added_count: number; dedup_removed: number; revision: number; total: number
+}> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('revision', String(revision))
+  form.append('mode', mode)
+  return requestApi('/api/v1/admin/keywords/upload', { method: 'POST', body: form })
+}
+
 export async function loadAdminUnmatchedRequests(): Promise<UnmatchedRegistrationRequest[]> {
   const result = await requestApi('/api/v1/admin/unmatched-registration-requests')
   return result.items

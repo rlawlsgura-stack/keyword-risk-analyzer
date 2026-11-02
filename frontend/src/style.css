@@ -126,6 +126,14 @@ textarea::placeholder { color: #a6b0c0; }
 .new-keyword-fields .criteria-field { grid-column: span 3; }
 .new-keyword-fields textarea { min-height: 95px; padding: 9px; font-size: 11px; }
 .new-keyword-form > .primary-button { justify-self: start; }
+.keyword-upload-panel { display: grid; gap: 12px; padding: 16px; border: 1px solid #e5e9ef; border-radius: 9px; background: #fafbfc; }
+.keyword-upload-panel h2 { margin: 0; font-size: 14px; }
+.keyword-upload-panel p, .keyword-upload-panel small { margin: 5px 0 0; color: #8490a2; font-size: 10px; line-height: 1.5; }
+.keyword-upload-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.keyword-upload-controls > label { display: grid; gap: 6px; color: #68758a; font-size: 10px; font-weight: 600; }
+.keyword-upload-controls input[type="file"] { max-width: 280px; font-size: 10px; }
+.keyword-upload-controls select { min-width: 180px; min-height: 36px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }
+.keyword-upload-panel .overwrite-warning { color: #a33b3b; }
 .normalization-admin-panel { display: grid; gap: 20px; max-width: 900px; }
 .approved-partial-editor { display: grid; gap: 15px; margin-top: 10px; padding-top: 22px; border-top: 1px solid #e8ecf2; }
 .approved-partial-editor h2 { margin: 0; font-size: 14px; }

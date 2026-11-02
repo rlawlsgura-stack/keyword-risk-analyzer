@@ -7,6 +7,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords, deleteAdminKeywords,
+  uploadAdminKeywords,
   loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
   type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
   saveAdminNormalizationSettings, type NormalizationSettings,
@@ -214,6 +215,9 @@ function App() {
   const [adminKeywordError, setAdminKeywordError] = useState('')
   const [adminKeywordMessage, setAdminKeywordMessage] = useState('')
   const [adminKeywordSelectedCodes, setAdminKeywordSelectedCodes] = useState<string[]>([])
+  const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null)
+  const [adminUploadMode, setAdminUploadMode] = useState<'merge' | 'overwrite'>('merge')
+  const [adminUploadInputVersion, setAdminUploadInputVersion] = useState(0)
   const [newKeywordOpen, setNewKeywordOpen] = useState(false)
   const [newKeywordForm, setNewKeywordForm] = useState<NewKeywordForm>({
     term: '', category: '', risk: '', alternative: '-', criteria: '', evidenceType: '',
@@ -764,6 +768,21 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  function downloadKeywordTemplate() {
+    const headers = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드',
+      '리스크 등급별 세부 심의기준', '증빙자료유형', '키워드 조회 수(누적카운트)', '마지막 출력일자']
+    const blob = new Blob(['\uFEFF' + headers.map(value => `"${value.replaceAll('"', '""')}"`).join(',')],
+      { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'keyword_template.csv'
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   function downloadReportCsv() {
     const rows = [
       ['검색순위', 'kwd_no', '키워드명', '기간내_조회수'],
@@ -1123,6 +1142,35 @@ function App() {
       setAdminKeywordRefresh(value => value + 1)
     } catch (error) {
       setAdminKeywordError(error instanceof Error ? error.message : '키워드를 삭제하지 못했습니다. 원장을 새로 불러오세요.')
+    } finally {
+      setAdminKeywordSaving(false)
+    }
+  }
+
+  async function importAdminKeywords() {
+    if (!adminUploadFile || adminKeywordRevision === null || adminKeywordDirty) return
+    if (adminUploadFile.size > 20 * 1024 * 1024) {
+      setAdminKeywordError('업로드 파일은 20MB 이하여야 합니다.')
+      return
+    }
+    const confirmText = adminUploadMode === 'overwrite'
+      ? '업로드 파일로 전체 키워드 원장을 덮어쓸까요? 현재 행은 목록에서 제거됩니다.'
+      : '업로드 파일의 키워드를 원장에 병합할까요? 같은 번호는 파일 행으로 교체됩니다.'
+    if (!window.confirm(confirmText)) return
+    setAdminKeywordSaving(true)
+    setAdminKeywordError('')
+    setAdminKeywordMessage('')
+    try {
+      const result = await uploadAdminKeywords(adminUploadFile, adminKeywordRevision, adminUploadMode)
+      setAdminKeywordDirty(false)
+      setAdminKeywordRevision(result.revision)
+      setAdminKeywordSelectedCodes([])
+      setAdminUploadFile(null)
+      setAdminUploadInputVersion(value => value + 1)
+      setAdminKeywordMessage(`업로드 ${result.added_count}건 처리 · 내부 중복 ${result.dedup_removed}건 제거 · 원장 ${result.total}건`)
+      setAdminKeywordRefresh(value => value + 1)
+    } catch (error) {
+      setAdminKeywordError(error instanceof Error ? error.message : '키워드 파일을 업로드하지 못했습니다.')
     } finally {
       setAdminKeywordSaving(false)
     }
@@ -1488,6 +1536,29 @@ function App() {
                 </div>
                 <button className="primary-button" type="submit">행 추가</button>
               </form>}
+              <section className="keyword-upload-panel">
+                <div><h2>CSV / XLSX 원장 업로드</h2>
+                  <p>CSV 템플릿을 내려받아 작성하거나 기존 XLSX 파일을 올릴 수 있습니다.</p></div>
+                <div className="keyword-upload-controls">
+                  <label>업로드 파일
+                    <input key={adminUploadInputVersion} type="file" accept=".csv,.xlsx" disabled={adminKeywordBusy || adminKeywordSaving || adminKeywordDirty}
+                      onChange={event => { setAdminUploadFile(event.target.files?.[0] ?? null); setAdminKeywordError('') }} />
+                  </label>
+                  <label>업로드 방식
+                    <select value={adminUploadMode} disabled={adminKeywordBusy || adminKeywordSaving || adminKeywordDirty}
+                      onChange={event => setAdminUploadMode(event.target.value as 'merge' | 'overwrite')}>
+                      <option value="merge">기존 유지 + 새로 추가</option><option value="overwrite">전체 덮어쓰기</option>
+                    </select>
+                  </label>
+                  <div className="admin-keyword-toolbar">
+                    <button className="secondary-button" onClick={downloadKeywordTemplate}>CSV 템플릿 다운로드</button>
+                    <button className="primary-button" disabled={!adminUploadFile || adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
+                      onClick={importAdminKeywords}>{adminKeywordSaving ? '업로드 중…' : '파일 업로드'}</button>
+                  </div>
+                </div>
+                {adminKeywordDirty && <small>저장하지 않은 수정이 있어 업로드를 잠시 막았습니다. 먼저 저장하거나 원장을 다시 불러오세요.</small>}
+                {adminUploadMode === 'overwrite' && <small className="overwrite-warning">전체 덮어쓰기는 현재 원장의 기존 키워드를 파일 내용으로 교체합니다.</small>}
+              </section>
               {adminKeywordDirty && <p className="admin-dirty-note">저장하지 않은 변경사항이 있습니다.</p>}
               {adminKeywordMessage && <p className="success-message" role="status">{adminKeywordMessage}</p>}
               {adminKeywordError && <p className="error-message" role="alert">{adminKeywordError}</p>}

@@ -9,7 +9,7 @@ from typing import Literal
 from uuid import UUID
 
 import requests
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -903,6 +903,105 @@ def save_admin_dropdown_settings(body: AdminDropdownSettings, actor=Depends(curr
         config[key] = cleaned
     repository.save_setting('dropdown_config', config)
     return config
+
+
+@app.post('/api/v1/admin/keywords/upload')
+async def upload_admin_keywords(
+        file: UploadFile = File(...), mode: Literal['merge', 'overwrite'] = Form(...),
+        revision: int = Form(..., ge=0), actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    name = str(file.filename or '').lower()
+    content = await file.read(20 * 1024 * 1024 + 1)
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(413, 'Keyword upload must be 20 MB or smaller.')
+    import io
+    import pandas as pd
+    if name.endswith('.csv'):
+        incoming = None
+        for encoding in ('utf-8-sig', 'utf-8', 'cp949', 'euc-kr', 'latin1'):
+            try:
+                incoming = pd.read_csv(io.BytesIO(content), dtype=str, encoding=encoding).fillna('')
+                break
+            except Exception:
+                continue
+        if incoming is None:
+            raise HTTPException(422, 'Could not read the CSV file. Check its encoding and headers.')
+    elif name.endswith('.xlsx'):
+        try:
+            incoming = pd.read_excel(io.BytesIO(content), dtype=str).fillna('')
+        except Exception as exc:
+            raise HTTPException(422, 'Could not read the XLSX file. Check its worksheet and headers.') from exc
+    else:
+        raise HTTPException(422, 'Upload a CSV or XLSX file.')
+
+    aliases = {
+        'kwd_no': DB_COLS[0], 'keyword_no': DB_COLS[0], '키워드no': DB_COLS[0], '키워드 no': DB_COLS[0],
+        '키워드명': DB_COLS[1], 'term': DB_COLS[1], '상품카테고리': DB_COLS[2], 'category': DB_COLS[2],
+        '리스크 등급': DB_COLS[3], 'risk': DB_COLS[3], '대체키워드': DB_COLS[4],
+        '대체키워드명': DB_COLS[4], 'alternative': DB_COLS[4],
+        '리스크 등급별 세부 심의기준': DB_COLS[5], '세부 심의기준': DB_COLS[5], 'criteria': DB_COLS[5],
+        '증빙자료유형': DB_COLS[6], '증빙자료': DB_COLS[6], 'evidence_type': DB_COLS[6], 'evidence': DB_COLS[6],
+        COUNT_COL.lower(): COUNT_COL, 'hit_count': COUNT_COL,
+        LAST_COL.lower(): LAST_COL, '마지막 검색일자': LAST_COL, 'last_hit': LAST_COL,
+    }
+    source = incoming.copy()
+    source.columns = [str(column).strip().lower() for column in source.columns]
+    source = source.rename(columns={column: aliases[column] for column in source.columns if column in aliases})
+    if source.columns.duplicated().any():
+        raise HTTPException(422, 'Upload has multiple columns for the same keyword field.')
+    for column in DB_COLS:
+        if column not in source:
+            source[column] = '0' if column == COUNT_COL else ''
+    source = source[DB_COLS].fillna('').astype(str).apply(lambda col: col.str.strip())
+    source = source.loc[~source[DB_COLS].apply(lambda row: all(not value for value in row), axis=1)]
+    if source.empty:
+        raise HTTPException(422, 'The upload contains no keyword rows.')
+    missing = source.loc[(source[DB_COLS[1]] == '') | (source[DB_COLS[2]] == '')]
+    if not missing.empty:
+        raise HTTPException(422, 'Every uploaded row needs a keyword name and category.')
+
+    current = repository.load_keywords()
+    if current.attrs.get('revision') != revision:
+        raise HTTPException(409, 'Keyword data changed. Reload it before importing.')
+    rows = current.to_dict('records')
+    assigned = []
+    for item in source.to_dict('records'):
+        if not item[DB_COLS[0]]:
+            item[DB_COLS[0]] = _next_keyword_code(item[DB_COLS[2]], rows + assigned)
+        assigned.append(item)
+    before = len(assigned)
+    deduplicated = {item[DB_COLS[0]]: item for item in assigned}
+    upload_rows = list(deduplicated.values())
+    removed_duplicates = before - len(upload_rows)
+    if mode == 'overwrite' and not upload_rows:
+        raise HTTPException(422, 'The upload contains no keyword rows.')
+    current_by_code = {str(row[DB_COLS[0]]).strip(): row for row in rows}
+    for item in upload_rows:
+        old = current_by_code.get(item[DB_COLS[0]])
+        if old:
+            item[COUNT_COL] = str(old[COUNT_COL])
+            item[LAST_COL] = str(old[LAST_COL])
+        else:
+            item[COUNT_COL] = item[COUNT_COL] or '0'
+    if mode == 'merge':
+        replaced = {item[DB_COLS[0]] for item in upload_rows}
+        rows = [row for row in rows if str(row[DB_COLS[0]]).strip() not in replaced]
+        result_rows = rows + upload_rows
+    else:
+        result_rows = upload_rows
+    frame = pd.DataFrame(result_rows, columns=DB_COLS).fillna('').astype(str)
+    try:
+        new_revision = repository.save_keywords(frame, revision)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'added_count': len(upload_rows), 'dedup_removed': removed_duplicates,
+            'revision': new_revision, 'total': len(result_rows)}
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
