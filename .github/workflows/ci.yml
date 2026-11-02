@@ -40,7 +40,7 @@ jobs:
           api.py app_config.py approved_matching.py auxiliary_analysis.py
           legislation_source.py matching_engine.py ocr_keyword_import.py
           regulation_assistant.py repository.py request_notifications.py
-          service.py unmatched_collection.py keyword_app2_fixed327.py
+          service.py unmatched_collection.py keyword_app2_fixed328.py
           streamlit_cloud tests scripts
 
       - name: Test
@@ -48,3 +48,19 @@ jobs:
 
       - name: Compile Python sources
         run: python -m compileall -q *.py streamlit_cloud tests scripts
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run build

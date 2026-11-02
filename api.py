@@ -7,6 +7,7 @@ from uuid import UUID
 
 import requests
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,6 +21,14 @@ configure()
 app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origin.strip() for origin in os.getenv(
+        'API_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173'
+    ).split(',') if origin.strip()],
+    allow_methods=['GET', 'POST'],
+    allow_headers=['Authorization', 'Content-Type'],
+)
 bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
 

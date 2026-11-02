@@ -1,6 +1,7 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED327** (`keyword_app2_fixed327.py`).
+Current local development version: **FIXED328** (`keyword_app2_fixed328.py`).
+The React transition preview lives in [frontend/README.md](frontend/README.md). The existing Streamlit app remains the production UI while features move across.
 `run_latest.ps1` checks Supabase Auth connectivity first, then starts the same `streamlit_cloud/app.py` entrypoint used by Streamlit Cloud and Render. That shared entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.

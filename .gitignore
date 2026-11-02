@@ -4,5 +4,9 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 .pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.npm-cache/
 logs/streamlit_*.out.log
 logs/streamlit_*.err.log
