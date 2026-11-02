@@ -34,6 +34,14 @@ const regulationStatusLabels: Record<string, string> = {
 const unmatchedStatusLabels: Record<string, string> = {
   pending: '검토 대기', approved: '등록 완료', registration_requested: '등록 요청', ignored: '관리자 거절',
 }
+
+function makeCsv(rows: string[][]) {
+  const cell = (value: string) => {
+    const safeValue = /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value
+    return `"${safeValue.replaceAll('"', '""')}"`
+  }
+  return '\uFEFF' + rows.map(row => row.map(cell).join(',')).join('\r\n')
+}
 const keywordRequestTypeLabels: Record<string, string> = {
   risk_grade_adjustment: '리스크 등급 조정', review_criteria_change: '심의 기준 변경',
   new_keyword_registration: '신규 키워드 등록',
@@ -1057,7 +1065,7 @@ function App() {
       ...result.data.matches.map(match => [match.kwd_no ?? '', match.term, match.category,
         match.risk, match.detail, String(match.start), String(match.end)]),
     ]
-    const csv = '\uFEFF' + cells.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const csv = makeCsv(cells)
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
@@ -1108,7 +1116,7 @@ function App() {
       ['검색순위', 'kwd_no', '키워드명', '기간내_조회수'],
       ...reportItems.map((item, index) => [String(index + 1), item.kwd_no, item.term ?? '', String(item.hit_count)]),
     ]
-    const csv = '\uFEFF' + rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const csv = makeCsv(rows)
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
@@ -1152,7 +1160,7 @@ function App() {
         row['리스크 등급'], row.대체키워드, row['리스크 등급별 세부 심의기준'],
         row.증빙자료유형, row['키워드 조회 수(누적카운트)'], row['마지막 출력일자']]
         .map(value => String(value ?? '')))]
-      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const csv = makeCsv(csvRows)
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
@@ -1181,7 +1189,7 @@ function App() {
       const csvRows = [headers, ...rows.map(row => [row.display_term, String(row.total_occurrences),
         String(row.analysis_count), labels[row.review_status] ?? row.review_status,
         formatDate(row.first_seen), formatDate(row.last_seen)])]
-      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const csv = makeCsv(csvRows)
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
