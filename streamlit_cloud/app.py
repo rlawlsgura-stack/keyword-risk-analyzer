@@ -23,6 +23,8 @@ if cached_repository is not None:
         "delete_unmatched_registration_requests",
         "submit_new_keyword_registration_requests",
         "reject_unmatched_registration_requests",
+        "load_unmatched_recommendation_draft",
+        "save_unmatched_recommendation_draft",
     )
     repository_class = getattr(cached_repository, "SupabaseRepository", None)
     try:

@@ -120,8 +120,12 @@ from app_config import configure, cloud_enabled
 # repository module retained by an already-running Streamlit process.
 _cached_repository = sys.modules.get('repository')
 if (_cached_repository is not None
-        and not hasattr(getattr(_cached_repository, 'SupabaseRepository', None),
-                        'reject_unmatched_registration_requests')):
+        and any(not hasattr(getattr(_cached_repository, 'SupabaseRepository', None), method)
+                for method in (
+                    'reject_unmatched_registration_requests',
+                    'load_unmatched_recommendation_draft',
+                    'save_unmatched_recommendation_draft',
+                ))):
     sys.modules.pop('repository', None)
 from repository import SupabaseRepository, StorageError, ConflictError
 from request_notifications import (
