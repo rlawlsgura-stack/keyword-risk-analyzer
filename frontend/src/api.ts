@@ -95,6 +95,10 @@ export type KeywordRequestRecord = {
   created_at: string
 }
 export type AdminUser = { id: string; email: string; role: 'admin' | 'member' | null; email_confirmed: boolean }
+export type UnmatchedRegistrationRequest = {
+  id: string; term: string; term_norm: string; source_terms: string; occurrences: number
+  category: string; risk: string; criteria: string; evidence_type: string; alternative: string; created_at: string
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -231,4 +235,16 @@ export async function saveAdminKeywords(revision: number, rows: KeywordRow[]): P
   return requestApi('/api/v1/admin/keywords', {
     method: 'PUT', body: JSON.stringify({ revision, rows }),
   })
+}
+
+export async function loadAdminUnmatchedRequests(): Promise<UnmatchedRegistrationRequest[]> {
+  const result = await requestApi('/api/v1/admin/unmatched-registration-requests')
+  return result.items
+}
+
+export async function rejectAdminUnmatchedRequests(requestIds: string[]): Promise<number> {
+  const result = await requestApi('/api/v1/admin/unmatched-registration-requests/reject', {
+    method: 'POST', body: JSON.stringify({ request_ids: requestIds }),
+  })
+  return result.rejected
 }

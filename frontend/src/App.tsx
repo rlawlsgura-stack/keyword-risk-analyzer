@@ -6,7 +6,9 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
-  updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords } from './api'
+  updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords,
+  loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests,
+  type UnmatchedRegistrationRequest } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -124,7 +126,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin' | 'registration-admin'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -193,6 +195,13 @@ function App() {
   const [newKeywordForm, setNewKeywordForm] = useState<NewKeywordForm>({
     term: '', category: '', risk: '', alternative: '-', criteria: '', evidenceType: '',
   })
+  const [registrationRequests, setRegistrationRequests] = useState<UnmatchedRegistrationRequest[]>([])
+  const [registrationBusy, setRegistrationBusy] = useState(false)
+  const [registrationError, setRegistrationError] = useState('')
+  const [registrationRefresh, setRegistrationRefresh] = useState(0)
+  const [registrationSelected, setRegistrationSelected] = useState<string[]>([])
+  const [registrationSaving, setRegistrationSaving] = useState(false)
+  const [registrationMessage, setRegistrationMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -340,6 +349,22 @@ function App() {
     return () => { active = false }
   }, [page, user?.id, user?.app_metadata?.role, adminKeywordRefresh])
 
+  useEffect(() => {
+    if (page !== 'registration-admin' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    setRegistrationBusy(true)
+    setRegistrationError('')
+    void loadAdminUnmatchedRequests().then(items => {
+      if (active) {
+        setRegistrationRequests(items)
+        setRegistrationSelected([])
+      }
+    }).catch(error => {
+      if (active) setRegistrationError(error instanceof Error ? error.message : '등록 요청을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setRegistrationBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, user?.app_metadata?.role, registrationRefresh])
+
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
@@ -385,6 +410,22 @@ function App() {
     const { error } = await supabase?.auth.signOut() ?? { error: null }
     setBusy(false)
     if (error) setMessage('로그아웃에 실패했습니다. 다시 시도해 주세요.')
+  }
+
+  async function rejectSelectedRegistrationRequests() {
+    if (!registrationSelected.length || !window.confirm(`선택한 ${registrationSelected.length}건의 등록 요청을 거절할까요?`)) return
+    setRegistrationSaving(true)
+    setRegistrationError('')
+    setRegistrationMessage('')
+    try {
+      const count = await rejectAdminUnmatchedRequests(registrationSelected)
+      setRegistrationMessage(`등록 요청 ${count}건을 거절했습니다.`)
+      setRegistrationRefresh(value => value + 1)
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : '등록 요청을 거절하지 못했습니다.')
+    } finally {
+      setRegistrationSaving(false)
+    }
   }
 
   async function submitAnalysis(event: FormEvent<HTMLFormElement>) {
@@ -735,6 +776,9 @@ function App() {
       {role === 'admin' && <button className={`nav-item nav-button ${page === 'keyword-admin' ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>
         <span className="nav-icon">✎</span> 키워드 관리
       </button>}
+      {role === 'admin' && <button className={`nav-item nav-button ${page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('registration-admin')}>
+        <span className="nav-icon">✓</span> 등록 요청 검토
+      </button>}
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -743,7 +787,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : '키워드 관리'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : '키워드 관리'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -810,6 +854,43 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
+        </section> : page === 'registration-admin' && role === 'admin' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">ADMIN / 09</div><h1>등록 요청 검토</h1>
+              <p>사용자가 제출한 미매칭 키워드 등록 요청을 확인하고 거절 처리합니다.</p></div>
+            <div className="preview-pill"><span /> 관리자 전용</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel admin-users-panel">
+              <div className="request-history-heading"><h2>대기 중인 요청</h2>
+                <span>{registrationBusy ? '불러오는 중…' : `${registrationRequests.length.toLocaleString()}건`}</span></div>
+              <div className="admin-keyword-toolbar">
+                <button className="secondary-button" disabled={registrationBusy || registrationSaving}
+                  onClick={() => setRegistrationRefresh(value => value + 1)}>새로고침</button>
+                <button className="secondary-button" disabled={!registrationSelected.length || registrationBusy || registrationSaving}
+                  onClick={rejectSelectedRegistrationRequests}>{registrationSaving ? '처리 중…' : `선택 요청 거절 (${registrationSelected.length})`}</button>
+              </div>
+              {registrationMessage && <p className="success-message" role="status">{registrationMessage}</p>}
+              {registrationError && <p className="error-message" role="alert">{registrationError}</p>}
+              {!registrationError && <div className="table-scroll"><table>
+                <thead><tr><th><input type="checkbox" aria-label="전체 선택" checked={registrationRequests.length > 0 && registrationSelected.length === registrationRequests.length}
+                  onChange={event => setRegistrationSelected(event.target.checked ? registrationRequests.map(item => item.id) : [])} /></th>
+                  <th>키워드</th><th>카테고리 / 리스크</th><th>심의 기준 / 증빙 유형</th><th>출현 횟수</th><th>요청일</th></tr></thead>
+                <tbody>{registrationRequests.map(item => <tr key={item.id}>
+                  <td><input type="checkbox" aria-label={`${item.term} 요청 선택`} checked={registrationSelected.includes(item.id)}
+                    onChange={event => setRegistrationSelected(previous => event.target.checked
+                      ? [...previous, item.id] : previous.filter(id => id !== item.id))} /></td>
+                  <td><strong>{item.term}</strong><br /><small>{item.source_terms}</small></td>
+                  <td>{item.category || '미지정'} · {item.risk || '미지정'}</td>
+                  <td>{item.criteria || '심의 기준 미입력'}<br /><small>{item.evidence_type || '증빙 유형 미입력'}</small></td>
+                  <td>{item.occurrences.toLocaleString()}</td><td>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</td>
+                </tr>)}</tbody>
+              </table></div>}
+              {!registrationBusy && !registrationError && registrationRequests.length === 0 && <p className="empty-result">검토할 등록 요청이 없습니다.</p>}
+            </div>
+          </section>
+        </> : page === 'registration-admin' ? <section className="state-card">
+          <h1>관리자 권한이 필요합니다.</h1><p>등록 요청 검토는 관리자 계정만 사용할 수 있습니다.</p>
         </section> : page === 'keyword-admin' && role === 'admin' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 08</div><h1>키워드 관리</h1>

@@ -1,3 +1,8 @@
+## React preview - Add registration request review
+
+- Let admins review queued unmatched keyword registration requests and reject selected requests.
+- Leave approval of queued requests in the existing Streamlit workflow.
+
 ## React preview - Add keyword editing and creation
 
 - Let admins edit existing keyword classifications and review criteria, and add new rows with generated IDs.

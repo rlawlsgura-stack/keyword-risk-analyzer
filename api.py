@@ -158,6 +158,11 @@ class AdminKeywordSave(BaseModel):
     rows: list[AdminKeywordRow] = Field(min_length=1, max_length=10000)
 
 
+class UnmatchedRegistrationReview(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_ids: list[UUID] = Field(min_length=1, max_length=1000)
+
+
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -232,6 +237,40 @@ def submit_unmatched_registration_requests(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'items': items or []}
+
+
+@app.get('/api/v1/admin/unmatched-registration-requests')
+def admin_unmatched_registration_requests(
+        actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    try:
+        return {'items': repository.load_unmatched_registration_requests(credentials.credentials)}
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@app.post('/api/v1/admin/unmatched-registration-requests/reject')
+def reject_admin_unmatched_registration_requests(
+        body: UnmatchedRegistrationReview, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    try:
+        rejected = repository.reject_unmatched_registration_requests(
+            [str(request_id) for request_id in body.request_ids], credentials.credentials)
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'rejected': rejected}
 
 
 @app.get('/api/v1/keyword-requests')
