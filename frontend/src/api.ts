@@ -248,3 +248,13 @@ export async function rejectAdminUnmatchedRequests(requestIds: string[]): Promis
   })
   return result.rejected
 }
+
+export async function approveAdminUnmatchedRequests(requestIds: string[], updates: {
+  request_id: string; category: string; risk: string; criteria: string; evidence_type: string; alternative: string
+}[]): Promise<{
+  approved: number; added: string[]; cleared_requests: number
+}> {
+  return requestApi('/api/v1/admin/unmatched-registration-requests/approve', {
+    method: 'POST', body: JSON.stringify({ request_ids: requestIds, updates }),
+  })
+}

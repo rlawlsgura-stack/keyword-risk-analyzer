@@ -7,7 +7,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords,
-  loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests,
+  loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
   type UnmatchedRegistrationRequest } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
@@ -200,6 +200,9 @@ function App() {
   const [registrationError, setRegistrationError] = useState('')
   const [registrationRefresh, setRegistrationRefresh] = useState(0)
   const [registrationSelected, setRegistrationSelected] = useState<string[]>([])
+  const [registrationDrafts, setRegistrationDrafts] = useState<Record<string, {
+    category: string; risk: string; criteria: string; evidence_type: string; alternative: string
+  }>>({})
   const [registrationSaving, setRegistrationSaving] = useState(false)
   const [registrationMessage, setRegistrationMessage] = useState('')
 
@@ -358,6 +361,10 @@ function App() {
       if (active) {
         setRegistrationRequests(items)
         setRegistrationSelected([])
+        setRegistrationDrafts(Object.fromEntries(items.map(item => [item.id, {
+          category: item.category ?? '', risk: item.risk ?? '', criteria: item.criteria ?? '',
+          evidence_type: item.evidence_type ?? '', alternative: item.alternative || '-',
+        }])))
       }
     }).catch(error => {
       if (active) setRegistrationError(error instanceof Error ? error.message : '등록 요청을 불러오지 못했습니다.')
@@ -423,6 +430,23 @@ function App() {
       setRegistrationRefresh(value => value + 1)
     } catch (error) {
       setRegistrationError(error instanceof Error ? error.message : '등록 요청을 거절하지 못했습니다.')
+    } finally {
+      setRegistrationSaving(false)
+    }
+  }
+
+  async function approveSelectedRegistrationRequests() {
+    if (!registrationSelected.length || !window.confirm(`선택한 ${registrationSelected.length}건을 키워드 원장에 등록할까요?`)) return
+    setRegistrationSaving(true)
+    setRegistrationError('')
+    setRegistrationMessage('')
+    try {
+      const updates = registrationSelected.map(request_id => ({ request_id, ...registrationDrafts[request_id] }))
+      const result = await approveAdminUnmatchedRequests(registrationSelected, updates)
+      setRegistrationMessage(`요청 ${result.approved}건을 처리했습니다. 신규 키워드 ${result.added.length}건을 등록했습니다.`)
+      setRegistrationRefresh(value => value + 1)
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : '등록 요청을 승인하지 못했습니다.')
     } finally {
       setRegistrationSaving(false)
     }
@@ -867,6 +891,8 @@ function App() {
               <div className="admin-keyword-toolbar">
                 <button className="secondary-button" disabled={registrationBusy || registrationSaving}
                   onClick={() => setRegistrationRefresh(value => value + 1)}>새로고침</button>
+                <button className="primary-button" disabled={!registrationSelected.length || registrationBusy || registrationSaving}
+                  onClick={approveSelectedRegistrationRequests}>{registrationSaving ? '처리 중…' : `선택 요청 승인 (${registrationSelected.length})`}</button>
                 <button className="secondary-button" disabled={!registrationSelected.length || registrationBusy || registrationSaving}
                   onClick={rejectSelectedRegistrationRequests}>{registrationSaving ? '처리 중…' : `선택 요청 거절 (${registrationSelected.length})`}</button>
               </div>
@@ -875,14 +901,33 @@ function App() {
               {!registrationError && <div className="table-scroll"><table>
                 <thead><tr><th><input type="checkbox" aria-label="전체 선택" checked={registrationRequests.length > 0 && registrationSelected.length === registrationRequests.length}
                   onChange={event => setRegistrationSelected(event.target.checked ? registrationRequests.map(item => item.id) : [])} /></th>
-                  <th>키워드</th><th>카테고리 / 리스크</th><th>심의 기준 / 증빙 유형</th><th>출현 횟수</th><th>요청일</th></tr></thead>
+                  <th>키워드</th><th>카테고리</th><th>리스크</th><th>심의 기준</th><th>증빙 유형</th><th>대체 키워드</th><th>출현 횟수</th><th>요청일</th></tr></thead>
                 <tbody>{registrationRequests.map(item => <tr key={item.id}>
                   <td><input type="checkbox" aria-label={`${item.term} 요청 선택`} checked={registrationSelected.includes(item.id)}
                     onChange={event => setRegistrationSelected(previous => event.target.checked
                       ? [...previous, item.id] : previous.filter(id => id !== item.id))} /></td>
                   <td><strong>{item.term}</strong><br /><small>{item.source_terms}</small></td>
-                  <td>{item.category || '미지정'} · {item.risk || '미지정'}</td>
-                  <td>{item.criteria || '심의 기준 미입력'}<br /><small>{item.evidence_type || '증빙 유형 미입력'}</small></td>
+                  <td><select aria-label={`${item.term} 카테고리`} value={registrationDrafts[item.id]?.category ?? ''}
+                    disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
+                      [item.id]: { ...previous[item.id], category: event.target.value } }))}>
+                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><select aria-label={`${item.term} 리스크`} value={registrationDrafts[item.id]?.risk ?? ''}
+                    disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
+                      [item.id]: { ...previous[item.id], risk: event.target.value } }))}>
+                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><textarea aria-label={`${item.term} 심의 기준`} value={registrationDrafts[item.id]?.criteria ?? ''}
+                    disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
+                      [item.id]: { ...previous[item.id], criteria: event.target.value } }))} /></td>
+                  <td><select aria-label={`${item.term} 증빙 유형`} value={registrationDrafts[item.id]?.evidence_type ?? ''}
+                    disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
+                      [item.id]: { ...previous[item.id], evidence_type: event.target.value } }))}>
+                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                  </select></td>
+                  <td><input aria-label={`${item.term} 대체 키워드`} value={registrationDrafts[item.id]?.alternative ?? '-'}
+                    disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
+                      [item.id]: { ...previous[item.id], alternative: event.target.value } }))} /></td>
                   <td>{item.occurrences.toLocaleString()}</td><td>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'}</td>
                 </tr>)}</tbody>
               </table></div>}

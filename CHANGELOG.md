@@ -1,7 +1,7 @@
-## React preview - Add registration request review
+## React preview - Add registration request approval
 
-- Let admins review queued unmatched keyword registration requests and reject selected requests.
-- Leave approval of queued requests in the existing Streamlit workflow.
+- Let admins review, classify, approve, and reject queued unmatched keyword registration requests.
+- Save approved terms to the keyword catalog and clear their unmatched observations and request rows.
 
 ## React preview - Add keyword editing and creation
 

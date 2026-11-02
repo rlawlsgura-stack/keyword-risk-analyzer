@@ -2,6 +2,8 @@
 import os
 import secrets
 import logging
+import re
+import unicodedata
 from typing import Literal
 from uuid import UUID
 
@@ -158,9 +160,48 @@ class AdminKeywordSave(BaseModel):
     rows: list[AdminKeywordRow] = Field(min_length=1, max_length=10000)
 
 
+class UnmatchedRegistrationUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+    category: str = Field(max_length=500)
+    risk: str = Field(max_length=500)
+    criteria: str = Field(max_length=500)
+    evidence_type: str = Field(max_length=500)
+    alternative: str = Field(default='-', max_length=500)
+
+
 class UnmatchedRegistrationReview(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_ids: list[UUID] = Field(min_length=1, max_length=1000)
+    updates: list[UnmatchedRegistrationUpdate] = Field(default_factory=list, max_length=1000)
+
+
+def _next_keyword_code(category: str, rows: list[dict]) -> str:
+    category_rows = [row for row in rows if str(row.get(DB_COLS[2], '')).strip() == category]
+    pattern = re.compile(r'^([A-Z]+)(\d{3,})$')
+    prefixes = [match.group(1) for row in category_rows
+                if (match := pattern.match(str(row.get('kwd_no', '')).strip()))]
+    if prefixes:
+        prefix = max(set(prefixes), key=prefixes.count)
+    else:
+        prefix = {'공통(전체)': 'A', '식품': 'F', '건강기능식품': 'G',
+                  '화장품': 'B', '공산품': 'I'}.get(category, '')
+        if not prefix:
+            first = category[:1].upper()
+            prefix = first if re.fullmatch(r'[A-Z]', first) else 'U'
+    same_category = [match for row in category_rows
+                     if (match := pattern.match(str(row.get('kwd_no', '')).strip()))
+                     and match.group(1) == prefix]
+    same_prefix = [match for row in rows
+                   if (match := pattern.match(str(row.get('kwd_no', '')).strip()))
+                   and match.group(1) == prefix]
+    source = same_category or same_prefix
+    width = max([3, *(len(match.group(2)) for match in same_category)])
+    number = max((int(match.group(2)) for match in source), default=0) + 1
+    existing = {str(row.get('kwd_no', '')).strip() for row in rows}
+    while f'{prefix}{number:0{width}d}' in existing:
+        number += 1
+    return f'{prefix}{number:0{width}d}'
 
 
 @app.exception_handler(StorageError)
@@ -271,6 +312,74 @@ def reject_admin_unmatched_registration_requests(
     except (PermissionError, ValueError) as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'rejected': rejected}
+
+
+@app.post('/api/v1/admin/unmatched-registration-requests/approve')
+def approve_admin_unmatched_registration_requests(
+        body: UnmatchedRegistrationReview, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    requests_by_id = {row['id']: row for row in repository.load_unmatched_registration_requests(
+        credentials.credentials)}
+    selected = [requests_by_id.get(str(request_id)) for request_id in body.request_ids]
+    if any(row is None for row in selected):
+        raise HTTPException(409, 'One or more requests are no longer in the review queue.')
+    updates = {str(update.request_id): update.model_dump(exclude={'request_id'}) for update in body.updates}
+    if len(updates) != len(body.updates) or not set(updates).issubset({str(value) for value in body.request_ids}):
+        raise HTTPException(422, 'Registration updates must match selected request IDs.')
+    selected = [{**row, **updates.get(row['id'], {})} for row in selected]
+    required = ('term', 'category', 'risk', 'criteria', 'evidence_type')
+    if any(not str(row.get(field) or '').strip() for row in selected for field in required):
+        raise HTTPException(422, 'Every selected request needs a term, category, risk, criteria, and evidence type.')
+
+    current = repository.load_keywords()
+    rows = current.to_dict('records')
+    existing = {(unicodedata.normalize('NFKC', str(row[DB_COLS[1]])).casefold().strip(),
+                 str(row[DB_COLS[2]]).strip()) for row in rows}
+    additions = []
+    for item in selected:
+        term = str(item['term']).strip()
+        category = str(item['category']).strip()
+        key = (unicodedata.normalize('NFKC', term).casefold(), category)
+        if key in existing:
+            continue
+        existing.add(key)
+        additions.append({
+            DB_COLS[0]: _next_keyword_code(category, rows + additions),
+            DB_COLS[1]: term, DB_COLS[2]: category, DB_COLS[3]: str(item['risk']).strip(),
+            DB_COLS[4]: str(item.get('alternative') or '-').strip() or '-',
+            DB_COLS[5]: str(item['criteria']).strip(), DB_COLS[6]: str(item['evidence_type']).strip(),
+            COUNT_COL: '0', LAST_COL: '',
+        })
+    if additions:
+        import pandas as pd
+        frame = pd.concat([current, pd.DataFrame(additions, columns=DB_COLS)], ignore_index=True)
+        try:
+            repository.save_keywords(frame[DB_COLS].fillna('').astype(str), current.attrs.get('revision'))
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    source_keys = set()
+    for item in selected:
+        raw_key = str(item.get('term_norm') or '').strip()
+        if raw_key:
+            source_keys.add(raw_key)
+        else:
+            sources = str(item.get('source_terms') or '').strip().split(' | ')
+            for source in (sources if sources != [''] else [str(item.get('term') or '')]):
+                normalized = unicodedata.normalize('NFKC', source).casefold().strip()
+                if 1 <= len(normalized) <= 100:
+                    source_keys.add(normalized)
+    if source_keys:
+        repository.delete_unmatched_terms(sorted(source_keys), credentials.credentials)
+    cleared = repository.delete_unmatched_registration_requests(
+        [str(request_id) for request_id in body.request_ids], credentials.credentials)
+    return {'approved': len(selected), 'added': [row[DB_COLS[0]] for row in additions], 'cleared_requests': cleared}
 
 
 @app.get('/api/v1/keyword-requests')
