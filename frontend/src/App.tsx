@@ -3,7 +3,7 @@ import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
-  type RegulationResult, type TopKeyword } from './api'
+  type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -12,6 +12,9 @@ const modes: { value: AnalysisMode; label: string; description: string }[] = [
 ]
 const regulationStatusLabels: Record<string, string> = {
   supported: '근거가 확인됨', retrieved: '검색 자료 확인', conflict: '검토 필요', insufficient: '자료 부족',
+}
+const unmatchedStatusLabels: Record<string, string> = {
+  pending: '검토 대기', approved: '등록 완료', registration_requested: '등록 요청', ignored: '관리자 거절',
 }
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
@@ -78,7 +81,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -99,6 +102,14 @@ function App() {
   const [regulationResult, setRegulationResult] = useState<RegulationResult | null>(null)
   const [regulationBusy, setRegulationBusy] = useState(false)
   const [regulationError, setRegulationError] = useState('')
+  const [unmatchedSearchInput, setUnmatchedSearchInput] = useState('')
+  const [unmatchedSearch, setUnmatchedSearch] = useState('')
+  const [unmatchedSort, setUnmatchedSort] = useState<'occurrences' | 'registered'>('occurrences')
+  const [unmatchedOffset, setUnmatchedOffset] = useState(0)
+  const [unmatchedPage, setUnmatchedPage] = useState<{ total: number; rows: UnmatchedTerm[] } | null>(null)
+  const [unmatchedBusy, setUnmatchedBusy] = useState(false)
+  const [unmatchedExportBusy, setUnmatchedExportBusy] = useState(false)
+  const [unmatchedError, setUnmatchedError] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -180,6 +191,19 @@ function App() {
     }).finally(() => { if (active) setReportBusy(false) })
     return () => { active = false }
   }, [page, user?.id, reportDays, reportLimit])
+
+  useEffect(() => {
+    if (page !== 'unmatched' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    let active = true
+    setUnmatchedBusy(true)
+    setUnmatchedError('')
+    void loadUnmatchedTerms(unmatchedOffset, unmatchedSearch, unmatchedSort).then(data => {
+      if (active) setUnmatchedPage(data)
+    }).catch(error => {
+      if (active) setUnmatchedError(error instanceof Error ? error.message : '미매칭 후보를 불러오지 못했습니다.')
+    }).finally(() => { if (active) setUnmatchedBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -314,6 +338,34 @@ function App() {
     }
   }
 
+  async function exportUnmatchedCsv() {
+    setUnmatchedExportBusy(true)
+    setUnmatchedError('')
+    try {
+      const rows = await exportUnmatchedTerms()
+      const headers = ['미매칭 표현', '누적 출현 횟수', '분석 횟수', '상태', '최초 수집 시각', '최근 수집 시각']
+      const labels: Record<string, string> = { pending: '검토 대기', approved: '등록 완료',
+        registration_requested: '신규 키워드 등록 요청', ignored: '관리자 거절' }
+      const formatDate = (value: string) => value ? new Date(value).toLocaleString('ko-KR') : ''
+      const csvRows = [headers, ...rows.map(row => [row.display_term, String(row.total_occurrences),
+        String(row.analysis_count), labels[row.review_status] ?? row.review_status,
+        formatDate(row.first_seen), formatDate(row.last_seen)])]
+      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'unmatched_candidates.csv'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      setUnmatchedError(error instanceof Error ? error.message : '미매칭 후보 CSV를 만들지 못했습니다.')
+    } finally {
+      setUnmatchedExportBusy(false)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -332,6 +384,9 @@ function App() {
       <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>
         <span className="nav-icon">§</span> 법령 근거 검색
       </button>
+      <button className={`nav-item nav-button ${page === 'unmatched' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>
+        <span className="nav-icon">?</span> 미매칭 후보
+      </button>
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -340,7 +395,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : '법령 근거 검색'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : '미매칭 후보'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -368,7 +423,54 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
-        </section> : page === 'regulation' ? <>
+        </section> : page === 'unmatched' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">REVIEW / 05</div><h1>미매칭 후보</h1>
+              <p>분석 중 등록 키워드와 일치하지 않은 표현의 누적 현황입니다.</p></div>
+            <div className="preview-pill"><span /> 공유 후보</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel catalog-panel">
+              <form className="unmatched-controls" onSubmit={event => {
+                event.preventDefault()
+                setUnmatchedOffset(0)
+                setUnmatchedSearch(unmatchedSearchInput.trim())
+              }}>
+                <label className="sr-only" htmlFor="unmatched-search">미매칭 표현 검색</label>
+                <input id="unmatched-search" value={unmatchedSearchInput} maxLength={200}
+                  placeholder="미매칭 표현 검색" onChange={event => setUnmatchedSearchInput(event.target.value)} />
+                <label className="sr-only" htmlFor="unmatched-sort">정렬 기준</label>
+                <select id="unmatched-sort" value={unmatchedSort}
+                  onChange={event => { setUnmatchedOffset(0); setUnmatchedSort(event.target.value as 'occurrences' | 'registered') }}>
+                  <option value="occurrences">출현 횟수순</option><option value="registered">최근 등록순</option>
+                </select>
+                <button className="primary-button" type="submit" disabled={unmatchedBusy}>검색</button>
+              </form>
+              <div className="catalog-meta">
+                <span>{unmatchedBusy ? '목록을 불러오는 중…' : `${unmatchedPage?.total ?? 0}개 표현`}</span>
+                <button className="secondary-button" disabled={unmatchedBusy || unmatchedExportBusy || !unmatchedPage?.total}
+                  onClick={exportUnmatchedCsv}>{unmatchedExportBusy ? 'CSV 준비 중…' : '전체 누적 CSV'}</button>
+              </div>
+              <p className="unmatched-note">후보 목록에는 표현과 집계 횟수만 표시됩니다. 계정이나 원문 문서는 포함하지 않습니다.</p>
+              {unmatchedError && <p className="error-message" role="alert">{unmatchedError}</p>}
+              {!unmatchedError && (unmatchedPage?.rows.length ? <div className="table-scroll"><table>
+                <thead><tr><th>미매칭 표현</th><th>누적 횟수</th><th>분석 횟수</th><th>상태</th><th>최초 수집</th><th>최근 수집</th></tr></thead>
+                <tbody>{unmatchedPage.rows.map(row => <tr key={row.term_norm}>
+                  <td><strong>{row.display_term}</strong></td><td>{row.total_occurrences.toLocaleString()}</td>
+                  <td>{row.analysis_count.toLocaleString()}</td><td>{unmatchedStatusLabels[row.review_status] ?? row.review_status}</td>
+                  <td>{new Date(row.first_seen).toLocaleDateString('ko-KR')}</td><td>{new Date(row.last_seen).toLocaleDateString('ko-KR')}</td>
+                </tr>)}</tbody>
+              </table></div> : !unmatchedBusy && <p className="empty-result">표시할 미매칭 후보가 없습니다.</p>)}
+              {unmatchedPage && <div className="catalog-pagination">
+                <button className="secondary-button" disabled={unmatchedBusy || unmatchedOffset === 0}
+                  onClick={() => setUnmatchedOffset(Math.max(0, unmatchedOffset - 100))}>이전</button>
+                <span>{unmatchedPage.total ? `${unmatchedOffset + 1}–${Math.min(unmatchedOffset + 100, unmatchedPage.total)} / ${unmatchedPage.total}` : '0개'}</span>
+                <button className="secondary-button" disabled={unmatchedBusy || unmatchedOffset + 100 >= unmatchedPage.total}
+                  onClick={() => setUnmatchedOffset(unmatchedOffset + 100)}>다음</button>
+              </div>}
+            </div>
+          </section>
+        </> : page === 'regulation' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">EVIDENCE / 04</div><h1>법령 근거 검색</h1>
               <p>공식 법령·행정규칙·판례 검색 결과와 현재 키워드 DB 후보를 함께 확인합니다.</p></div>

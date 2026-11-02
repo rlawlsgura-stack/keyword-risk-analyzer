@@ -149,6 +149,19 @@ def create_current_analysis(body: CurrentAnalysisRequest, actor=Depends(current_
     return analyze_current(repository, body.model_dump(mode='json'), actor)
 
 
+@app.get('/api/v1/unmatched-terms')
+def unmatched_terms(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=100),
+                    search: str = Query('', max_length=200),
+                    sort: Literal['occurrences', 'registered'] = 'occurrences',
+                    actor=Depends(current_actor), repository=Depends(get_repository)):
+    return repository.load_unmatched_terms(offset, limit, search, sort)
+
+
+@app.get('/api/v1/unmatched-terms/export')
+def export_unmatched_terms(actor=Depends(current_actor), repository=Depends(get_repository)):
+    return {'items': repository.export_unmatched_terms()}
+
+
 @app.get('/api/v1/analyses/{analysis_id}')
 def get_analysis(analysis_id: UUID, actor=Depends(current_actor),
                  repository=Depends(get_repository)):

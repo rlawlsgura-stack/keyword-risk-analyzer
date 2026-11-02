@@ -1,3 +1,8 @@
+## React preview - Add unmatched candidate review
+
+- Add authenticated search, sort, pagination, status display, and full CSV export for unmatched terms.
+- Keep review edits, deletion, and registration requests in the existing Streamlit screen.
+
 ## React preview - Add evidence-based regulation search
 
 - Add both search directions and show official sources plus matching keyword database entries.

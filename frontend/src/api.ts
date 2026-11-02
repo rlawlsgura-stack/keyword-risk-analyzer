@@ -74,6 +74,15 @@ export type RegulationResult = {
     대체키워드: string; '리스크 등급별 세부 심의기준': string }[]
   llm_used: boolean
 }
+export type UnmatchedTerm = {
+  term_norm: string
+  display_term: string
+  total_occurrences: number
+  analysis_count: number
+  first_seen: string
+  last_seen: string
+  review_status: 'open' | 'registration_requested' | 'ignored' | string
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -136,4 +145,15 @@ export async function askRegulation(question: RegulationQuestion): Promise<Regul
     method: 'POST',
     body: JSON.stringify(question),
   })
+}
+
+export async function loadUnmatchedTerms(offset: number, search: string,
+  sort: 'occurrences' | 'registered'): Promise<{ total: number; rows: UnmatchedTerm[] }> {
+  const params = new URLSearchParams({ offset: String(offset), limit: '100', search, sort })
+  return requestApi(`/api/v1/unmatched-terms?${params}`)
+}
+
+export async function exportUnmatchedTerms(): Promise<UnmatchedTerm[]> {
+  const result = await requestApi('/api/v1/unmatched-terms/export')
+  return result.items
 }
