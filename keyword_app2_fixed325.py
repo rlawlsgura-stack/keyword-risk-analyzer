@@ -1078,7 +1078,8 @@ def build_kwd_tooltip_attr(kwd_no: str) -> str:
                     continue
             except Exception:
                 pass
-            sval = str(val).strip()
+            sval = (format_datetime_display(val) if str(col).strip() in DATETIME_DISPLAY_COLUMNS
+                    else str(val).strip())
             if not sval:
                 continue
             parts.append(f"{col}: {sval}")
@@ -1198,7 +1199,7 @@ def build_kwd_tooltip_data(kwd_no: str):
             tooltip_label = "리스크 등급별 세부 심의기준" if str(col) == RAW_F_COL else UI_COLUMN_LABELS.get(str(col), str(col))
             out.append((tooltip_label, sval))
         last_date_row = next((i for i, item in enumerate(out) if item[0] == LAST_SEARCH_LABEL), None)
-        registration_row = ("키워드 등록일자", registration_date)
+        registration_row = ("키워드 등록일자", format_datetime_display(registration_date))
         out.insert(last_date_row + 1 if last_date_row is not None else len(out), registration_row)
         if not out:
             out = [("kwd_no", kwd_no)]
@@ -2076,11 +2077,38 @@ def is_admin() -> bool:
 KEYWORD_REQUEST_STATUSES = ('대기', '검토중', '처리완료')
 
 
-def format_keyword_request_time(value):
-    parsed = pd.to_datetime(value, utc=True, errors='coerce')
+DATETIME_DISPLAY_COLUMNS = {
+    '키워드 등록일자', '키워드등록일자', '마지막 출력일자', '마지막 검색일자',
+    '접수 시각', '요청 접수일', '최초 수집 시각', '최근 수집 시각', '등록일시',
+    'request_date', 'created_at', 'first_seen', 'last_seen', 'ts',
+}
+
+
+def format_datetime_display(value):
+    if value is None:
+        return ''
+    try:
+        if pd.isna(value):
+            return ''
+    except (TypeError, ValueError):
+        pass
+    parsed = pd.to_datetime(value, errors='coerce')
     if pd.isna(parsed):
-        return str(value or '')
-    return parsed.tz_convert('Asia/Seoul').strftime('%Y-%m-%d %H:%M')
+        return str(value).strip()
+    if parsed.tzinfo is not None:
+        parsed = parsed.tz_convert('Asia/Seoul').tz_localize(None)
+    return parsed.strftime('%Y-%m-%d %H:%M:%S')
+
+
+def format_datetime_columns(frame):
+    display = frame.copy()
+    for column in DATETIME_DISPLAY_COLUMNS.intersection(display.columns):
+        display[column] = display[column].map(format_datetime_display)
+    return display
+
+
+def format_keyword_request_time(value):
+    return format_datetime_display(value)
 
 
 @st.dialog('문의 상세 및 처리', width='large')
@@ -3796,7 +3824,7 @@ with tabs['analysis']:
                         append_hits_log(unique_kwds)
 
                     out_buf = io.BytesIO()
-                    out.to_csv(out_buf, index=False, encoding="utf-8-sig")
+                    format_datetime_columns(out).to_csv(out_buf, index=False, encoding="utf-8-sig")
 
                     st.session_state['analysis_df_full'] = out
                     st.session_state['analysis_df_display_unique'] = display_unique
@@ -3840,7 +3868,7 @@ with tabs['analysis']:
         except Exception:
             merged_full = _persist_df_unique
 
-        _selectable_dataframe(_rename_fcol(merged_full), width="stretch", alt="Keywords found in the latest analysis")
+        _selectable_dataframe(_rename_fcol(format_datetime_columns(merged_full)), width="stretch", alt="Keywords found in the latest analysis")
 
         if _persist_csv is not None:
             st.download_button("분석 결과 CSV 다운로드", data=_persist_csv, file_name="analysis_results.csv", mime="text/csv", key="dl_analysis")
@@ -4468,12 +4496,12 @@ with tabs['analysis']:
         _kwd_col_config = None
 
     try:
-        _selectable_dataframe(_rename_fcol(_list_view_df), width="stretch", column_config=_kwd_col_config or {}, alt="Keyword database list")
+        _selectable_dataframe(_rename_fcol(format_datetime_columns(_list_view_df)), width="stretch", column_config=_kwd_col_config or {}, alt="Keyword database list")
     except TypeError:
-        _selectable_dataframe(_rename_fcol(_list_view_df), width="stretch", alt="Keyword database list")
+        _selectable_dataframe(_rename_fcol(format_datetime_columns(_list_view_df)), width="stretch", alt="Keyword database list")
 
     buf_bytes = io.BytesIO()
-    st.session_state.kw_df[get_db_cols()].rename(columns={LAST_HIT_COL: LAST_SEARCH_LABEL}).to_csv(
+    format_datetime_columns(st.session_state.kw_df[get_db_cols()]).rename(columns={LAST_HIT_COL: LAST_SEARCH_LABEL}).to_csv(
         buf_bytes, index=False, encoding="utf-8-sig"
     )
     st.download_button("키워드 CSV 다운로드", data=buf_bytes.getvalue(), file_name="keywords_current.csv", mime="text/csv", key="dl_kw_current")
@@ -4601,7 +4629,7 @@ def render_unmatched_candidate_pool():
                     })
                 for column in ('최초 수집 시각', '최근 수집 시각'):
                     if column in export_frame:
-                        export_frame[column] = pd.to_datetime(export_frame[column], utc=True).dt.tz_convert('Asia/Seoul')
+                        export_frame[column] = export_frame[column].map(format_datetime_display)
                 st.session_state['unmatched_export_csv'] = export_frame.to_csv(index=False).encode('utf-8-sig')
             except Exception:
                 st.error('전체 CSV를 만들지 못했습니다. 다시 시도하세요.')
@@ -4625,8 +4653,7 @@ def render_unmatched_candidate_pool():
     if review_rows:
         candidate_df = pd.DataFrame([
             {'미매칭 표현': row['surface'],
-             '\uB4F1\uB85D\uC77C\uC2DC': pd.to_datetime(row.get('first_seen'), utc=True).tz_convert('Asia/Seoul').tz_localize(None)
-                          if row.get('first_seen') else pd.NaT,
+             '\uB4F1\uB85D\uC77C\uC2DC': format_datetime_display(row.get('first_seen')),
              '처리상태': row.get('status', ''),
              '검출횟수(중복포함)': int(row.get('occurrences', 0) or 0),
              **({'분석 횟수': int(row.get('analysis_count', 0) or 0)} if cloud_enabled() else {})}
@@ -4679,8 +4706,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             column_config={
                 selection_column: st.column_config.CheckboxColumn(
                     "\u200b", width=32, pinned=True, alignment='center'),
-                '\uB4F1\uB85D\uC77C\uC2DC': st.column_config.DatetimeColumn(
-                    '\uB4F1\uB85D\uC77C\uC2DC', format='YYYY-MM-DD HH:mm'),
+                '\uB4F1\uB85D\uC77C\uC2DC': st.column_config.TextColumn('\uB4F1\uB85D\uC77C\uC2DC'),
             },
             disabled=[column for column in candidate_df.columns if column != selection_column],
             key=editor_key,
@@ -4762,7 +4788,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 {'term': row['term'], 'source_terms': row.get('source_terms', ''),
                  'occurrences': row.get('occurrences', 0), 'request_id': row['id'],
                  'term_norm': row.get('term_norm', ''),
-                 'request_date': row.get('created_at', ''),
+                 'request_date': format_datetime_display(row.get('created_at', '')),
                  '상품카테고리': row.get('category', ''),
                  '리스크 등급': row.get('risk', ''),
                  '리스크 등급별 세부 심의기준': row.get('criteria', ''),
@@ -5309,7 +5335,7 @@ if is_admin():
         editor_key = f"editor_{mode_id}_{editor_version}"
         base_key = f"{editor_key}_base"
         checkbox_key = f"keyword_editor_select_all_{mode_id}"
-        display_base_df = _rename_fcol(base_df)
+        display_base_df = _rename_fcol(format_datetime_columns(base_df))
         st.session_state[base_key] = display_base_df.to_dict('records')
         st.session_state.setdefault(
             checkbox_key,
@@ -5337,8 +5363,8 @@ if is_admin():
             cat_opts = _ko_sorted(set((st.session_state.opt_categories or []) + (db_cat_opts or []))) or _ko_sorted(st.session_state.opt_categories)
             db_evidence_opts = unique_values_from_db("증빙자료유형")
             evidence_opts = _ko_sorted(set((st.session_state.opt_evidences or []) + db_evidence_opts))
-            edited_df = st.data_editor(_rename_fcol(
-                base_df),
+            edited_df = st.data_editor(_rename_fcol(format_datetime_columns(
+                base_df)),
                 alt="Editable keyword database",
                 on_change="ignore",
                 column_config={
@@ -5356,7 +5382,7 @@ if is_admin():
             )
         else:
             edited_df = st.data_editor(
-                _rename_fcol(base_df),
+                _rename_fcol(format_datetime_columns(base_df)),
                 alt="Editable keyword database",
                 width="stretch",
                 num_rows="fixed" if cloud_enabled() else "dynamic",
@@ -5389,7 +5415,8 @@ if is_admin():
                 st.success("수정 내용 저장 완료")
 
         st.caption(f"현재 저장된 항목: {len(st.session_state.kw_df)}")
-        _selectable_dataframe(_rename_fcol(sort_for_display(st.session_state.kw_df[get_db_cols()])), width="stretch", alt="Current keyword database")
+        _selectable_dataframe(_rename_fcol(format_datetime_columns(
+            sort_for_display(st.session_state.kw_df[get_db_cols()]))), width="stretch", alt="Current keyword database")
 
 
 with tabs['report']:
@@ -5451,11 +5478,12 @@ with tabs['report']:
 
             # ---- Right align numeric columns ----
             align_cols = [c for c in ["기간내_조회수", "키워드 조회 수(누적카운트)"] if c in report.columns]
-            styled = report.style.set_properties(**{"text-align": "right"}, subset=align_cols)
+            display_report = format_datetime_columns(report)
+            styled = display_report.style.set_properties(**{"text-align": "right"}, subset=align_cols)
 
             _selectable_dataframe(_rename_fcol(styled), width="stretch", hide_index=True, alt="Top keywords for the selected period")
             rep_buf = io.BytesIO()
-            report.rename(columns={LAST_HIT_COL: LAST_SEARCH_LABEL}).to_csv(
+            display_report.rename(columns={LAST_HIT_COL: LAST_SEARCH_LABEL}).to_csv(
                 rep_buf, index=False, encoding="utf-8-sig"
             )
             st.download_button("리포트 CSV 다운로드 (선택 기간 Top N)", data=rep_buf.getvalue(), file_name="period_topN_report.csv", mime="text/csv", key="dl_week_report")
