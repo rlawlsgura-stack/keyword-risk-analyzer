@@ -241,6 +241,8 @@ function App() {
   const [regulationDirection, setRegulationDirection] = useState<RegulationQuestion['direction']>('keyword_to_law')
   const [regulationQuery, setRegulationQuery] = useState('')
   const [regulationContext, setRegulationContext] = useState('')
+  const [regulationOCRSelection, setRegulationOCRSelection] = useState<string[]>([])
+  const [regulationIncludeAnalysisText, setRegulationIncludeAnalysisText] = useState(false)
   const [regulationCategory, setRegulationCategory] = useState('')
   const [regulationResult, setRegulationResult] = useState<RegulationResult | null>(null)
   const [regulationBusy, setRegulationBusy] = useState(false)
@@ -807,9 +809,14 @@ function App() {
     setRegulationError('')
     setRegulationResult(null)
     try {
+      const contextParts = [regulationContext.trim()]
+      const selectedOCRText = [...new Set(ocrCandidates.map(candidate => candidate.term.trim()).filter(Boolean))]
+        .filter(term => regulationOCRSelection.includes(term))
+      if (selectedOCRText.length) contextParts.push(selectedOCRText.join('\n'))
+      if (regulationIncludeAnalysisText && text.trim()) contextParts.push(text.trim())
       const question: RegulationQuestion = { direction: regulationDirection,
         query: regulationQuery.trim(),
-        context_text: regulationDirection === 'keyword_to_law' ? regulationContext : '',
+        context_text: contextParts.filter(Boolean).join('\n\n').slice(0, 20000),
         category: regulationCategory }
       setRegulationResult(await askRegulation(question))
     } catch (error) {
@@ -821,6 +828,7 @@ function App() {
 
   const role = user?.app_metadata?.role
   const allowed = role === 'member' || role === 'admin'
+  const regulationOCRCandidates = [...new Set(ocrCandidates.map(candidate => candidate.term.trim()).filter(Boolean))].sort()
   const selectedUnmatchedCount = Object.keys(selectedUnmatched).length
   const adminKeywordMatches = adminKeywordRows.filter(row => {
     const query = adminKeywordSearch.trim().toLocaleLowerCase()
@@ -2009,6 +2017,21 @@ function App() {
                 <input required minLength={2} maxLength={500} value={regulationQuery} disabled={regulationBusy}
                   placeholder={regulationDirection === 'keyword_to_law' ? '예: 미백 기능성 화장품 광고 표현' : '예: 화장품법 제13조'}
                   onChange={event => setRegulationQuery(event.target.value)} />
+              </label>
+              {regulationOCRCandidates.length > 0 && <fieldset className="regulation-context-picker" disabled={regulationBusy}>
+                <legend>현재 OCR 후보 연결 (선택)</legend>
+                <div>{regulationOCRCandidates.map(term => <label key={term}>
+                  <input type="checkbox" checked={regulationOCRSelection.includes(term)}
+                    onChange={event => setRegulationOCRSelection(previous => event.target.checked
+                      ? [...previous, term] : previous.filter(item => item !== term))} />
+                  <span>{term}</span>
+                </label>)}</div>
+              </fieldset>}
+              <label className="regulation-analysis-context">
+                <span><input type="checkbox" checked={regulationIncludeAnalysisText}
+                  disabled={regulationBusy || !text.trim()}
+                  onChange={event => setRegulationIncludeAnalysisText(event.target.checked)} />
+                  현재 텍스트 분석 문구를 검색에 포함</span>
               </label>
               {regulationDirection === 'keyword_to_law' && <label>검토할 광고 문구 (선택)
                 <textarea maxLength={20000} value={regulationContext} disabled={regulationBusy}

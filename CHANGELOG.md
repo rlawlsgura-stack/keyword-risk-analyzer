@@ -1,3 +1,8 @@
+## React preview - Add OCR and analysis context to regulation search
+
+- Allow regulation searches to include selected OCR candidates and the current analysis text.
+- Send selected context with either search direction, matching the Streamlit workflow.
+
 ## React preview - Split the production vendor bundle
 
 - Move node modules into a separate vendor chunk so the React application bundle stays below Vite's 500 KB warning threshold.
