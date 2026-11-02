@@ -4669,7 +4669,7 @@ def render_unmatched_candidate_pool():
         )
         selection_version = int(st.session_state.get(selection_version_key, 0))
         select_all_key = f"unmatched_candidate_select_all_{selection_version_key}"
-        editor_key = f"unmatched_candidate_selector_{selection_version_key}_{selection_version}"
+        editor_key = f"unmatched_candidate_selector_datetime_v1_{selection_version_key}_{selection_version}"
         st.session_state.setdefault(select_all_key, False)
         candidate_df.insert(0, selection_column, bool(st.session_state[select_all_key]))
         table_key = f"unmatched_candidate_table_{selection_version_key}_{selection_version}"
@@ -4819,6 +4819,13 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             if column not in recommendation_df:
                 recommendation_df[column] = default
         recommendation_ids = [row['recommendation_id'] for row in recommendations]
+        ids_hash = hashlib.sha256(','.join(recommendation_ids).encode()).hexdigest()[:12]
+        editor_version = int(st.session_state.get('unmatched_recommendation_version', 0))
+        legacy_editor_key = f"unmatched_recommendation_editor_{editor_version}_{ids_hash}"
+        migration_key = f'{legacy_editor_key}_datetime_migrated'
+        if legacy_editor_key in st.session_state and not st.session_state.get(migration_key):
+            _persist_unmatched_editor_state(legacy_editor_key, recommendations, select_column)
+            st.session_state[migration_key] = True
         saved_edits = st.session_state.get('unmatched_recommendation_edits', {})
         for index, recommendation_id in enumerate(recommendation_ids):
             for column, value in saved_edits.get(recommendation_id, {}).items():
@@ -4838,9 +4845,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         recommendation_df = recommendation_df[
             [select_column] + [column for column in recommendation_df.columns if column != select_column]
         ]
-        ids_hash = hashlib.sha256(','.join(recommendation_ids).encode()).hexdigest()[:12]
-        editor_key = (f"unmatched_recommendation_editor_{st.session_state.get('unmatched_recommendation_version', 0)}_"
-                      + ids_hash)
+        editor_key = f"unmatched_recommendation_editor_datetime_v1_{editor_version}_{ids_hash}"
         select_all_key = f"unmatched_recommendation_select_all_{ids_hash}"
         st.session_state.setdefault(
             select_all_key,
@@ -5305,7 +5310,7 @@ if is_admin():
         selection_column = "선택"
         previous_mode_id = st.session_state.get("keyword_editor_active_mode", "dropdown")
         previous_editor_key = (
-            f"editor_{previous_mode_id}_{int(st.session_state.get('keyword_editor_version', 0))}"
+            f"editor_{previous_mode_id}_datetime_v1_{int(st.session_state.get('keyword_editor_version', 0))}"
         )
         previous_draft_key = f"keyword_editor_draft_{previous_mode_id}"
         previous_checkbox_key = f"keyword_editor_select_all_{previous_mode_id}"
@@ -5319,6 +5324,15 @@ if is_admin():
         st.session_state["keyword_editor_active_mode"] = mode_id
         draft_key = f"keyword_editor_draft_{mode_id}"
         version_key = "keyword_editor_version"
+        editor_version = int(st.session_state.get(version_key, 0))
+        checkbox_key = f"keyword_editor_select_all_{mode_id}"
+        legacy_editor_key = f"editor_{mode_id}_{editor_version}"
+        migration_key = f'{legacy_editor_key}_datetime_migrated'
+        if legacy_editor_key in st.session_state and not st.session_state.get(migration_key):
+            _persist_keyword_editor(
+                legacy_editor_key, f"{legacy_editor_key}_base", draft_key,
+                checkbox_key, selection_column)
+            st.session_state[migration_key] = True
         if st.session_state.get('keyword_editor_reset_select_all'):
             st.session_state['keyword_editor_reset_select_all'] = False
             st.session_state["keyword_editor_select_all_dropdown"] = False
@@ -5331,10 +5345,8 @@ if is_admin():
             base_df = sort_for_display(st.session_state.kw_df[get_db_cols()].copy())
             base_df.insert(0, selection_column, False)
             st.session_state[draft_key] = _rename_fcol(base_df).to_dict('records')
-        editor_version = int(st.session_state.get(version_key, 0))
-        editor_key = f"editor_{mode_id}_{editor_version}"
+        editor_key = f"editor_{mode_id}_datetime_v1_{editor_version}"
         base_key = f"{editor_key}_base"
-        checkbox_key = f"keyword_editor_select_all_{mode_id}"
         display_base_df = _rename_fcol(format_datetime_columns(base_df))
         st.session_state[base_key] = display_base_df.to_dict('records')
         st.session_state.setdefault(
