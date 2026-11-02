@@ -51,10 +51,10 @@ export type KeywordRow = {
   상품카테고리: string
   '리스크 등급': string
   대체키워드: string
-  리스크 등급별 세부 심의기준: string
+  '리스크 등급별 세부 심의기준': string
   증빙자료유형: string
   '키워드 조회 수(누적카운트)': string
-  마지막 출력일자: string
+  '마지막 출력일자': string
 }
 
 export type TopKeyword = { kwd_no: string; hit_count: number; term: string | null }
@@ -82,6 +82,17 @@ export type UnmatchedTerm = {
   first_seen: string
   last_seen: string
   review_status: 'open' | 'registration_requested' | 'ignored' | string
+}
+export type KeywordRequestRecord = {
+  id: string
+  requester_email?: string
+  kwd_no: string
+  keyword_name: string
+  request_type: string
+  request_detail: string
+  status: string
+  admin_reply: string
+  created_at: string
 }
 
 async function requestApi(path: string, init?: RequestInit) {
@@ -167,5 +178,31 @@ export async function submitUnmatchedRegistrationRequests(candidates: {
     method: 'POST',
     body: JSON.stringify({ candidates: candidates.map(candidate => ({ ...candidate,
       category: '', risk: '', criteria: '', evidence_type: '', alternative: '-' })) }),
+  })
+}
+
+export async function findKeywords(query: string): Promise<KeywordRow[]> {
+  const filters = { category: '', risk: '', evidenceType: '' }
+  const result = await loadKeywords(0, query, filters, 100)
+  return result.items
+}
+
+export async function loadKeywordRequests(): Promise<KeywordRequestRecord[]> {
+  const result = await requestApi('/api/v1/keyword-requests')
+  return result.items
+}
+
+export async function submitKeywordRequest(input: {
+  kwd_no: string
+  request_type: 'risk_grade_adjustment' | 'review_criteria_change'
+  request_detail: string
+}): Promise<KeywordRequestRecord> {
+  return requestApi('/api/v1/keyword-requests', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function updateKeywordRequest(requestId: string, status: string,
+  adminReply: string): Promise<{ id: string; status: string; admin_reply: string }> {
+  return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}`, {
+    method: 'PUT', body: JSON.stringify({ status, admin_reply: adminReply }),
   })
 }

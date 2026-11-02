@@ -27,7 +27,7 @@ app.add_middleware(
     allow_origins=[origin.strip() for origin in os.getenv(
         'API_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173'
     ).split(',') if origin.strip()],
-    allow_methods=['GET', 'POST'],
+    allow_methods=['GET', 'POST', 'PUT'],
     allow_headers=['Authorization', 'Content-Type'],
 )
 bearer = HTTPBearer(auto_error=False)
@@ -120,6 +120,19 @@ class UnmatchedRegistrationRequest(BaseModel):
     candidates: list[UnmatchedRegistrationCandidate] = Field(min_length=1, max_length=1000)
 
 
+class KeywordRequestSubmission(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kwd_no: str = Field(min_length=1, max_length=100)
+    request_type: Literal['risk_grade_adjustment', 'review_criteria_change']
+    request_detail: str = Field(min_length=1, max_length=4000)
+
+
+class KeywordRequestUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    status: Literal['대기', '검토중', '처리완료']
+    admin_reply: str = Field(default='', max_length=4000)
+
+
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -194,6 +207,62 @@ def submit_unmatched_registration_requests(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'items': items or []}
+
+
+@app.get('/api/v1/keyword-requests')
+def keyword_requests(actor=Depends(current_actor),
+                     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                     repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to view keyword requests')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    return {'items': repository.load_keyword_requests(credentials.credentials, limit=100)}
+
+
+@app.post('/api/v1/keyword-requests')
+def submit_keyword_request(body: KeywordRequestSubmission, actor=Depends(current_actor),
+                           credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                           repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to submit keyword requests')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    detail = body.request_detail.strip()
+    if not detail:
+        raise HTTPException(422, 'Request details must contain text')
+    user = repository.user(credentials.credentials)
+    keywords = repository.load_keywords()
+    matches = keywords[keywords['kwd_no'].astype(str).str.strip().str.casefold()
+                       == body.kwd_no.strip().casefold()]
+    if matches.empty:
+        raise HTTPException(404, 'Keyword number not found')
+    row = matches.iloc[0]
+    payload = {
+        'requester_id': user['id'], 'requester_email': user.get('email', ''),
+        'kwd_no': str(row['kwd_no']).strip(), 'keyword_name': str(row['키워드명']).strip(),
+        'request_type': body.request_type, 'request_detail': detail,
+    }
+    try:
+        return repository.submit_keyword_request(payload, credentials.credentials)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.put('/api/v1/keyword-requests/{request_id}')
+def update_keyword_request(request_id: UUID, body: KeywordRequestUpdate,
+                          actor=Depends(current_actor),
+                          credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                          repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to update keyword requests')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    return repository.update_keyword_request(str(request_id), body.status,
+                                            body.admin_reply.strip(), credentials.credentials)
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

@@ -1,3 +1,8 @@
+## React preview - Add keyword inquiries
+
+- Let members search for a registered keyword, submit risk or criteria change requests, and view request history.
+- Add role-checked administrator status and response controls in React.
+
 ## React preview - Submit unmatched registration requests
 
 - Let members submit selected pending unmatched terms to the server-side admin review queue.

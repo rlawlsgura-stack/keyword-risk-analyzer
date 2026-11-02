@@ -4,7 +4,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
-  submitUnmatchedRegistrationRequests } from './api'
+  submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
+  submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -16,6 +17,13 @@ const regulationStatusLabels: Record<string, string> = {
 }
 const unmatchedStatusLabels: Record<string, string> = {
   pending: '검토 대기', approved: '등록 완료', registration_requested: '등록 요청', ignored: '관리자 거절',
+}
+const keywordRequestTypeLabels: Record<string, string> = {
+  risk_grade_adjustment: '리스크 등급 조정', review_criteria_change: '심의 기준 변경',
+  new_keyword_registration: '신규 키워드 등록',
+}
+const keywordRequestStatusLabels: Record<string, string> = {
+  대기: '대기', 검토중: '검토 중', 처리완료: '처리 완료',
 }
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
@@ -82,7 +90,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -115,6 +123,19 @@ function App() {
   const [selectedUnmatched, setSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
   const [unmatchedSubmitBusy, setUnmatchedSubmitBusy] = useState(false)
   const [unmatchedActionMessage, setUnmatchedActionMessage] = useState('')
+  const [requestSearch, setRequestSearch] = useState('')
+  const [requestMatches, setRequestMatches] = useState<KeywordRow[]>([])
+  const [selectedRequestKeyword, setSelectedRequestKeyword] = useState<KeywordRow | null>(null)
+  const [requestType, setRequestType] = useState<'risk_grade_adjustment' | 'review_criteria_change'>('risk_grade_adjustment')
+  const [requestDetail, setRequestDetail] = useState('')
+  const [requestRecords, setRequestRecords] = useState<KeywordRequestRecord[]>([])
+  const [requestDrafts, setRequestDrafts] = useState<Record<string, { status: string; reply: string }>>({})
+  const [requestSavingId, setRequestSavingId] = useState<string | null>(null)
+  const [requestRefresh, setRequestRefresh] = useState(0)
+  const [requestBusy, setRequestBusy] = useState(false)
+  const [requestSearchBusy, setRequestSearchBusy] = useState(false)
+  const [requestError, setRequestError] = useState('')
+  const [requestMessage, setRequestMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -209,6 +230,23 @@ function App() {
     }).finally(() => { if (active) setUnmatchedBusy(false) })
     return () => { active = false }
   }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort, unmatchedRefresh])
+
+  useEffect(() => {
+    if (page !== 'requests' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    let active = true
+    setRequestBusy(true)
+    setRequestError('')
+    void loadKeywordRequests().then(items => {
+      if (active) {
+        setRequestRecords(items)
+        setRequestDrafts(Object.fromEntries(items.map(item => [item.id,
+          { status: item.status, reply: item.admin_reply ?? '' }])))
+      }
+    }).catch(error => {
+      if (active) setRequestError(error instanceof Error ? error.message : '문의 내역을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setRequestBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, requestRefresh])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -325,8 +363,8 @@ function App() {
       const headers = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드',
         '리스크 등급별 세부 심의기준', '증빙자료유형', '키워드 조회 수(누적카운트)', '마지막 출력일자']
       const csvRows = [headers, ...rows.map(row => [row.kwd_no, row.키워드명, row.상품카테고리,
-        row['리스크 등급'], row.대체키워드, row.리스크 등급별 세부 심의기준,
-        row.증빙자료유형, row['키워드 조회 수(누적카운트)'], row.마지막 출력일자]
+        row['리스크 등급'], row.대체키워드, row['리스크 등급별 세부 심의기준'],
+        row.증빙자료유형, row['키워드 조회 수(누적카운트)'], row['마지막 출력일자']]
         .map(value => String(value ?? '')))]
       const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
@@ -413,6 +451,59 @@ function App() {
     }
   }
 
+  async function searchRequestKeywords(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!requestSearch.trim()) return
+    setRequestSearchBusy(true)
+    setRequestError('')
+    setSelectedRequestKeyword(null)
+    try {
+      setRequestMatches(await findKeywords(requestSearch.trim()))
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : '키워드를 찾지 못했습니다.')
+    } finally {
+      setRequestSearchBusy(false)
+    }
+  }
+
+  async function submitKeywordInquiry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedRequestKeyword || !requestDetail.trim()) return
+    setRequestBusy(true)
+    setRequestError('')
+    setRequestMessage('')
+    try {
+      await submitKeywordRequest({ kwd_no: selectedRequestKeyword.kwd_no, request_type: requestType,
+        request_detail: requestDetail.trim() })
+      setRequestDetail('')
+      setSelectedRequestKeyword(null)
+      setRequestMatches([])
+      setRequestMessage('문의가 접수되었습니다.')
+      setRequestRefresh(value => value + 1)
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : '문의를 접수하지 못했습니다.')
+    } finally {
+      setRequestBusy(false)
+    }
+  }
+
+  async function saveKeywordRequest(requestId: string) {
+    const draft = requestDrafts[requestId]
+    if (!draft) return
+    setRequestSavingId(requestId)
+    setRequestError('')
+    setRequestMessage('')
+    try {
+      await updateKeywordRequest(requestId, draft.status, draft.reply)
+      setRequestMessage('문의 처리 상태와 답변을 저장했습니다.')
+      setRequestRefresh(value => value + 1)
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : '문의 처리 내용을 저장하지 못했습니다.')
+    } finally {
+      setRequestSavingId(null)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -434,6 +525,9 @@ function App() {
       <button className={`nav-item nav-button ${page === 'unmatched' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>
         <span className="nav-icon">?</span> 미매칭 후보
       </button>
+      <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>
+        <span className="nav-icon">✉</span> 키워드 문의
+      </button>
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -442,7 +536,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : '미매칭 후보'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : '키워드 문의'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -470,7 +564,86 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
-        </section> : page === 'unmatched' ? <>
+        </section> : page === 'requests' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">REQUESTS / 06</div><h1>키워드 문의</h1>
+              <p>기존 키워드의 리스크 등급이나 심의 기준 변경을 요청합니다.</p></div>
+            <div className="preview-pill"><span /> 계정 문의</div>
+          </div>
+          <section className="catalog-section request-section">
+            <div className="panel request-panel">
+              <h2>문의할 키워드 찾기</h2>
+              <form className="catalog-search" onSubmit={searchRequestKeywords}>
+                <label className="sr-only" htmlFor="request-keyword-search">키워드 번호 또는 이름</label>
+                <input id="request-keyword-search" maxLength={200} value={requestSearch}
+                  placeholder="키워드 번호 또는 이름 검색" onChange={event => setRequestSearch(event.target.value)} />
+                <button className="primary-button" disabled={requestSearchBusy || !requestSearch.trim()} type="submit">
+                  {requestSearchBusy ? '검색 중…' : '검색'}
+                </button>
+              </form>
+              {requestMatches.length > 0 && <div className="request-match-list" aria-label="검색된 키워드">
+                {requestMatches.map(row => <button key={row.kwd_no}
+                  className={`request-match ${selectedRequestKeyword?.kwd_no === row.kwd_no ? 'selected' : ''}`}
+                  onClick={() => setSelectedRequestKeyword(row)}>
+                  <strong>{row.kwd_no} · {row.키워드명}</strong><span>{row.상품카테고리} · {row['리스크 등급']}</span>
+                </button>)}
+              </div>}
+              {selectedRequestKeyword && <form className="request-compose" onSubmit={submitKeywordInquiry}>
+                <p>선택: <strong>{selectedRequestKeyword.kwd_no} · {selectedRequestKeyword.키워드명}</strong></p>
+                <label>문의 유형
+                  <select value={requestType} disabled={requestBusy}
+                    onChange={event => setRequestType(event.target.value as typeof requestType)}>
+                    <option value="risk_grade_adjustment">리스크 등급 조정 요청</option>
+                    <option value="review_criteria_change">심의 기준 변경 요청</option>
+                  </select>
+                </label>
+                <label>요청 내용
+                  <textarea required minLength={1} maxLength={4000} value={requestDetail} disabled={requestBusy}
+                    placeholder="변경이 필요한 이유와 제안 내용을 입력해 주세요."
+                    onChange={event => setRequestDetail(event.target.value)} />
+                </label>
+                <button className="primary-button" disabled={requestBusy || !requestDetail.trim()} type="submit">
+                  {requestBusy ? '접수 중…' : '문의 접수'}
+                </button>
+              </form>}
+              {requestMessage && <p className="success-message" role="status">{requestMessage}</p>}
+              {requestError && <p className="error-message" role="alert">{requestError}</p>}
+            </div>
+            <div className="panel request-history">
+              <div className="request-history-heading"><h2>문의 내역</h2><span>{requestBusy ? '불러오는 중…' : `${requestRecords.length}건`}</span></div>
+              {requestRecords.length ? <div className="request-record-list">{requestRecords.map(item => <details className="request-record" key={item.id}>
+                <summary><strong>{item.keyword_name} · {item.kwd_no}</strong>
+                  <span>{keywordRequestTypeLabels[item.request_type] ?? item.request_type} · {keywordRequestStatusLabels[item.status] ?? item.status}</span>
+                </summary>
+                {role === 'admin' && item.requester_email && <small>요청자: {item.requester_email}</small>}
+                <p>{item.request_detail}</p>
+                {item.admin_reply && <p className="admin-reply"><strong>관리자 답변</strong><br />{item.admin_reply}</p>}
+                <small>{new Date(item.created_at).toLocaleString('ko-KR')}</small>
+                {role === 'admin' && <div className="request-admin-controls">
+                  <label>처리 상태
+                    <select value={requestDrafts[item.id]?.status ?? item.status} disabled={requestSavingId === item.id}
+                      onChange={event => setRequestDrafts(previous => ({ ...previous, [item.id]: {
+                        status: event.target.value, reply: previous[item.id]?.reply ?? item.admin_reply ?? '',
+                      } }))}>
+                      <option value="대기">대기</option><option value="검토중">검토 중</option><option value="처리완료">처리 완료</option>
+                    </select>
+                  </label>
+                  <label>관리자 답변
+                    <textarea maxLength={4000} value={requestDrafts[item.id]?.reply ?? item.admin_reply ?? ''}
+                      disabled={requestSavingId === item.id}
+                      onChange={event => setRequestDrafts(previous => ({ ...previous, [item.id]: {
+                        status: previous[item.id]?.status ?? item.status, reply: event.target.value,
+                      } }))} />
+                  </label>
+                  <button className="secondary-button" disabled={requestSavingId === item.id}
+                    onClick={() => saveKeywordRequest(item.id)}>
+                    {requestSavingId === item.id ? '저장 중…' : '답변 저장'}
+                  </button>
+                </div>}
+              </details>)}</div> : !requestBusy && <p className="empty-result">아직 문의 내역이 없습니다.</p>}
+            </div>
+          </section>
+        </> : page === 'unmatched' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">REVIEW / 05</div><h1>미매칭 후보</h1>
               <p>분석 중 등록 키워드와 일치하지 않은 표현의 누적 현황입니다.</p></div>
@@ -670,7 +843,7 @@ function App() {
                 <tbody>{keywordPage?.items.map(row => <tr key={row.kwd_no}>
                   <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td><td>{row.상품카테고리 || '—'}</td>
                   <td>{row['리스크 등급'] || '—'}</td><td>{row.대체키워드 || '—'}</td>
-                  <td>{row.리스크 등급별 세부 심의기준 || '—'}</td><td>{row.증빙자료유형 || '—'}</td>
+                  <td>{row['리스크 등급별 세부 심의기준'] || '—'}</td><td>{row.증빙자료유형 || '—'}</td>
                 </tr>)}</tbody>
               </table></div>}
               {keywordPage && <div className="catalog-pagination">
