@@ -11,7 +11,7 @@ from uuid import UUID
 import requests
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
@@ -1002,6 +1002,28 @@ async def upload_admin_keywords(
         raise HTTPException(409, str(exc)) from exc
     return {'added_count': len(upload_rows), 'dedup_removed': removed_duplicates,
             'revision': new_revision, 'total': len(result_rows)}
+
+
+@app.get('/api/v1/admin/keywords/template.xlsx')
+def download_admin_keyword_template(actor=Depends(current_actor),
+                                    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                    repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    import io
+    import pandas as pd
+    buffer = io.BytesIO()
+    try:
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            pd.DataFrame(columns=DB_COLS).to_excel(writer, sheet_name='keywords_template', index=False)
+    except ImportError as exc:
+        raise HTTPException(503, 'XLSX template export is unavailable in this API environment.') from exc
+    return Response(content=buffer.getvalue(),
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename="keyword_template.xlsx"'})
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

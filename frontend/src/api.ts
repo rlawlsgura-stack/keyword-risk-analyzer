@@ -307,6 +307,20 @@ export async function uploadAdminKeywords(file: File, revision: number, mode: 'm
   return requestApi('/api/v1/admin/keywords/upload', { method: 'POST', body: form })
 }
 
+export async function downloadAdminKeywordTemplateXlsx(): Promise<Blob> {
+  if (!supabase) throw new Error('연결 설정이 필요합니다.')
+  const { data, error } = await supabase.auth.getSession()
+  if (error || !data.session) throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해 주세요.')
+  const response = await fetch(`${apiBaseUrl.replace(/\/$/, '')}/api/v1/admin/keywords/template.xlsx`, {
+    headers: { Authorization: `Bearer ${data.session.access_token}` },
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.detail ?? 'XLSX 템플릿을 내려받지 못했습니다.')
+  }
+  return response.blob()
+}
+
 export async function loadAdminUnmatchedRequests(): Promise<UnmatchedRegistrationRequest[]> {
   const result = await requestApi('/api/v1/admin/unmatched-registration-requests')
   return result.items

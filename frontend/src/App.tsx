@@ -8,6 +8,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords, deleteAdminKeywords,
   uploadAdminKeywords,
+  downloadAdminKeywordTemplateXlsx,
   loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
   type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
   saveAdminNormalizationSettings, type NormalizationSettings,
@@ -249,6 +250,7 @@ function App() {
   const [adminUploadFile, setAdminUploadFile] = useState<File | null>(null)
   const [adminUploadMode, setAdminUploadMode] = useState<'merge' | 'overwrite'>('merge')
   const [adminUploadInputVersion, setAdminUploadInputVersion] = useState(0)
+  const [adminTemplateBusy, setAdminTemplateBusy] = useState(false)
   const [newKeywordOpen, setNewKeywordOpen] = useState(false)
   const [newKeywordForm, setNewKeywordForm] = useState<NewKeywordForm>({
     term: '', category: '', risk: '', alternative: '-', criteria: '', evidenceType: '',
@@ -812,6 +814,26 @@ function App() {
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  async function downloadKeywordTemplateXlsx() {
+    setAdminTemplateBusy(true)
+    setAdminKeywordError('')
+    try {
+      const blob = await downloadAdminKeywordTemplateXlsx()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'keyword_template.xlsx'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      setAdminKeywordError(error instanceof Error ? error.message : 'XLSX 템플릿을 내려받지 못했습니다.')
+    } finally {
+      setAdminTemplateBusy(false)
+    }
   }
 
   function downloadReportCsv() {
@@ -1583,6 +1605,9 @@ function App() {
                   </label>
                   <div className="admin-keyword-toolbar">
                     <button className="secondary-button" onClick={downloadKeywordTemplate}>CSV 템플릿 다운로드</button>
+                    <button className="secondary-button" disabled={adminTemplateBusy} onClick={downloadKeywordTemplateXlsx}>
+                      {adminTemplateBusy ? '준비 중…' : 'XLSX 템플릿 다운로드'}
+                    </button>
                     <button className="primary-button" disabled={!adminUploadFile || adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
                       onClick={importAdminKeywords}>{adminKeywordSaving ? '업로드 중…' : '파일 업로드'}</button>
                   </div>

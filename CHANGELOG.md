@@ -6,7 +6,7 @@
 ## React preview - Add keyword spreadsheet upload
 
 - Support admin CSV/XLSX import in merge or explicit overwrite mode.
-- Add a CSV template download and revision checks for the import.
+- Add CSV/XLSX template downloads and revision checks for the import.
 
 ## React preview - Add dropdown option management
 
