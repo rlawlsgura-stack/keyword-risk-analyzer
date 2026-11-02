@@ -1,3 +1,7 @@
+## React preview - Split the production vendor bundle
+
+- Move node modules into a separate vendor chunk so the React application bundle stays below Vite's 500 KB warning threshold.
+
 ## React preview - Refresh the sidebar description
 
 - Update the footer copy to match the current React analysis, OCR, and keyword administration features.
