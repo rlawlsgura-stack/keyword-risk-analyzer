@@ -182,6 +182,22 @@ class AdminNormalizationSettings(BaseModel):
     extra_suffixes: list[str] = Field(max_length=1000)
 
 
+class UnmatchedSurface(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    surface: str = Field(min_length=1, max_length=150)
+    occurrences: int = Field(default=0, ge=0, le=1_000_000_000)
+
+
+class UnmatchedNormalizationRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    candidates: list[UnmatchedSurface] = Field(min_length=1, max_length=1000)
+
+
+class UnmatchedRecommendationDraft(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    payload: dict
+
+
 def _next_keyword_code(category: str, rows: list[dict]) -> str:
     category_rows = [row for row in rows if str(row.get(DB_COLS[2], '')).strip() == category]
     pattern = re.compile(r'^([A-Z]+)(\d{3,})$')
@@ -284,6 +300,44 @@ def submit_unmatched_registration_requests(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'items': items or []}
+
+
+@app.post('/api/v1/unmatched-terms/normalize')
+def normalize_unmatched_terms(body: UnmatchedNormalizationRequest, actor=Depends(current_actor)):
+    from auxiliary_analysis import AuxiliaryUnavailable, normalize_unmatched_term_candidates
+    try:
+        candidates = normalize_unmatched_term_candidates(
+            [row.model_dump() for row in body.candidates])
+    except AuxiliaryUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {'items': candidates}
+
+
+@app.get('/api/v1/unmatched-terms/recommendation-draft')
+def unmatched_recommendation_draft(
+        actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to access drafts')
+    try:
+        return {'payload': repository.load_unmatched_recommendation_draft(credentials.credentials)}
+    except PermissionError as exc:
+        raise HTTPException(401, str(exc)) from exc
+
+
+@app.put('/api/v1/unmatched-terms/recommendation-draft')
+def save_unmatched_recommendation_draft(
+        body: UnmatchedRecommendationDraft, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to access drafts')
+    try:
+        repository.save_unmatched_recommendation_draft(body.payload, credentials.credentials)
+    except (PermissionError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'saved': True}
 
 
 @app.get('/api/v1/admin/unmatched-registration-requests')

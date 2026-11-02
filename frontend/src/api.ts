@@ -100,6 +100,10 @@ export type UnmatchedRegistrationRequest = {
   category: string; risk: string; criteria: string; evidence_type: string; alternative: string; created_at: string
 }
 export type NormalizationSettings = { ignored_symbols: string[]; extra_suffixes: string[]; default_suffix_count: number }
+export type NormalizationRecommendation = {
+  recommendation_id: string; term: string; source_terms: string; occurrences: number
+  category: string; risk: string; criteria: string; evidence_type: string; alternative: string
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -186,11 +190,30 @@ export async function submitUnmatchedRegistrationRequests(candidates: {
   term: string
   source_terms: string
   occurrences: number
+  category?: string
+  risk?: string
+  criteria?: string
+  evidence_type?: string
+  alternative?: string
 }[]): Promise<{ items: unknown[] }> {
   return requestApi('/api/v1/unmatched-terms/registration-requests', {
-    method: 'POST',
-    body: JSON.stringify({ candidates: candidates.map(candidate => ({ ...candidate,
-      category: '', risk: '', criteria: '', evidence_type: '', alternative: '-' })) }),
+    method: 'POST', body: JSON.stringify({ candidates }),
+  })
+}
+
+export async function normalizeUnmatchedTerms(candidates: { surface: string; occurrences: number }[]): Promise<{
+  items: { term: string; source_terms: string; occurrences: number }[]
+}> {
+  return requestApi('/api/v1/unmatched-terms/normalize', { method: 'POST', body: JSON.stringify({ candidates }) })
+}
+
+export async function loadUnmatchedRecommendationDraft(): Promise<{ payload: Record<string, unknown> | null }> {
+  return requestApi('/api/v1/unmatched-terms/recommendation-draft')
+}
+
+export async function saveUnmatchedRecommendationDraft(payload: Record<string, unknown>): Promise<void> {
+  await requestApi('/api/v1/unmatched-terms/recommendation-draft', {
+    method: 'PUT', body: JSON.stringify({ payload }),
   })
 }
 

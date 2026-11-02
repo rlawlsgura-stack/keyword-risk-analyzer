@@ -1,3 +1,8 @@
+## React preview - Add unmatched normalization review
+
+- Generate keyword-form recommendations from selected unmatched candidates using the existing Kiwi normalizer.
+- Edit and save per-user recommendation drafts, then submit selected recommendations for admin review.
+
 ## React preview - Add shared normalization settings
 
 - Let admins edit the shared ignored-symbol list and additional Korean suffix whitelist.

@@ -128,6 +128,12 @@ textarea::placeholder { color: #a6b0c0; }
 .normalization-setting-field input, .normalization-setting-field textarea { width: 100%; border: 1px solid #dce2eb; border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 12px; }
 .normalization-setting-field textarea { min-height: 220px; resize: vertical; }
 .normalization-setting-field small { color: #8a95a7; font-size: 10px; font-weight: 400; line-height: 1.6; }
+.normalization-recommendations { display: grid; gap: 13px; margin-top: 25px; padding-top: 20px; border-top: 1px solid #e8ecf2; }
+.normalization-recommendations .request-history-heading { align-items: flex-start; }
+.normalization-recommendations .request-history-heading p { margin: 5px 0 0; color: #8490a2; font-size: 11px; }
+.normalization-recommendations .admin-keyword-table input { width: 140px; }
+.normalization-recommendations .admin-keyword-table select { min-width: 120px; max-width: 170px; border: 1px solid #dce2eb; border-radius: 6px; padding: 8px; font-size: 11px; }
+.normalization-recommendations .admin-keyword-table textarea { min-width: 220px; }
 .admin-keyword-table td { vertical-align: top; }
 .admin-keyword-table input { width: 145px; border: 1px solid #dce2eb; border-radius: 6px; padding: 8px; font-size: 11px; }
 .admin-keyword-table textarea { width: 250px; min-height: 85px; padding: 8px; font-size: 11px; line-height: 1.5; }

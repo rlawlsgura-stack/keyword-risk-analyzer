@@ -9,7 +9,9 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords,
   loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
   type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
-  saveAdminNormalizationSettings, type NormalizationSettings } from './api'
+  saveAdminNormalizationSettings, type NormalizationSettings,
+  type NormalizationRecommendation, normalizeUnmatchedTerms,
+  loadUnmatchedRecommendationDraft, saveUnmatchedRecommendationDraft } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -57,6 +59,19 @@ function nextKeywordCode(category: string, rows: KeywordRow[]) {
   const next = source.reduce((max, match) => Math.max(max, Number(match[2])), 0) + 1
   const width = Math.max(3, ...matchingCategoryCodes.map(match => match[2].length))
   return `${prefix}${String(next).padStart(width, '0')}`
+}
+
+function recommendationDraftPayload(rows: NormalizationRecommendation[], selectedIds: string[]) {
+  return {
+    version: 1,
+    recommendations: rows.map(row => ({
+      ...row, '상품카테고리': row.category, '리스크 등급': row.risk,
+      '리스크 등급별 세부 심의기준': row.criteria, '증빙자료유형': row.evidence_type,
+      '대체키워드': row.alternative,
+    })),
+    edits: {}, selected_ids: selectedIds, hidden_ids: [],
+    manual_rows: [], manual_placements: {}, recommendation_version: Date.now(),
+  }
 }
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
@@ -216,6 +231,13 @@ function App() {
   const [normalizationError, setNormalizationError] = useState('')
   const [normalizationMessage, setNormalizationMessage] = useState('')
   const [normalizationRefresh, setNormalizationRefresh] = useState(0)
+  const [recommendations, setRecommendations] = useState<NormalizationRecommendation[]>([])
+  const [selectedRecommendationIds, setSelectedRecommendationIds] = useState<string[]>([])
+  const [recommendationBusy, setRecommendationBusy] = useState(false)
+  const [recommendationDraftBusy, setRecommendationDraftBusy] = useState(false)
+  const [recommendationDraftError, setRecommendationDraftError] = useState('')
+  const [recommendationDraftMessage, setRecommendationDraftMessage] = useState('')
+  const [recommendationDraftRefresh, setRecommendationDraftRefresh] = useState(0)
 
   useEffect(() => {
     if (!supabase) {
@@ -398,6 +420,39 @@ function App() {
     }).finally(() => { if (active) setNormalizationBusy(false) })
     return () => { active = false }
   }, [page, user?.id, user?.app_metadata?.role, normalizationRefresh])
+
+  useEffect(() => {
+    if (page !== 'unmatched' || !user?.id) return
+    let active = true
+    setRecommendationDraftBusy(true)
+    setRecommendationDraftError('')
+    void loadUnmatchedRecommendationDraft().then(({ payload }) => {
+      if (!active || !payload || !Array.isArray(payload.recommendations)) return
+      const edits = payload.edits && typeof payload.edits === 'object'
+        ? payload.edits as Record<string, Record<string, unknown>> : {}
+      const items = payload.recommendations as Record<string, unknown>[]
+      const loaded = items.map((row, index) => {
+        const id = String(row.recommendation_id || `draft:${index}:${String(row.term || '')}`)
+        const edit = edits[id] ?? {}
+        return {
+          recommendation_id: id, term: String(edit.term ?? row.term ?? ''),
+          source_terms: String(edit.source_terms ?? row.source_terms ?? ''),
+          occurrences: Number(row.occurrences || 0),
+          category: String(edit['상품카테고리'] ?? row['상품카테고리'] ?? row.category ?? ''),
+          risk: String(edit['리스크 등급'] ?? row['리스크 등급'] ?? row.risk ?? ''),
+          criteria: String(edit['리스크 등급별 세부 심의기준'] ?? row['리스크 등급별 세부 심의기준'] ?? row.criteria ?? ''),
+          evidence_type: String(edit['증빙자료유형'] ?? row['증빙자료유형'] ?? row.evidence_type ?? ''),
+          alternative: String(edit['대체키워드'] ?? row['대체키워드'] ?? row.alternative ?? '-'),
+        }
+      })
+      setRecommendations(loaded)
+      setSelectedRecommendationIds(Array.isArray(payload.selected_ids)
+        ? payload.selected_ids.map(String).filter((id: string) => loaded.some(row => row.recommendation_id === id)) : [])
+    }).catch(error => {
+      if (active) setRecommendationDraftError(error instanceof Error ? error.message : '정규화 작업본을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setRecommendationDraftBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, recommendationDraftRefresh])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -687,6 +742,84 @@ function App() {
       setUnmatchedRefresh(value => value + 1)
     } catch (error) {
       setUnmatchedError(error instanceof Error ? error.message : '등록 요청을 접수하지 못했습니다.')
+    } finally {
+      setUnmatchedSubmitBusy(false)
+    }
+  }
+
+  async function createUnmatchedRecommendations() {
+    const rows = Object.values(selectedUnmatched)
+    if (!rows.length || rows.length > 1000) return
+    setRecommendationBusy(true)
+    setRecommendationDraftError('')
+    setRecommendationDraftMessage('')
+    try {
+      const result = await normalizeUnmatchedTerms(rows.map(row => ({
+        surface: row.display_term, occurrences: row.total_occurrences,
+      })))
+      const items = result.items.map(item => ({
+        recommendation_id: `recommendation:${crypto.randomUUID()}`, ...item,
+        category: '', risk: '', criteria: '', evidence_type: '', alternative: '-',
+      }))
+      setRecommendations(items)
+      setSelectedRecommendationIds([])
+      setRecommendationDraftMessage(`${items.length}건의 정규화 추천을 만들었습니다. 분류 정보를 검토하고 작업본을 저장하세요.`)
+    } catch (error) {
+      setRecommendationDraftError(error instanceof Error ? error.message : '정규화 추천을 만들지 못했습니다.')
+    } finally {
+      setRecommendationBusy(false)
+    }
+  }
+
+  function updateRecommendation(id: string, field: keyof NormalizationRecommendation, value: string) {
+    setRecommendations(previous => previous.map(row => row.recommendation_id === id ? { ...row, [field]: value } : row))
+  }
+
+  async function saveRecommendationDraft() {
+    setRecommendationDraftBusy(true)
+    setRecommendationDraftError('')
+    setRecommendationDraftMessage('')
+    try {
+      await saveUnmatchedRecommendationDraft(recommendationDraftPayload(recommendations, selectedRecommendationIds))
+      setRecommendationDraftMessage('정규화 작업본을 계정에 저장했습니다.')
+    } catch (error) {
+      setRecommendationDraftError(error instanceof Error ? error.message : '정규화 작업본을 저장하지 못했습니다.')
+    } finally {
+      setRecommendationDraftBusy(false)
+    }
+  }
+
+  async function submitSelectedRecommendations() {
+    const rows = recommendations.filter(row => selectedRecommendationIds.includes(row.recommendation_id))
+    if (!rows.length) return
+    const incomplete = rows.some(row => !row.term.trim() || !row.category.trim() || !row.risk.trim() ||
+      !row.criteria.trim() || !row.evidence_type.trim())
+    if (incomplete) {
+      setRecommendationDraftError('선택한 추천의 키워드, 카테고리, 리스크, 심의 기준과 증빙 유형을 모두 입력하세요.')
+      return
+    }
+    setUnmatchedSubmitBusy(true)
+    setRecommendationDraftError('')
+    setRecommendationDraftMessage('')
+    try {
+      const result = await submitUnmatchedRegistrationRequests(rows.map(row => ({
+        term: row.term, source_terms: row.source_terms, occurrences: row.occurrences,
+        category: row.category, risk: row.risk, criteria: row.criteria,
+        evidence_type: row.evidence_type, alternative: row.alternative,
+      })))
+      const submitted = new Set(rows.map(row => row.recommendation_id))
+      const remaining = recommendations.filter(row => !submitted.has(row.recommendation_id))
+      const remainingIds = selectedRecommendationIds.filter(id => !submitted.has(id))
+      setRecommendations(remaining)
+      setSelectedRecommendationIds(remainingIds)
+      try {
+        await saveUnmatchedRecommendationDraft(recommendationDraftPayload(remaining, remainingIds))
+      } catch {
+        setRecommendationDraftError('요청은 접수했지만 작업본 정리에 실패했습니다. 작업본을 다시 저장해 주세요.')
+      }
+      setRecommendationDraftMessage(`${result.items.length}건을 관리자 검토 요청으로 접수했습니다.`)
+    } catch (error) {
+      setRecommendationDraftError(error instanceof Error ? error.message : '등록 요청을 접수하지 못했습니다.')
     } finally {
       setUnmatchedSubmitBusy(false)
     }
@@ -1271,10 +1404,58 @@ function App() {
               {selectedUnmatchedCount > 0 && <div className="unmatched-actions">
                 <span>{selectedUnmatchedCount}개 후보 선택됨 · 요청 후 관리자 검토 대기열로 이동합니다.
                   {selectedUnmatchedCount > 1000 && ' 한 번에 최대 1,000개까지 요청할 수 있습니다.'}</span>
+                <button className="secondary-button" disabled={recommendationBusy || unmatchedBusy || selectedUnmatchedCount > 1000}
+                  onClick={createUnmatchedRecommendations}>{recommendationBusy ? '추천 생성 중…' : '선택 후보 정규화 추천'}</button>
                 <button className="primary-button" disabled={unmatchedSubmitBusy || unmatchedBusy || selectedUnmatchedCount > 1000}
                   onClick={submitUnmatchedRequests}>{unmatchedSubmitBusy ? '요청 접수 중…' : '선택 후보 등록 요청'}</button>
               </div>}
               {unmatchedActionMessage && <p className="success-message" role="status">{unmatchedActionMessage}</p>}
+              {recommendationDraftError && <p className="error-message" role="alert">{recommendationDraftError}</p>}
+              {recommendationDraftMessage && <p className="success-message" role="status">{recommendationDraftMessage}</p>}
+              {recommendations.length > 0 && <section className="normalization-recommendations">
+                <div className="request-history-heading"><div><h2>정규화 추천 작업본</h2>
+                  <p>Kiwi 형태소 분석이 제안한 표현입니다. 등록 전에 분류 정보를 검토하세요.</p></div>
+                  <span>{recommendations.length}건 · {selectedRecommendationIds.length}건 선택</span></div>
+                <div className="admin-keyword-toolbar">
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy}
+                    onClick={() => setRecommendationDraftRefresh(value => value + 1)}>저장된 작업본 불러오기</button>
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy}
+                    onClick={saveRecommendationDraft}>{recommendationDraftBusy ? '저장 중…' : '작업본 저장'}</button>
+                  <button className="primary-button" disabled={!selectedRecommendationIds.length || unmatchedSubmitBusy || recommendationDraftBusy}
+                    onClick={submitSelectedRecommendations}>{unmatchedSubmitBusy ? '요청 접수 중…' : `선택 추천 요청 (${selectedRecommendationIds.length})`}</button>
+                </div>
+                <div className="table-scroll admin-keyword-table"><table>
+                  <thead><tr><th><input type="checkbox" aria-label="추천 전체 선택"
+                    checked={recommendations.length > 0 && selectedRecommendationIds.length === recommendations.length}
+                    onChange={event => setSelectedRecommendationIds(event.target.checked ? recommendations.map(row => row.recommendation_id) : [])} /></th>
+                    <th>추천 키워드</th><th>원문 표현</th><th>카테고리</th><th>리스크</th><th>심의 기준</th><th>증빙 유형</th><th>대체 키워드</th><th>횟수</th></tr></thead>
+                  <tbody>{recommendations.map(row => <tr key={row.recommendation_id}>
+                    <td><input type="checkbox" aria-label={`${row.term} 추천 선택`} checked={selectedRecommendationIds.includes(row.recommendation_id)}
+                      onChange={event => setSelectedRecommendationIds(previous => event.target.checked
+                        ? [...previous, row.recommendation_id] : previous.filter(id => id !== row.recommendation_id))} /></td>
+                    <td><input aria-label={`${row.term} 추천 키워드`} value={row.term}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'term', event.target.value)} /></td>
+                    <td>{row.source_terms}</td>
+                    <td><select aria-label={`${row.term} 추천 카테고리`} value={row.category}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'category', event.target.value)}>
+                      <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                    </select></td>
+                    <td><select aria-label={`${row.term} 추천 리스크`} value={row.risk}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'risk', event.target.value)}>
+                      <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                    </select></td>
+                    <td><textarea aria-label={`${row.term} 추천 심의 기준`} value={row.criteria}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'criteria', event.target.value)} /></td>
+                    <td><select aria-label={`${row.term} 추천 증빙 유형`} value={row.evidence_type}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'evidence_type', event.target.value)}>
+                      <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                    </select></td>
+                    <td><input aria-label={`${row.term} 추천 대체 키워드`} value={row.alternative}
+                      onChange={event => updateRecommendation(row.recommendation_id, 'alternative', event.target.value)} /></td>
+                    <td>{row.occurrences.toLocaleString()}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </section>}
               {unmatchedPage && <div className="catalog-pagination">
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedOffset === 0}
                   onClick={() => setUnmatchedOffset(Math.max(0, unmatchedOffset - 100))}>이전</button>
