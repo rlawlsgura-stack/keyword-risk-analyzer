@@ -285,6 +285,12 @@ export async function saveAdminKeywords(revision: number, rows: KeywordRow[]): P
   })
 }
 
+export async function deleteAdminKeywords(revision: number, kwdNos: string[]): Promise<{ deleted: number; revision: number }> {
+  return requestApi('/api/v1/admin/keywords/delete', {
+    method: 'POST', body: JSON.stringify({ revision, kwd_nos: kwdNos }),
+  })
+}
+
 export async function loadAdminUnmatchedRequests(): Promise<UnmatchedRegistrationRequest[]> {
   const result = await requestApi('/api/v1/admin/unmatched-registration-requests')
   return result.items

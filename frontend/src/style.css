@@ -113,6 +113,9 @@ textarea::placeholder { color: #a6b0c0; }
 .admin-users-panel select { min-width: 115px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }
 .admin-user-id { min-width: 225px; color: #8a95a7; font-family: ui-monospace, monospace; font-size: 10px; }
 .admin-keyword-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.danger-button { min-height: 37px; border: 1px solid #f2caca; border-radius: 7px; padding: 9px 13px; background: #fff7f7; color: #a33b3b; font-size: 11px; font-weight: 600; cursor: pointer; }
+.danger-button:hover:not(:disabled) { background: #ffeded; }
+.danger-button:disabled { opacity: .5; cursor: not-allowed; }
 .admin-keyword-toolbar input { flex: 1 1 260px; min-width: 0; border: 1px solid #dce2eb; border-radius: 8px; padding: 10px 12px; }
 .admin-keyword-toolbar span { color: #8a95a7; font-size: 10px; white-space: nowrap; }
 .new-keyword-form { display: grid; gap: 13px; margin: 17px 0; padding: 16px; border: 1px solid #e5e9ef; border-radius: 9px; background: #fafbfc; }

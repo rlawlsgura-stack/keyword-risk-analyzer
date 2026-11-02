@@ -163,6 +163,12 @@ class AdminKeywordSave(BaseModel):
     rows: list[AdminKeywordRow] = Field(min_length=1, max_length=10000)
 
 
+class AdminKeywordDelete(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    revision: int = Field(ge=0)
+    kwd_nos: list[str] = Field(min_length=1, max_length=1000)
+
+
 class UnmatchedRegistrationUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_id: UUID
@@ -708,6 +714,34 @@ def save_admin_keywords(body: AdminKeywordSave, actor=Depends(current_actor),
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'revision': revision}
+
+
+@app.post('/api/v1/admin/keywords/delete')
+def delete_admin_keywords(body: AdminKeywordDelete, actor=Depends(current_actor),
+                          credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                          repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    codes = [value.strip() for value in body.kwd_nos]
+    if any(not value for value in codes) or len(set(codes)) != len(codes):
+        raise HTTPException(422, 'Keyword numbers must be unique and non-empty.')
+    current = repository.load_keywords()
+    if current.attrs.get('revision') != body.revision:
+        raise HTTPException(409, 'Keyword data changed. Reload it before deleting.')
+    current_codes = set(current['kwd_no'].astype(str).str.strip())
+    if not set(codes).issubset(current_codes):
+        raise HTTPException(409, 'One or more selected keyword rows no longer exist.')
+    if len(codes) >= len(current_codes):
+        raise HTTPException(422, 'At least one keyword row must remain in the catalog.')
+    frame = current.loc[~current['kwd_no'].astype(str).str.strip().isin(codes), DB_COLS]
+    try:
+        revision = repository.save_keywords(frame.fillna('').astype(str), body.revision)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'deleted': len(codes), 'revision': revision}
 
 
 @app.get('/api/v1/admin/normalization-settings')

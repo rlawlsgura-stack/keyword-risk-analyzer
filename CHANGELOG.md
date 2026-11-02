@@ -1,3 +1,8 @@
+## React preview - Add keyword deletion
+
+- Let admins select keyword rows across catalog pages and delete them with a revision check.
+- Block deletes that would leave the keyword catalog empty or conflict with unsaved edits.
+
 ## React preview - Add OCR keyword import
 
 - Add Korean OCR image upload, text preview, candidate classification and keyword registration.

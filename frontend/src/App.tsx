@@ -6,7 +6,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
-  updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords,
+  updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords, deleteAdminKeywords,
   loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
   type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
   saveAdminNormalizationSettings, type NormalizationSettings,
@@ -208,6 +208,7 @@ function App() {
   const [adminKeywordRefresh, setAdminKeywordRefresh] = useState(0)
   const [adminKeywordError, setAdminKeywordError] = useState('')
   const [adminKeywordMessage, setAdminKeywordMessage] = useState('')
+  const [adminKeywordSelectedCodes, setAdminKeywordSelectedCodes] = useState<string[]>([])
   const [newKeywordOpen, setNewKeywordOpen] = useState(false)
   const [newKeywordForm, setNewKeywordForm] = useState<NewKeywordForm>({
     term: '', category: '', risk: '', alternative: '-', criteria: '', evidenceType: '',
@@ -988,6 +989,25 @@ function App() {
     }
   }
 
+  async function deleteSelectedAdminKeywords() {
+    if (!adminKeywordSelectedCodes.length || adminKeywordRevision === null || adminKeywordDirty) return
+    if (!window.confirm(`선택한 키워드 ${adminKeywordSelectedCodes.length}건을 원장에서 삭제할까요?`)) return
+    setAdminKeywordSaving(true)
+    setAdminKeywordError('')
+    setAdminKeywordMessage('')
+    try {
+      const result = await deleteAdminKeywords(adminKeywordRevision, adminKeywordSelectedCodes)
+      setAdminKeywordSelectedCodes([])
+      setAdminKeywordRevision(result.revision)
+      setAdminKeywordMessage(`키워드 ${result.deleted}건을 삭제했습니다.`)
+      setAdminKeywordRefresh(value => value + 1)
+    } catch (error) {
+      setAdminKeywordError(error instanceof Error ? error.message : '키워드를 삭제하지 못했습니다. 원장을 새로 불러오세요.')
+    } finally {
+      setAdminKeywordSaving(false)
+    }
+  }
+
   function addAdminKeyword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const term = newKeywordForm.term.trim()
@@ -1249,8 +1269,10 @@ function App() {
                   onClick={() => { setNewKeywordOpen(value => !value); setAdminKeywordError('') }}>새 키워드 추가</button>
                 <button className="primary-button" disabled={!adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
                   onClick={saveAdminKeywordChanges}>{adminKeywordSaving ? '저장 중…' : '변경사항 저장'}</button>
+                <button className="danger-button" disabled={!adminKeywordSelectedCodes.length || adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
+                  onClick={deleteSelectedAdminKeywords}>선택 삭제 ({adminKeywordSelectedCodes.length})</button>
               </div>
-              <p className="unmatched-note">번호·키워드명·조회 횟수·마지막 출력일은 읽기 전용입니다. 행 삭제는 기존 Streamlit 관리자 화면에서 할 수 있습니다.</p>
+              <p className="unmatched-note">번호·키워드명·조회 횟수·마지막 출력일은 읽기 전용입니다. 삭제는 저장되지 않은 편집이 없을 때만 가능하며, 최소 한 행은 원장에 남아야 합니다.</p>
               {newKeywordOpen && <form className="new-keyword-form" onSubmit={addAdminKeyword}>
                 <h2>새 키워드 행</h2>
                 <div className="new-keyword-fields">
@@ -1279,8 +1301,16 @@ function App() {
               {adminKeywordMessage && <p className="success-message" role="status">{adminKeywordMessage}</p>}
               {adminKeywordError && <p className="error-message" role="alert">{adminKeywordError}</p>}
               {!adminKeywordError && <div className="table-scroll admin-keyword-table"><table>
-                <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 유형</th></tr></thead>
+                <thead><tr><th><input type="checkbox" aria-label="현재 페이지 키워드 전체 선택"
+                  checked={adminKeywordPageRows.length > 0 && adminKeywordPageRows.every(row => adminKeywordSelectedCodes.includes(row.kwd_no))}
+                  onChange={event => setAdminKeywordSelectedCodes(previous => event.target.checked
+                    ? [...new Set([...previous, ...adminKeywordPageRows.map(row => row.kwd_no)])]
+                    : previous.filter(code => !adminKeywordPageRows.some(row => row.kwd_no === code)))} /></th>
+                  <th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 유형</th></tr></thead>
                 <tbody>{adminKeywordPageRows.map(row => <tr key={row.kwd_no}>
+                  <td><input type="checkbox" aria-label={`${row.kwd_no} 키워드 선택`} checked={adminKeywordSelectedCodes.includes(row.kwd_no)}
+                    onChange={event => setAdminKeywordSelectedCodes(previous => event.target.checked
+                      ? [...previous, row.kwd_no] : previous.filter(code => code !== row.kwd_no))} /></td>
                   <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td>
                   <td><input aria-label={`${row.kwd_no} 카테고리`} value={row.상품카테고리}
                     disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '상품카테고리', event.target.value)} /></td>
