@@ -8,6 +8,7 @@
 - [x] Signed-in text analysis matched the sample terms `필러` (B118) and `안티에이징` (B245), recorded the run, and showed each keyword's details.
 - [x] The live seven-day Top 10 database function included B245 at rank 2 with 47 hits and B118 at rank 3 with 43 hits when checked on 2026-11-02. Counts change as new analyses are recorded.
 - [x] Admin API role checks were reviewed in the API implementation.
+- [x] CSV exports prefix formula-leading values as text; the React preview deployment's JavaScript bundle contains this guard.
 - [x] Confirmed production data is available for the catalog, unmatched-candidate review, and inquiry screens: 1,431 keywords, 571 candidates (564 pending, 7 ignored), and 3 inquiry threads with 6 messages on 2026-11-03.
 
 ## Remaining before switching the production UI
