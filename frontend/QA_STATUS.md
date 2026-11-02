@@ -12,6 +12,7 @@
 
 ## Remaining before switching the production UI
 
+- [ ] Apply the updated Render Blueprint to the existing API service. The repository now includes OCR dependencies in that service's build, but Render still reports the previous build command (`pip install -r requirements.lock.txt`); OCR is not confirmed live until the Blueprint is synced and a deployment completes.
 - [ ] Visually verify that the React report page displays the recorded terms and that its CSV download opens correctly.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
