@@ -2987,6 +2987,7 @@ def _set_unmatched_select_all(
     st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
     st.session_state['unmatched_recommendation_version'] = int(
         st.session_state.get('unmatched_recommendation_version', 0)) + 1
+    _save_unmatched_recommendation_draft()
 
 
 def _persist_unmatched_editor_state(editor_key, recommendations, selection_column):
@@ -3007,6 +3008,81 @@ def _persist_unmatched_editor_state(editor_key, recommendations, selection_colum
                 selected_ids.discard(recommendation_id)
     selected_ids.intersection_update(recommendation_ids)
     st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
+
+
+def _unmatched_recommendation_draft_payload():
+    payload = {
+        'version': 1,
+        'recommendations': st.session_state.get('unmatched_candidate_recommendations', []),
+        'edits': st.session_state.get('unmatched_recommendation_edits', {}),
+        'selected_ids': st.session_state.get('unmatched_recommendation_selected_ids', []),
+        'hidden_ids': st.session_state.get('unmatched_recommendation_hidden_ids', []),
+        'manual_rows': st.session_state.get('unmatched_manual_recommendations', []),
+        'manual_placements': st.session_state.get('unmatched_manual_recommendation_placements', {}),
+        'recommendation_version': int(st.session_state.get('unmatched_recommendation_version', 0)),
+    }
+    return json.loads(json.dumps(
+        payload, ensure_ascii=False,
+        default=lambda value: value.item() if hasattr(value, 'item') else str(value),
+    ))
+
+
+def _save_unmatched_recommendation_draft():
+    if not cloud_enabled() or not st.session_state.get('auth_session'):
+        return
+    try:
+        SupabaseRepository().save_unmatched_recommendation_draft(
+            _unmatched_recommendation_draft_payload(),
+            st.session_state.auth_session['access_token'],
+        )
+    except (StorageError, PermissionError, ValueError) as exc:
+        logging.exception('Could not save unmatched recommendation draft')
+        st.session_state['unmatched_recommendation_draft_error'] = str(exc)
+    else:
+        st.session_state.pop('unmatched_recommendation_draft_error', None)
+
+
+def _restore_unmatched_recommendation_draft():
+    if not cloud_enabled() or not st.session_state.get('auth_session'):
+        return
+    user_id = (st.session_state.get('cloud_user') or {}).get('id', '')
+    if st.session_state.get('unmatched_recommendation_draft_user_id') == user_id:
+        return
+    old_version = int(st.session_state.get('unmatched_recommendation_version', 0))
+    for key in (
+            'unmatched_candidate_recommendations', 'unmatched_recommendation_edits',
+            'unmatched_recommendation_selected_ids', 'unmatched_recommendation_hidden_ids',
+            'unmatched_manual_recommendations', 'unmatched_manual_recommendation_placements'):
+        st.session_state.pop(key, None)
+    st.session_state.pop('unmatched_recommendation_draft_error', None)
+    st.session_state['unmatched_recommendation_version'] = old_version + 1
+    st.session_state['unmatched_recommendation_draft_user_id'] = user_id
+    try:
+        draft = SupabaseRepository().load_unmatched_recommendation_draft(
+            st.session_state.auth_session['access_token'])
+    except (StorageError, PermissionError, ValueError) as exc:
+        logging.exception('Could not restore unmatched recommendation draft')
+        st.session_state['unmatched_recommendation_draft_error'] = str(exc)
+        return
+    if not isinstance(draft, dict) or draft.get('version') != 1:
+        return
+    st.session_state['unmatched_candidate_recommendations'] = draft.get('recommendations', [])
+    st.session_state['unmatched_recommendation_edits'] = draft.get('edits', {})
+    st.session_state['unmatched_recommendation_selected_ids'] = draft.get('selected_ids', [])
+    st.session_state['unmatched_recommendation_hidden_ids'] = draft.get('hidden_ids', [])
+    st.session_state['unmatched_manual_recommendations'] = draft.get('manual_rows', [])
+    st.session_state['unmatched_manual_recommendation_placements'] = draft.get(
+        'manual_placements', {})
+    st.session_state['unmatched_recommendation_version'] = int(
+        draft.get('recommendation_version', 0))
+    st.session_state.pop('unmatched_recommendation_draft_error', None)
+
+
+def _save_unmatched_recommendation_editor(
+        editor_key, recommendations, selection_column):
+    _persist_unmatched_editor_state(editor_key, recommendations, selection_column)
+    _persist_added_unmatched_rows(None, recommendations, editor_key)
+    _save_unmatched_recommendation_draft()
 
 
 def _persist_keyword_editor(editor_key, base_key, draft_key, checkbox_key, selection_column):
@@ -4683,14 +4759,32 @@ def _order_manual_unmatched_recommendations(recommendations):
     return ordered
 
 
-def _persist_added_unmatched_rows(edited_rows, recommendations):
+def _persist_added_unmatched_rows(edited_rows, recommendations, editor_key=None):
     manual_rows = st.session_state.setdefault('unmatched_manual_recommendations', [])
     placements = st.session_state.setdefault('unmatched_manual_recommendation_placements', {})
     known_ids = {row['recommendation_id'] for row in recommendations}
     known_ids.update(row['recommendation_id'] for row in manual_rows)
     anchor_id = recommendations[-1]['recommendation_id'] if recommendations else None
-    for _, item in edited_rows.iloc[len(recommendations):].iterrows():
-        recommendation_id = str(item.get('recommendation_id') or '')
+    if edited_rows is None:
+        widget_state = st.session_state.get(editor_key) or {}
+        additions = []
+        for index, added in enumerate(widget_state.get('added_rows') or []):
+            item = {
+                'term': '', 'source_terms': '', 'occurrences': 0,
+                '상품카테고리': '', '리스크 등급': '',
+                '리스크 등급별 세부 심의기준': '', '증빙자료유형': '', '대체키워드': '-',
+                '선택': False,
+            }
+            item.update(added)
+            stable_id = hashlib.sha256(f'{editor_key}:{index}'.encode()).hexdigest()[:20]
+            additions.append((item, f'manual:add:{stable_id}'))
+    else:
+        additions = [
+            (item, str(item.get('recommendation_id') or ''))
+            for _, item in edited_rows.iloc[len(recommendations):].iterrows()
+        ]
+    selected_ids = set(st.session_state.get('unmatched_recommendation_selected_ids', []))
+    for item, recommendation_id in additions:
         if not recommendation_id or recommendation_id in known_ids:
             continue
         row = {}
@@ -4709,6 +4803,9 @@ def _persist_added_unmatched_rows(edited_rows, recommendations):
         placements[recommendation_id] = {'anchor_id': anchor_id, 'position': 'after'}
         known_ids.add(recommendation_id)
         anchor_id = recommendation_id
+        if item.get('선택'):
+            selected_ids.add(recommendation_id)
+    st.session_state['unmatched_recommendation_selected_ids'] = list(selected_ids)
 
 
 def _remove_manual_unmatched_recommendations(recommendation_ids):
@@ -4724,6 +4821,7 @@ def _remove_manual_unmatched_recommendations(recommendation_ids):
 
 def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
+    _restore_unmatched_recommendation_draft()
     if cloud_enabled():
         st.caption('모든 승인 계정의 공용 누적 통계입니다. 로그아웃 후에도 유지됩니다. OCR은 신뢰도 60% 이상만 수집합니다.')
         search = st.text_input('미매칭 표현 검색', key='unmatched_search', max_chars=100, on_change='ignore').strip()
@@ -4951,12 +5049,15 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                     st.session_state["unmatched_recommendation_version"] = int(
                         st.session_state.get("unmatched_recommendation_version", 0)
                     ) + 1
+                    _save_unmatched_recommendation_draft()
                     st.success(f"정규화 추천 {len(recommendations)}건을 만들었습니다. 검토 후 승인하세요.")
                 except Exception as pool_error:
                     st.error(f"미매칭 후보군 분석에 실패했습니다: {pool_error}")
     else:
         st.info("아직 후보가 없습니다. 텍스트 분석 또는 한국어 OCR을 실행하면 자동으로 수집됩니다.")
 
+    if st.session_state.get('unmatched_recommendation_draft_error'):
+        st.warning('정규화 작업본을 저장하거나 복원하지 못했습니다. 연결 상태를 확인하세요.')
     recommendations = list(st.session_state.get("unmatched_candidate_recommendations", []))
     if cloud_enabled() and not recommendations:
         version = int(st.session_state.get('unmatched_recommendation_version', 0))
@@ -5078,7 +5179,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             hide_index=True,
             width="stretch",
             num_rows="add",
-            on_change="ignore",
+            on_change=_save_unmatched_recommendation_editor,
+            args=(editor_key, recommendations, select_column),
             column_config={
                 "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=32, pinned=True, alignment="center"),
                 "term": st.column_config.TextColumn("추천 키워드", required=True),
@@ -5132,6 +5234,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 }
                 st.session_state['unmatched_recommendation_version'] = int(
                     st.session_state.get('unmatched_recommendation_version', 0)) + 1
+                _save_unmatched_recommendation_draft()
                 st.rerun()
         if st.button("선택 항목 삭제", key='exclude_unmatched_recommendations'):
             selected_for_exclusion = edited_recommendations[
@@ -5152,12 +5255,14 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         SupabaseRepository().delete_unmatched_registration_requests(
                             request_ids, st.session_state['auth_session']['access_token'])
                     _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                    _persist_added_unmatched_rows(edited_recommendations, recommendations)
                     if local_ids:
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(local_ids)
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
                     st.session_state['unmatched_recommendation_version'] = int(
                         st.session_state.get('unmatched_recommendation_version', 0)) + 1
+                    _save_unmatched_recommendation_draft()
                     st.rerun()
                 except (StorageError, ValueError, PermissionError) as exc:
                     st.error(f"선택한 항목을 삭제하지 못했습니다: {exc}")
@@ -5170,6 +5275,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 elif selected[required].fillna("").astype(str).apply(lambda col: col.str.strip().eq("")).any().any():
                     st.warning("선택한 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.")
                 else:
+                    _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                    _persist_added_unmatched_rows(edited_recommendations, recommendations)
                     existing_keys = {
                         (str(row.get("키워드명", "")).strip().casefold(), str(row.get("상품카테고리", "")).strip())
                         for _, row in st.session_state.kw_df.iterrows()
@@ -5213,6 +5320,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         st.session_state["unmatched_recommendation_version"] = int(
                             st.session_state.get("unmatched_recommendation_version", 0)
                         ) + 1
+                        _save_unmatched_recommendation_draft()
                         st.success(f"승인된 키워드 {len(additions)}건을 DB에 등록하고 요청 {cleared}건을 정리했습니다.")
                         st.rerun()
                     else:
@@ -5225,6 +5333,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         if cleared or unmatched_registration_source_keys(selected):
                             _remove_manual_unmatched_recommendations(
                                 selected['recommendation_id'].astype(str).tolist())
+                            _save_unmatched_recommendation_draft()
                             st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\uc758 \ubbf8\ub9e4\uce6d \ud1b5\uacc4\uc640 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
                             st.rerun()
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
@@ -5243,9 +5352,11 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         st.error(f'등록 요청을 거절하지 못했습니다: {exc}')
                     else:
                         _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                        _persist_added_unmatched_rows(edited_recommendations, recommendations)
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(f'request:{request_id}' for request_id in request_ids)
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                        _save_unmatched_recommendation_draft()
                         st.success(f'등록 요청 {rejected}건을 거절했습니다.')
                         st.rerun()
         else:
@@ -5272,11 +5383,13 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         st.caption(type(exc).__name__)
                     else:
                         _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                        _persist_added_unmatched_rows(edited_recommendations, recommendations)
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(selected['recommendation_id'].astype(str).tolist())
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
                         st.session_state['unmatched_recommendation_version'] = int(
                             st.session_state.get('unmatched_recommendation_version', 0)) + 1
+                        _save_unmatched_recommendation_draft()
                         st.success('\uad00\ub9ac\uc790 \uc815\uaddc\ud654 \ucd94\ucc9c \ubc0f \ubd84\ub958 \uc785\ub825\ub780\uc5d0 \uc694\uccad\uc774 \ub204\uc801\ub418\uc5c8\uc2b5\ub2c8\ub2e4.')
                         st.rerun()
             else:
@@ -5285,7 +5398,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         st.button(
             "등록 요청 목록 새로고침",
             key='refresh_unmatched_registration_requests',
-            on_click=_persist_unmatched_editor_state if editor_key else None,
+            on_click=_save_unmatched_recommendation_editor if editor_key else None,
             args=(editor_key, recommendations, select_column) if editor_key else (),
         )
 

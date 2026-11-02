@@ -1,6 +1,8 @@
 """Server-only Supabase REST access. No mutable user session is shared."""
+import json
 import os
 import unicodedata
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pandas as pd
@@ -329,6 +331,34 @@ class SupabaseRepository:
             'POST', '/rest/v1/kra_unmatched_registration_requests', rows,
             prefer='return=representation',
         )
+
+    def load_unmatched_recommendation_draft(self, access_token):
+        actor = self.user(access_token)
+        user_id = str(UUID(str(actor['id'])))
+        rows = self.request(
+            'GET', '/rest/v1/kra_unmatched_recommendation_drafts'
+            '?user_id=eq.' + user_id + '&select=payload',
+        ) or []
+        return rows[0]['payload'] if rows else None
+
+    def save_unmatched_recommendation_draft(self, payload, access_token):
+        actor = self.user(access_token)
+        if not isinstance(payload, dict):
+            raise ValueError('Invalid unmatched recommendation draft.')
+        try:
+            if len(json.dumps(payload, ensure_ascii=False).encode('utf-8')) > 2_000_000:
+                raise ValueError('Unmatched recommendation draft is too large.')
+        except (TypeError, OverflowError) as exc:
+            raise ValueError('Invalid unmatched recommendation draft.') from exc
+        user_id = str(UUID(str(actor['id'])))
+        rows = self.request(
+            'POST', '/rest/v1/kra_unmatched_recommendation_drafts?on_conflict=user_id',
+            {'user_id': user_id, 'payload': payload,
+             'updated_at': datetime.now(timezone.utc).isoformat()},
+            prefer='resolution=merge-duplicates,return=representation',
+        ) or []
+        if not rows:
+            raise StorageError('Unmatched recommendation draft was not saved.')
 
     def submit_new_keyword_registration_requests(self, terms, access_token):
         self.user(access_token)

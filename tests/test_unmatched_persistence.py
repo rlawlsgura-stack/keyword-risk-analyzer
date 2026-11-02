@@ -53,6 +53,28 @@ class UnmatchedPersistenceTests(unittest.TestCase):
               'evidence_type': 'document', 'alternative': '-'}],
             prefer='return=representation')
 
+    def test_recommendation_draft_load_and_save_are_scoped_to_authenticated_user(self):
+        user_id = str(uuid4())
+        payload = {'version': 1, 'recommendations': [{'term': 'candidate'}]}
+        with patch.object(self.repository, 'user', return_value={'id': user_id}) as user, \
+                patch.object(self.repository, 'request', return_value=[{'payload': payload}]) as request:
+            self.assertEqual(
+                self.repository.load_unmatched_recommendation_draft('member-token'), payload)
+            self.assertEqual(request.call_args.args[:2], (
+                'GET', '/rest/v1/kra_unmatched_recommendation_drafts'
+                f'?user_id=eq.{user_id}&select=payload'))
+            self.assertEqual(request.call_args.kwargs, {})
+            request.return_value = [{'user_id': user_id, 'payload': payload}]
+            self.repository.save_unmatched_recommendation_draft(payload, 'member-token')
+            self.assertEqual(request.call_args.args[:2], (
+                'POST', '/rest/v1/kra_unmatched_recommendation_drafts?on_conflict=user_id'))
+            saved_row = request.call_args.args[2]
+            self.assertEqual(saved_row['user_id'], user_id)
+            self.assertEqual(saved_row['payload'], payload)
+            self.assertIn('updated_at', saved_row)
+            self.assertIn('resolution=merge-duplicates', request.call_args.kwargs['prefer'])
+        self.assertEqual(user.call_count, 2)
+
     def test_sidebar_registration_requests_are_deduplicated_without_statistics(self):
         with patch.object(self.repository, 'user', return_value={'id': str(uuid4())}) as user, \
                 patch.object(self.repository, 'rpc', return_value=2) as rpc:
