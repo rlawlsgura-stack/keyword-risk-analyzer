@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
-  submitKeywordRequest, updateKeywordRequest, loadRequestEmailNotifications,
+  submitKeywordRequest, loadKeywordRequestMessages, addKeywordRequestMessage,
+  editKeywordRequestMessage, deleteKeywordRequestMessage, deleteKeywordRequest,
+  type KeywordRequestMessage, loadRequestEmailNotifications,
   saveRequestEmailNotifications, type RequestEmailNotifications, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords, deleteAdminKeywords,
   uploadAdminKeywords,
@@ -198,6 +200,202 @@ function OCRSelectableImage({ file }: { file: OCRFileResult }) {
   </div>
 }
 
+function KeywordRequestThread({ request, role, currentUserId, onChanged }: {
+  request: KeywordRequestRecord
+  role: string
+  currentUserId: string
+  onChanged: () => void
+}) {
+  const [messages, setMessages] = useState<KeywordRequestMessage[]>([])
+  const [loaded, setLoaded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
+  const [replyStatuses, setReplyStatuses] = useState<Record<string, string>>({})
+  const [followupTarget, setFollowupTarget] = useState<string | null>(null)
+  const [followupDraft, setFollowupDraft] = useState('')
+  const [newMessage, setNewMessage] = useState('')
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [editType, setEditType] = useState(request.request_type)
+
+  async function refreshMessages() {
+    setLoading(true)
+    setError('')
+    try {
+      setMessages(await loadKeywordRequestMessages(request.id))
+      setLoaded(true)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '문의 대화를 불러오지 못했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleToggle(event: SyntheticEvent<HTMLDetailsElement>) {
+    if (event.currentTarget.open && !loaded && !loading) await refreshMessages()
+  }
+
+  async function postMessage(body: string, replyToId?: string, status?: string) {
+    if (!body.trim()) return
+    setBusy(true)
+    setError('')
+    try {
+      await addKeywordRequestMessage(request.id, body, { replyToId, status })
+      setFollowupTarget(null)
+      setFollowupDraft('')
+      setNewMessage('')
+      setReplyDrafts(previous => ({ ...previous, [replyToId ?? '']: '' }))
+      await refreshMessages()
+      onChanged()
+    } catch (postError) {
+      setError(postError instanceof Error ? postError.message : '문의 메시지를 저장하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function editMessage(message: KeywordRequestMessage) {
+    if (!editDraft.trim()) {
+      setError('문의 내용을 입력하세요.')
+      return
+    }
+    if (editDraft.trim() === message.body.trim() && (!message.is_initial || editType === request.request_type)) {
+      setEditingMessageId(null)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      await editKeywordRequestMessage(request.id, message.id, editDraft, message.is_initial ? editType : undefined)
+      setEditingMessageId(null)
+      await refreshMessages()
+      onChanged()
+    } catch (editError) {
+      setError(editError instanceof Error ? editError.message : '문의 내용을 수정하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeMessage(message: KeywordRequestMessage) {
+    if (!window.confirm('이 문의와 연결된 답변·재문의도 함께 삭제할까요? 삭제한 메시지는 복구할 수 없습니다.')) return
+    setBusy(true)
+    setError('')
+    try {
+      await deleteKeywordRequestMessage(request.id, message.id)
+      await refreshMessages()
+      onChanged()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '문의 메시지를 삭제하지 못했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeRequest() {
+    if (!window.confirm('이 접수건과 모든 문의·답변을 영구 삭제할까요? 삭제한 내역은 복구할 수 없습니다.')) return
+    setBusy(true)
+    setError('')
+    try {
+      await deleteKeywordRequest(request.id)
+      onChanged()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : '접수건을 삭제하지 못했습니다.')
+      setBusy(false)
+    }
+  }
+
+  const children = new Map(messages.filter(message => message.reply_to_id)
+    .map(message => [message.reply_to_id!, message]))
+  const roots = messages.filter(message => message.author_role === 'user' && !message.reply_to_id)
+  const orphanedAdmins = messages.filter(message => message.author_role === 'admin' && !message.reply_to_id)
+
+  function renderMessage(message: KeywordRequestMessage, depth = 0, visited = new Set<string>()): ReactNode {
+    if (visited.has(message.id)) return null
+    const nextVisited = new Set(visited).add(message.id)
+    const reply = children.get(message.id)
+    const ownsMessage = role !== 'admin' && message.author_role === 'user' && message.author_id === currentUserId
+    return <Fragment key={message.id}>
+      <article className={`inquiry-message inquiry-message-${message.author_role}`} style={{ marginLeft: `${Math.min(depth, 4) * 18}px` }}>
+        <div className="inquiry-message-meta">
+          <strong>{message.author_role === 'admin' ? (message.is_legacy ? '기존 관리자 답변' : '관리자 답변') : message.is_initial ? '사용자 문의' : '사용자 재문의'}</strong>
+          {message.author_role === 'user' && <span>{keywordRequestStatusLabels[message.status] ?? message.status}</span>}
+          <small>{message.is_legacy ? '작성 시각 기록 없음' : `${message.author_email} · ${message.created_at ? new Date(message.created_at).toLocaleString('ko-KR') : ''}`}</small>
+        </div>
+        {ownsMessage && editingMessageId === message.id ? <form className="inquiry-edit-form" onSubmit={event => {
+          event.preventDefault(); void editMessage(message)
+        }}>
+          {message.is_initial && <label>문의 유형<select value={editType} disabled={busy}
+            onChange={event => setEditType(event.target.value)}>
+            {Object.entries(keywordRequestTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>}
+          <label>문의 내용<textarea required maxLength={4000} value={editDraft} disabled={busy}
+            onChange={event => setEditDraft(event.target.value)} /></label>
+          <button className="secondary-button" disabled={busy} type="submit">수정 저장</button>
+          <button className="text-button" type="button" disabled={busy} onClick={() => setEditingMessageId(null)}>취소</button>
+        </form> : <p>{message.body}</p>}
+        {ownsMessage && editingMessageId !== message.id && <div className="inquiry-message-actions">
+          <button type="button" className="text-button" disabled={busy} onClick={() => {
+            setEditDraft(message.body); setEditType(request.request_type); setEditingMessageId(message.id); setError('')
+          }}>수정</button>
+          <button type="button" className="text-button" disabled={busy} onClick={() => removeMessage(message)}>삭제</button>
+        </div>}
+        {role === 'admin' && message.author_role === 'user' && !reply && <form className="inquiry-reply-form"
+          onSubmit={event => { event.preventDefault(); void postMessage(replyDrafts[message.id] ?? '', message.id, replyStatuses[message.id] ?? message.status) }}>
+          <label>관리자 답변<textarea required maxLength={4000} value={replyDrafts[message.id] ?? ''} disabled={busy}
+            onChange={event => setReplyDrafts(previous => ({ ...previous, [message.id]: event.target.value }))} /></label>
+          <label>처리 상태<select value={replyStatuses[message.id] ?? message.status ?? '대기'} disabled={busy}
+            onChange={event => setReplyStatuses(previous => ({ ...previous, [message.id]: event.target.value }))}>
+            <option value="대기">대기</option><option value="검토중">검토중</option><option value="처리완료">처리 완료</option>
+          </select></label>
+          <button className="secondary-button" disabled={busy || !(replyDrafts[message.id] ?? '').trim()} type="submit">답변 및 상태 저장</button>
+        </form>}
+        {role !== 'admin' && message.author_role === 'admin' && !reply && <div className="inquiry-message-actions">
+          {followupTarget === message.id ? <form className="inquiry-followup-form" onSubmit={event => {
+            event.preventDefault(); void postMessage(followupDraft, message.id)
+          }}><textarea required maxLength={4000} value={followupDraft} disabled={busy} aria-label="재문의 내용"
+            onChange={event => setFollowupDraft(event.target.value)} />
+            <button className="secondary-button" disabled={busy || !followupDraft.trim()} type="submit">재문의 등록</button>
+            <button className="text-button" type="button" onClick={() => setFollowupTarget(null)}>취소</button></form>
+            : <button type="button" className="text-button" disabled={busy} onClick={() => setFollowupTarget(message.id)}>이 답변에 재문의</button>}
+        </div>}
+      </article>
+      {reply && renderMessage(reply, depth + 1, nextVisited)}
+    </Fragment>
+  }
+
+  return <details className="request-record" onToggle={event => { void handleToggle(event) }}>
+    <summary><strong>{request.keyword_name} · {request.kwd_no}</strong>
+      <span>{keywordRequestTypeLabels[request.request_type] ?? request.request_type} · {keywordRequestStatusLabels[request.status] ?? request.status}</span>
+    </summary>
+    <div className="inquiry-thread">
+      <p><strong>접수번호:</strong> KR-{request.id.slice(0, 8).toUpperCase()}</p>
+      <p><strong>접수 시각:</strong> {request.created_at ? new Date(request.created_at).toLocaleString('ko-KR') : '—'}</p>
+      {role === 'admin' && request.requester_email && <p><strong>요청자:</strong> {request.requester_email}</p>}
+      {loading && <p className="catalog-status" role="status">문의 대화를 불러오는 중…</p>}
+      {error && <p className="error-message" role="alert">{error}</p>}
+      {!loading && loaded && roots.length === 0 && <><p>{request.request_detail}</p>
+        {request.admin_reply && <p className="admin-reply"><strong>관리자 답변</strong><br />{request.admin_reply}</p>}</>}
+      {roots.map((message, index) => <div className="inquiry-thread-root" key={message.id}>
+        <small>Q{String(index + 1).padStart(2, '0')}</small>{renderMessage(message)}
+      </div>)}
+      {orphanedAdmins.map(message => <article className="inquiry-message inquiry-message-admin" key={message.id}>
+        <strong>기존 관리자 답변</strong><p>{message.body}</p>
+      </article>)}
+      {loaded && role !== 'admin' && <form className="inquiry-new-message" onSubmit={event => {
+        event.preventDefault(); void postMessage(newMessage)
+      }}><label>새 문의 등록<textarea required maxLength={4000} value={newMessage} disabled={busy}
+        onChange={event => setNewMessage(event.target.value)} /></label>
+        <button className="secondary-button" disabled={busy || !newMessage.trim()} type="submit">새 문의 제출</button>
+      </form>}
+      <button type="button" className="danger-button inquiry-delete-request"
+        disabled={busy} onClick={removeRequest}>접수건 전체 삭제</button>
+    </div>
+  </details>
+}
+
 function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
@@ -265,8 +463,6 @@ function App() {
   const [requestType, setRequestType] = useState<'risk_grade_adjustment' | 'review_criteria_change'>('risk_grade_adjustment')
   const [requestDetail, setRequestDetail] = useState('')
   const [requestRecords, setRequestRecords] = useState<KeywordRequestRecord[]>([])
-  const [requestDrafts, setRequestDrafts] = useState<Record<string, { status: string; reply: string }>>({})
-  const [requestSavingId, setRequestSavingId] = useState<string | null>(null)
   const [requestRefresh, setRequestRefresh] = useState(0)
   const [requestBusy, setRequestBusy] = useState(false)
   const [requestSearchBusy, setRequestSearchBusy] = useState(false)
@@ -460,8 +656,6 @@ function App() {
     void loadKeywordRequests().then(items => {
       if (active) {
         setRequestRecords(items)
-        setRequestDrafts(Object.fromEntries(items.map(item => [item.id,
-          { status: item.status, reply: item.admin_reply ?? '' }])))
       }
     }).catch(error => {
       if (active) setRequestError(error instanceof Error ? error.message : '문의 내역을 불러오지 못했습니다.')
@@ -1211,23 +1405,6 @@ function App() {
     }
   }
 
-  async function saveKeywordRequest(requestId: string) {
-    const draft = requestDrafts[requestId]
-    if (!draft) return
-    setRequestSavingId(requestId)
-    setRequestError('')
-    setRequestMessage('')
-    try {
-      await updateKeywordRequest(requestId, draft.status, draft.reply)
-      setRequestMessage('문의 처리 상태와 답변을 저장했습니다.')
-      setRequestRefresh(value => value + 1)
-    } catch (error) {
-      setRequestError(error instanceof Error ? error.message : '문의 처리 내용을 저장하지 못했습니다.')
-    } finally {
-      setRequestSavingId(null)
-    }
-  }
-
   async function saveRequestEmailSetting() {
     if (!requestEmailSettings) return
     setRequestEmailBusy(true)
@@ -1857,36 +2034,10 @@ function App() {
               </div>}
               {requestEmailError && <p className="error-message" role="alert">{requestEmailError}</p>}
               <div className="request-history-heading"><h2>문의 내역</h2><span>{requestBusy ? '불러오는 중…' : `${requestRecords.length}건`}</span></div>
-              {requestRecords.length ? <div className="request-record-list">{requestRecords.map(item => <details className="request-record" key={item.id}>
-                <summary><strong>{item.keyword_name} · {item.kwd_no}</strong>
-                  <span>{keywordRequestTypeLabels[item.request_type] ?? item.request_type} · {keywordRequestStatusLabels[item.status] ?? item.status}</span>
-                </summary>
-                {role === 'admin' && item.requester_email && <small>요청자: {item.requester_email}</small>}
-                <p>{item.request_detail}</p>
-                {item.admin_reply && <p className="admin-reply"><strong>관리자 답변</strong><br />{item.admin_reply}</p>}
-                <small>{new Date(item.created_at).toLocaleString('ko-KR')}</small>
-                {role === 'admin' && <div className="request-admin-controls">
-                  <label>처리 상태
-                    <select value={requestDrafts[item.id]?.status ?? item.status} disabled={requestSavingId === item.id}
-                      onChange={event => setRequestDrafts(previous => ({ ...previous, [item.id]: {
-                        status: event.target.value, reply: previous[item.id]?.reply ?? item.admin_reply ?? '',
-                      } }))}>
-                      <option value="대기">대기</option><option value="검토중">검토 중</option><option value="처리완료">처리 완료</option>
-                    </select>
-                  </label>
-                  <label>관리자 답변
-                    <textarea maxLength={4000} value={requestDrafts[item.id]?.reply ?? item.admin_reply ?? ''}
-                      disabled={requestSavingId === item.id}
-                      onChange={event => setRequestDrafts(previous => ({ ...previous, [item.id]: {
-                        status: previous[item.id]?.status ?? item.status, reply: event.target.value,
-                      } }))} />
-                  </label>
-                  <button className="secondary-button" disabled={requestSavingId === item.id}
-                    onClick={() => saveKeywordRequest(item.id)}>
-                    {requestSavingId === item.id ? '저장 중…' : '답변 저장'}
-                  </button>
-                </div>}
-              </details>)}</div> : !requestBusy && <p className="empty-result">아직 문의 내역이 없습니다.</p>}
+              {requestRecords.length ? <div className="request-record-list">
+                {requestRecords.map(item => <KeywordRequestThread key={item.id} request={item} role={role ?? 'member'}
+                  currentUserId={user?.id ?? ''} onChanged={() => setRequestRefresh(value => value + 1)} />)}
+              </div> : !requestBusy && <p className="empty-result">{ '아직 문의 내역이 없습니다.' }</p>}
             </div>
           </section>
         </> : page === 'unmatched' ? <>

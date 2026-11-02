@@ -1,3 +1,9 @@
+## React preview - Add threaded keyword inquiry conversations
+
+- Load request messages on demand and support administrator replies with per-question status, member follow-ups, and member message edits.
+- Allow request owners and administrators to delete a complete inquiry after confirmation.
+- Add authenticated message API routes that rely on the existing Supabase row-level security and RPC checks.
+
 ## React preview - Preserve regulation search history
 
 - Keep the latest 20 successful regulation searches with their answers, matches, and sources until the user clears the conversation.

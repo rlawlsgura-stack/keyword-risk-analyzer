@@ -32,7 +32,7 @@ app.add_middleware(
         'API_CORS_ORIGINS',
         'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174'
     ).split(',') if origin.strip()],
-    allow_methods=['GET', 'POST', 'PUT'],
+    allow_methods=['GET', 'POST', 'PUT', 'DELETE'],
     allow_headers=['Authorization', 'Content-Type'],
 )
 bearer = HTTPBearer(auto_error=False)
@@ -137,6 +137,20 @@ class KeywordRequestUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     status: Literal['대기', '검토중', '처리완료']
     admin_reply: str = Field(default='', max_length=4000)
+
+
+class KeywordRequestMessageCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    body: str = Field(min_length=1, max_length=4000)
+    reply_to_id: UUID | None = None
+    status: str = Field(default='', max_length=20)
+
+
+
+class KeywordRequestMessageEdit(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    body: str = Field(max_length=4000)
+    request_type: Literal['risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration'] | None = None
 
 
 class AdminRequestNotificationsUpdate(BaseModel):
@@ -658,6 +672,99 @@ def update_keyword_request(request_id: UUID, body: KeywordRequestUpdate,
         raise HTTPException(403, 'Administrator role required')
     return repository.update_keyword_request(str(request_id), body.status,
                                             body.admin_reply.strip(), credentials.credentials)
+
+
+@app.get('/api/v1/keyword-requests/{request_id}/messages')
+def keyword_request_messages(request_id: UUID, actor=Depends(current_actor),
+                             credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                             repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to view inquiry messages')
+    return {'items': repository.load_keyword_request_messages(str(request_id), credentials.credentials)}
+
+
+@app.post('/api/v1/keyword-requests/{request_id}/messages')
+def add_keyword_request_message(request_id: UUID, body: KeywordRequestMessageCreate,
+                                actor=Depends(current_actor),
+                                credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to post inquiry messages')
+    content = body.body.strip()
+    if not content:
+        raise HTTPException(422, 'Message body must contain text')
+    user = repository.user(credentials.credentials)
+    role = (user.get('app_metadata') or {}).get('role')
+    try:
+        if role == 'admin':
+            if body.reply_to_id is None:
+                raise HTTPException(422, 'Select the inquiry this reply belongs to')
+            result = repository.respond_to_keyword_inquiry(
+                str(request_id), str(body.reply_to_id), content, body.status,
+                credentials.credentials)
+            return {'id': str(result), 'author_role': 'admin'}
+        result = repository.add_keyword_request_message(
+            str(request_id), user['id'], user.get('email', ''), content,
+            credentials.credentials, author_role='user',
+            reply_to_id=str(body.reply_to_id) if body.reply_to_id else None)
+        return result
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@app.put('/api/v1/keyword-requests/{request_id}/messages/{message_id}')
+def edit_own_keyword_request_message(request_id: UUID, message_id: UUID,
+                                     body: KeywordRequestMessageEdit, actor=Depends(current_actor),
+                                     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                     repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to edit inquiry messages')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') == 'admin':
+        raise HTTPException(403, 'Only the inquiry owner can edit a message')
+    try:
+        return repository.mutate_own_keyword_inquiry(
+            str(request_id), str(message_id), 'edit', credentials.credentials,
+            body=body.body, request_type=body.request_type)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@app.delete('/api/v1/keyword-requests/{request_id}/messages/{message_id}')
+def delete_own_keyword_request_message(request_id: UUID, message_id: UUID,
+                                       actor=Depends(current_actor),
+                                       credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                       repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to delete inquiry messages')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') == 'admin':
+        raise HTTPException(403, 'Only the inquiry owner can delete a message')
+    try:
+        return repository.mutate_own_keyword_inquiry(
+            str(request_id), str(message_id), 'delete', credentials.credentials)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+
+
+@app.delete('/api/v1/keyword-requests/{request_id}')
+def delete_keyword_request(request_id: UUID, actor=Depends(current_actor),
+                           credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                           repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'A user session is required to delete an inquiry')
+    try:
+        return repository.delete_keyword_request(str(request_id), credentials.credentials)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except StorageError as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @app.get('/api/v1/admin/keyword-request-notifications')

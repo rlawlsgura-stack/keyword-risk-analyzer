@@ -104,6 +104,24 @@ textarea::placeholder { color: #a6b0c0; }
 .request-record summary span, .request-record small { color: #909bad; font-size: 10px; }
 .request-record p { margin: 12px 0; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
 .request-record .admin-reply { padding: 10px; border-radius: 6px; background: #f8f9fb; }
+.inquiry-thread { display: grid; gap: 9px; padding-top: 14px; }
+.inquiry-thread > p { margin: 0; color: #68758a; font-size: 11px; }
+.inquiry-thread-root { padding: 12px 0; border-top: 1px solid #e8ecf2; }
+.inquiry-thread-root > small { color: #7d8ba2; font-size: 10px; }
+.inquiry-message { margin-top: 8px; padding: 12px; border: 1px solid #e5e9f0; border-radius: 8px; background: #f8f9fc; }
+.inquiry-message-admin { background: #f1f5fc; }
+.inquiry-message-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #57657c; font-size: 10px; }
+.inquiry-message-meta small { color: #8995a7; }
+.inquiry-message > p { margin: 9px 0 0; color: #46546b; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inquiry-message-actions { display: flex; flex-wrap: wrap; align-items: start; gap: 7px; margin-top: 9px; }
+.inquiry-reply-form, .inquiry-followup-form, .inquiry-new-message { display: grid; gap: 9px; margin-top: 12px; }
+.inquiry-edit-form { display: grid; gap: 9px; margin-top: 12px; }
+.inquiry-edit-form label { display: grid; gap: 6px; color: #68758a; font-size: 10px; }
+.inquiry-edit-form textarea, .inquiry-edit-form select { min-height: 38px; border: 1px solid #dce2eb; border-radius: 7px; padding: 9px; }
+.inquiry-reply-form label, .inquiry-new-message label { display: grid; gap: 6px; color: #68758a; font-size: 10px; }
+.inquiry-reply-form textarea, .inquiry-followup-form textarea, .inquiry-new-message textarea { min-height: 78px; width: 100%; border: 1px solid #dce2eb; border-radius: 7px; padding: 9px; resize: vertical; }
+.inquiry-reply-form select { min-height: 36px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; color: #344059; background: #fff; }
+.inquiry-delete-request { justify-self: start; margin-top: 12px; }
 .request-admin-controls { display: grid; gap: 10px; margin-top: 14px; padding-top: 13px; border-top: 1px solid #edf0f4; }
 .request-admin-controls label { display: grid; gap: 6px; color: #68758a; font-size: 10px; font-weight: 600; }
 .request-admin-controls select { min-height: 36px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }

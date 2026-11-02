@@ -94,6 +94,11 @@ export type KeywordRequestRecord = {
   admin_reply: string
   created_at: string
 }
+export type KeywordRequestMessage = {
+  id: string; request_id: string; author_id: string | null; author_email: string
+  author_role: 'user' | 'admin'; is_initial: boolean; is_legacy: boolean
+  reply_to_id: string | null; body: string; status: string; created_at: string
+}
 export type RequestEmailNotifications = { enabled: boolean; configured: boolean }
 export type AdminUser = { id: string; email: string; role: 'admin' | 'member' | null; email_confirmed: boolean }
 export type UnmatchedRegistrationRequest = {
@@ -261,6 +266,35 @@ export async function findKeywords(query: string): Promise<KeywordRow[]> {
 export async function loadKeywordRequests(): Promise<KeywordRequestRecord[]> {
   const result = await requestApi('/api/v1/keyword-requests')
   return result.items
+}
+
+export async function loadKeywordRequestMessages(requestId: string): Promise<KeywordRequestMessage[]> {
+  const result = await requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}/messages`)
+  return result.items
+}
+
+export async function addKeywordRequestMessage(requestId: string, body: string,
+  options: { replyToId?: string; status?: string } = {}): Promise<KeywordRequestMessage> {
+  return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}/messages`, {
+    method: 'POST', body: JSON.stringify({ body, reply_to_id: options.replyToId, status: options.status }),
+  })
+}
+
+export async function editKeywordRequestMessage(requestId: string, messageId: string, body: string,
+  requestType?: string): Promise<{ id: string; action: string }> {
+  return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}/messages/${encodeURIComponent(messageId)}`, {
+    method: 'PUT', body: JSON.stringify({ body, request_type: requestType }),
+  })
+}
+
+export async function deleteKeywordRequestMessage(requestId: string, messageId: string): Promise<{ id: string; action: string }> {
+  return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}/messages/${encodeURIComponent(messageId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteKeywordRequest(requestId: string): Promise<KeywordRequestRecord> {
+  return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}`, { method: 'DELETE' })
 }
 
 export async function submitKeywordRequest(input: {
