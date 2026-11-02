@@ -98,7 +98,11 @@ textarea::placeholder { color: #a6b0c0; }
 .highlight-toggle { display: inline; padding: 0; border: 0; background: transparent; color: inherit; line-height: inherit; }
 .highlight-toggle:focus-visible { outline: 2px solid #7387ae; outline-offset: 2px; border-radius: 3px; }
 .highlight-keywords { display: inline-flex; gap: 4px; margin: 0 4px; vertical-align: middle; }
-.keyword-tag { padding: 2px 5px; border-radius: 4px; color: #405472; background: #edf1fa; font-size: 9px; line-height: 1.5; }
+.keyword-tag { padding: 2px 5px; border: 0; border-radius: 4px; color: #405472; background: #edf1fa; font-size: 9px; line-height: 1.5; cursor: pointer; }
+.keyword-tag:hover, .keyword-tag[aria-expanded='true'] { color: #fff; background: #5d7195; }
+.keyword-detail { display: grid; flex-basis: 100%; gap: 3px; max-width: min(440px, 90vw); padding: 9px 11px; border: 1px solid #e4e8ef; border-radius: 7px; color: #627089; background: #fff; white-space: normal; font-size: 10px; line-height: 1.5; box-shadow: 0 4px 14px rgba(34, 45, 76, .08); }
+.keyword-detail strong { color: #344059; font-size: 11px; }
+.keyword-detail small { color: #8590a2; }
 mark { background: #ffe4ac; color: #5d4525; border-radius: 3px; padding: 2px 0; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }

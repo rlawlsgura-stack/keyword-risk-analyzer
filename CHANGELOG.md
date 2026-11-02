@@ -1,3 +1,7 @@
+## React preview - Show keyword match details
+
+- Reveal the matched keyword's category, risk, and review criteria from the result highlight.
+
 ## React preview - Add match highlight details
 
 - Make each detected phrase reveal its linked keyword numbers when selected.

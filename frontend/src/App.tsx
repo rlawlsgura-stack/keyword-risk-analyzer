@@ -15,6 +15,7 @@ function HighlightedText({ text, matches }: { text: string; matches: Match[] }) 
   const characters = Array.from(text)
   const pieces: ReactNode[] = []
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null)
   let cursor = 0
   const sorted = [...matches].sort((a, b) => a.start - b.start || b.end - a.end)
   const groups: Match[][] = []
@@ -31,13 +32,20 @@ function HighlightedText({ text, matches }: { text: string; matches: Match[] }) 
     const key = `${match.start}-${match.end}`
     const keywords = group.filter((item, index) => item.kwd_no &&
       group.findIndex(candidate => candidate.kwd_no === item.kwd_no) === index)
+    const selectedMatch = selectedKeyword ? group.find(item => item.kwd_no === selectedKeyword) : undefined
     pieces.push(<span className="highlight-group" key={key}>
       <button className="highlight-toggle" aria-expanded={Boolean(expanded[key])}
         onClick={() => setExpanded(previous => ({ ...previous, [key]: !previous[key] }))}>
         <mark title={group.map(item => item.term).join(', ')}>{characters.slice(match.start, match.end).join('')}</mark>
       </button>
       {expanded[key] && keywords.length > 0 && <span className="highlight-keywords" aria-label="연결된 키워드 번호">
-        {keywords.map((item, index) => <span className="keyword-tag" key={item.kwd_no ?? index}>{item.kwd_no}</span>)}
+        {keywords.map((item, index) => <button className="keyword-tag" key={item.kwd_no ?? index}
+          aria-expanded={selectedKeyword === item.kwd_no}
+          onClick={() => setSelectedKeyword(selectedKeyword === item.kwd_no ? null : item.kwd_no)}>{item.kwd_no}</button>)}
+        {selectedMatch && <span className="keyword-detail"><strong>{selectedMatch.term}</strong>
+          <span>{[selectedMatch.category, selectedMatch.risk].filter(Boolean).join(' · ') || '분류 정보 없음'}</span>
+          {selectedMatch.detail && <small>{selectedMatch.detail}</small>}
+        </span>}
       </span>}
     </span>)
     cursor = match.end
@@ -448,7 +456,7 @@ function App() {
                 {result.data.matches.length > 0 && <button className="secondary-button" onClick={downloadCsv}>CSV 다운로드</button>}
               </div></div>
             <div className="panel preview-panel"><h3>문장 속 키워드</h3>
-              <p className="highlight-help">검출 문구를 누르면 연결된 키워드 번호를 확인할 수 있습니다.</p>
+              <p className="highlight-help">검출 문구를 누르면 연결된 키워드 번호를, 번호를 누르면 상세 정보를 확인할 수 있습니다.</p>
               <HighlightedText text={result.text} matches={result.data.matches} /></div>
             {result.data.matches.length > 0 ? <div className="panel table-panel"><div className="table-scroll"><table>
               <thead><tr><th>키워드</th><th>상품 카테고리</th><th>리스크 등급</th><th>심의 기준</th><th>위치</th></tr></thead>
