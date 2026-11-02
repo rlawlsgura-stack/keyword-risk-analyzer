@@ -1,3 +1,7 @@
+## React preview - Allow the alternate Vite port
+
+- Allow the local React preview on port 5174 through the API's default CORS configuration when port 5173 is already occupied.
+
 ## React preview - Add inquiry email notification settings
 
 - Let administrators view the delivery configuration status and save the shared new-inquiry email notification toggle.

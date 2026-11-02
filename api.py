@@ -29,7 +29,8 @@ app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in os.getenv(
-        'API_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173'
+        'API_CORS_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174'
     ).split(',') if origin.strip()],
     allow_methods=['GET', 'POST', 'PUT'],
     allow_headers=['Authorization', 'Content-Type'],

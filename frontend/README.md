@@ -7,7 +7,7 @@ FIXED328 starts a separate React/TypeScript interface. The preview supports exis
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_PUBLISHABLE_KEY` to the project's **publishable** key. Set `VITE_API_BASE_URL` to the FastAPI origin. Never put `SUPABASE_SECRET_KEY` in a `VITE_` variable.
 2. Add the frontend origin to Supabase Auth's allowed redirect URLs so password recovery emails can return to the React app.
 3. Run `npm ci` and `npm run dev` in this directory.
-4. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include `http://localhost:5173` and `http://127.0.0.1:5173`.
+4. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include the React dev ports 5173 and 5174 on `localhost` and `127.0.0.1`.
 
 Korean OCR additionally requires Python 3.9–3.13 and the dependencies in [`requirements-ocr.txt`](../requirements-ocr.txt). Install these in the same Python environment that runs FastAPI; the OCR model is initialized on the first OCR request.
 
