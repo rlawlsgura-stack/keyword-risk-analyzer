@@ -90,7 +90,7 @@ class ApprovedMatchingTests(unittest.TestCase):
              patch('repository.SupabaseRepository.save_setting', side_effect=settings.__setitem__), \
              patch('repository.SupabaseRepository.load_hits', side_effect=repository.load_hits), \
              patch('repository.SupabaseRepository.record_analysis') as record:
-            app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed326.py'))
+            app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed327.py'))
             app.session_state['auth_session'] = {'access_token': 'test-token', 'expires_at': 9999999999}
             app.session_state['match_mode'] = MATCH_MODES['similar']
             app.run(timeout=30)

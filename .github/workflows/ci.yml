@@ -40,7 +40,7 @@ jobs:
           api.py app_config.py approved_matching.py auxiliary_analysis.py
           legislation_source.py matching_engine.py ocr_keyword_import.py
           regulation_assistant.py repository.py request_notifications.py
-          service.py unmatched_collection.py keyword_app2_fixed326.py
+          service.py unmatched_collection.py keyword_app2_fixed327.py
           streamlit_cloud tests scripts
 
       - name: Test

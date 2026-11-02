@@ -71,7 +71,7 @@ class PasswordRecoveryTests(TestCase):
         with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
                                     'APP_PUBLIC_URL': 'http://localhost:8504/'}), \
              patch('repository.SupabaseRepository.sign_up') as sign_up:
-            app = AppTest.from_file(str(root / 'keyword_app2_fixed326.py'))
+            app = AppTest.from_file(str(root / 'keyword_app2_fixed327.py'))
             app.run(timeout=30)
             app.button(key='cloud_signup_open').click().run(timeout=30)
             app.text_input(key='cloud_signup_email').set_value('member@example.test')
@@ -111,7 +111,7 @@ class PasswordRecoveryTests(TestCase):
         root = Path(__file__).resolve().parents[1]
         with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase'}), \
              patch('repository.SupabaseRepository.update_password') as update:
-            app = AppTest.from_file(str(root / 'keyword_app2_fixed326.py'))
+            app = AppTest.from_file(str(root / 'keyword_app2_fixed327.py'))
             app.session_state['cloud_password_recovery'] = {
                 'hash': '#access_token=recovery-test&token_type=bearer&type=recovery'}
             app.run(timeout=30)

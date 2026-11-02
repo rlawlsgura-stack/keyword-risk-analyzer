@@ -1,3 +1,8 @@
+## FIXED327 - Defer normalization reruns until an action
+
+- Keep edits in the browser while entering normalization recommendations.
+- Persist the per-account work after approval or registration actions.
+
 ## FIXED326 - Add CI and keep OCR overlay text inside its boxes
 
 - Add a secret-free GitHub Actions pipeline for dependency, lint, test, and syntax checks.
