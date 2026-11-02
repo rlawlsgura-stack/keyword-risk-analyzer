@@ -1,3 +1,7 @@
+## React preview - Add match highlight details
+
+- Make each detected phrase reveal its linked keyword numbers when selected.
+
 ## React preview - Complete keyword catalog filters
 
 - Search the catalog by keyword number, name, or alternative terms and filter by category, risk, and evidence type.

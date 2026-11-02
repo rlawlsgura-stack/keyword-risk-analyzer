@@ -1,6 +1,6 @@
 # React transition preview
 
-FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts, recorded text analysis through `/api/v2/analyses`, read-only keyword catalog search and filters through `/api/v1/keywords`, and rolling-period Top N reports through `/api/v1/reports/top-keywords`. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, and administration.
+FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts, recorded text analysis through `/api/v2/analyses` with clickable keyword-number highlights, read-only keyword catalog search and filters through `/api/v1/keywords`, and rolling-period Top N reports through `/api/v1/reports/top-keywords`. The Streamlit app remains the operational UI for OCR, unmatched candidates, keyword requests, and administration.
 
 ## Local setup
 

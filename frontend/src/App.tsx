@@ -14,14 +14,32 @@ function HighlightedText({ text, matches }: { text: string; matches: Match[] }) 
   // API offsets count Unicode code points; JavaScript string slicing counts UTF-16 units.
   const characters = Array.from(text)
   const pieces: ReactNode[] = []
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   let cursor = 0
-  for (const match of [...matches].sort((a, b) => a.start - b.start || b.end - a.end)) {
+  const sorted = [...matches].sort((a, b) => a.start - b.start || b.end - a.end)
+  const groups: Match[][] = []
+  for (const match of sorted) {
+    const lastGroup = groups[groups.length - 1]
+    if (lastGroup && lastGroup[0].start === match.start && lastGroup[0].end === match.end) lastGroup.push(match)
+    else groups.push([match])
+  }
+  for (const group of groups) {
+    const match = group[0]
     if (!Number.isInteger(match.start) || !Number.isInteger(match.end) ||
         match.start < cursor || match.end > characters.length || match.end <= match.start) continue
     if (match.start > cursor) pieces.push(characters.slice(cursor, match.start).join(''))
-    pieces.push(<mark key={`${match.start}-${match.end}`} title={match.term}>
-      {characters.slice(match.start, match.end).join('')}
-    </mark>)
+    const key = `${match.start}-${match.end}`
+    const keywords = group.filter((item, index) => item.kwd_no &&
+      group.findIndex(candidate => candidate.kwd_no === item.kwd_no) === index)
+    pieces.push(<span className="highlight-group" key={key}>
+      <button className="highlight-toggle" aria-expanded={Boolean(expanded[key])}
+        onClick={() => setExpanded(previous => ({ ...previous, [key]: !previous[key] }))}>
+        <mark title={group.map(item => item.term).join(', ')}>{characters.slice(match.start, match.end).join('')}</mark>
+      </button>
+      {expanded[key] && keywords.length > 0 && <span className="highlight-keywords" aria-label="연결된 키워드 번호">
+        {keywords.map((item, index) => <span className="keyword-tag" key={item.kwd_no ?? index}>{item.kwd_no}</span>)}
+      </span>}
+    </span>)
     cursor = match.end
   }
   pieces.push(characters.slice(cursor).join(''))
@@ -430,6 +448,7 @@ function App() {
                 {result.data.matches.length > 0 && <button className="secondary-button" onClick={downloadCsv}>CSV 다운로드</button>}
               </div></div>
             <div className="panel preview-panel"><h3>문장 속 키워드</h3>
+              <p className="highlight-help">검출 문구를 누르면 연결된 키워드 번호를 확인할 수 있습니다.</p>
               <HighlightedText text={result.text} matches={result.data.matches} /></div>
             {result.data.matches.length > 0 ? <div className="panel table-panel"><div className="table-scroll"><table>
               <thead><tr><th>키워드</th><th>상품 카테고리</th><th>리스크 등급</th><th>심의 기준</th><th>위치</th></tr></thead>

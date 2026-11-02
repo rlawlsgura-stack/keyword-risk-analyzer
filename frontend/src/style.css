@@ -93,6 +93,12 @@ textarea::placeholder { color: #a6b0c0; }
 .preview-panel { padding: 24px; margin-bottom: 15px; }
 .preview-panel h3 { font-size: 13px; margin-bottom: 13px; }
 .highlighted-text { white-space: pre-wrap; overflow-wrap: anywhere; color: #42506a; font-size: 13px; line-height: 2; }
+.highlight-help { margin: -5px 0 12px; color: #98a2b2; font-size: 10px; }
+.highlight-group { display: inline; }
+.highlight-toggle { display: inline; padding: 0; border: 0; background: transparent; color: inherit; line-height: inherit; }
+.highlight-toggle:focus-visible { outline: 2px solid #7387ae; outline-offset: 2px; border-radius: 3px; }
+.highlight-keywords { display: inline-flex; gap: 4px; margin: 0 4px; vertical-align: middle; }
+.keyword-tag { padding: 2px 5px; border-radius: 4px; color: #405472; background: #edf1fa; font-size: 9px; line-height: 1.5; }
 mark { background: #ffe4ac; color: #5d4525; border-radius: 3px; padding: 2px 0; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
