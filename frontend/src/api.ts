@@ -58,6 +58,7 @@ export type KeywordRow = {
 }
 
 export type TopKeyword = { kwd_no: string; hit_count: number; term: string | null }
+export type AnalysisFilters = { categories: string[]; risks: string[]; evidence_types?: string[] }
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -78,7 +79,7 @@ async function requestApi(path: string, init?: RequestInit) {
   return response.json()
 }
 
-export async function loadAnalysisFilters(): Promise<{ categories: string[]; risks: string[] }> {
+export async function loadAnalysisFilters(): Promise<AnalysisFilters> {
   return requestApi('/api/v2/analysis-filters')
 }
 
@@ -89,12 +90,14 @@ export async function analyzeText(input: AnalysisInput, analysisId: string): Pro
   })
 }
 
-export async function loadKeywords(offset: number, query: string): Promise<{
+export async function loadKeywords(offset: number, query: string,
+  filters: { category: string; risk: string; evidenceType: string }): Promise<{
   total: number
   revision: string | null
   items: KeywordRow[]
 }> {
-  const params = new URLSearchParams({ offset: String(offset), limit: '100', q: query })
+  const params = new URLSearchParams({ offset: String(offset), limit: '100', q: query,
+    category: filters.category, risk: filters.risk, evidence_type: filters.evidenceType })
   return requestApi(`/api/v1/keywords?${params}`)
 }
 

@@ -135,8 +135,9 @@ def create_analysis(body: AnalysisRequest, actor=Depends(current_actor),
 def analysis_filters(actor=Depends(current_actor), repository=Depends(get_repository)):
     df = repository.load_keywords()
     return {
-        'categories': sorted({value for value in df[DB_COLS[2]].astype(str).str.strip() if value}),
-        'risks': sorted({value for value in df[DB_COLS[3]].astype(str).str.strip() if value}),
+        'categories': sorted({value for value in df[DB_COLS[2]].fillna('').astype(str).str.strip() if value}),
+        'risks': sorted({value for value in df[DB_COLS[3]].fillna('').astype(str).str.strip() if value}),
+        'evidence_types': sorted({value for value in df[DB_COLS[6]].fillna('').astype(str).str.strip() if value}),
     }
 
 
@@ -159,10 +160,19 @@ def get_analysis(analysis_id: UUID, actor=Depends(current_actor),
 
 @app.get('/api/v1/keywords', dependencies=[Depends(current_actor)])
 def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
-             q: str = Query('', max_length=200), repository=Depends(get_repository)):
+             q: str = Query('', max_length=200), category: str = Query('', max_length=100),
+             risk: str = Query('', max_length=100), evidence_type: str = Query('', max_length=100),
+             repository=Depends(get_repository)):
     df = repository.load_keywords().sort_values('kwd_no', kind='stable')
     if q:
-        df = df[df['키워드명'].str.contains(q, regex=False, case=False)]
+        searchable = df[['kwd_no', '키워드명', '대체키워드']].fillna('').astype(str).agg('\n'.join, axis=1)
+        df = df[searchable.str.contains(q, regex=False, case=False)]
+    if category:
+        df = df[df['상품카테고리'].astype(str).str.strip() == category]
+    if risk:
+        df = df[df['리스크 등급'].astype(str).str.strip() == risk]
+    if evidence_type:
+        df = df[df['증빙자료유형'].astype(str).str.strip() == evidence_type]
     return {'total': len(df), 'revision': df.attrs.get('revision'),
             'items': df.iloc[offset:offset + limit].to_dict('records')}
 

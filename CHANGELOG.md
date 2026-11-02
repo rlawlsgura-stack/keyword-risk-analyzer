@@ -1,3 +1,7 @@
+## React preview - Complete keyword catalog filters
+
+- Search the catalog by keyword number, name, or alternative terms and filter by category, risk, and evidence type.
+
 ## React preview - Add period reports
 
 - Add authenticated rolling-period Top N keyword reports with CSV download.

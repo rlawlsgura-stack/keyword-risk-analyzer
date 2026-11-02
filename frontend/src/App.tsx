@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult,
-  type KeywordRow, type Match, type TopKeyword } from './api'
+  type AnalysisFilters, type KeywordRow, type Match, type TopKeyword } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -40,7 +40,7 @@ function App() {
   const [partialMinLen, setPartialMinLen] = useState(2)
   const [options, setOptions] = useState({ strip_bracket_notes: true, normalize_whitespace: true,
     ignore_case: true, normalize_symbols: true })
-  const [filters, setFilters] = useState({ categories: [] as string[], risks: [] as string[] })
+  const [filters, setFilters] = useState<AnalysisFilters>({ categories: [], risks: [], evidence_types: [] })
   const [categories, setCategories] = useState<string[]>([])
   const [risks, setRisks] = useState<string[]>([])
   const [filterMessage, setFilterMessage] = useState('')
@@ -52,6 +52,7 @@ function App() {
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
+  const [keywordFilter, setKeywordFilter] = useState({ category: '', risk: '', evidenceType: '' })
   const [keywordPage, setKeywordPage] = useState<{ total: number; revision: string | null; items: KeywordRow[] } | null>(null)
   const [keywordBusy, setKeywordBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
@@ -121,13 +122,13 @@ function App() {
     let active = true
     setKeywordBusy(true)
     setKeywordError('')
-    void loadKeywords(keywordOffset, keywordQuery).then(data => {
+    void loadKeywords(keywordOffset, keywordQuery, keywordFilter).then(data => {
       if (active) setKeywordPage(data)
     }).catch(error => {
       if (active) setKeywordError(error instanceof Error ? error.message : '키워드 목록을 불러오지 못했습니다.')
     }).finally(() => { if (active) setKeywordBusy(false) })
     return () => { active = false }
-  }, [page, user?.id, keywordOffset, keywordQuery])
+  }, [page, user?.id, keywordOffset, keywordQuery, keywordFilter])
 
   useEffect(() => {
     if (page !== 'report' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
@@ -327,9 +328,21 @@ function App() {
                 setKeywordOffset(0)
                 setKeywordQuery(keywordSearch.trim())
               }}>
-                <label className="sr-only" htmlFor="keyword-search">키워드명 검색</label>
+                <label className="sr-only" htmlFor="keyword-search">번호, 키워드명 또는 대체 키워드 검색</label>
                 <input id="keyword-search" value={keywordSearch} maxLength={200}
-                  placeholder="키워드명 검색" onChange={event => setKeywordSearch(event.target.value)} />
+                  placeholder="번호·키워드명·대체 키워드 검색" onChange={event => setKeywordSearch(event.target.value)} />
+                <select aria-label="카테고리 필터" value={keywordFilter.category}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, category: event.target.value }) }}>
+                  <option value="">전체 카테고리</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                </select>
+                <select aria-label="리스크 필터" value={keywordFilter.risk}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, risk: event.target.value }) }}>
+                  <option value="">전체 리스크</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                </select>
+                <select aria-label="증빙 자료 필터" value={keywordFilter.evidenceType}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, evidenceType: event.target.value }) }}>
+                  <option value="">전체 증빙 유형</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                </select>
                 <button className="primary-button" type="submit" disabled={keywordBusy}>검색</button>
               </form>
               <div className="catalog-meta">

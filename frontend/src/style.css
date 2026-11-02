@@ -72,8 +72,9 @@ textarea::placeholder { color: #a6b0c0; }
 .results-section { padding: 39px 36px 60px; }
 .catalog-section { max-width: 1230px; margin: 0 auto; padding: 0 36px 60px; }
 .catalog-panel { padding: 22px; }
-.catalog-search { display: flex; gap: 9px; max-width: 560px; }
-.catalog-search input { flex: 1; min-width: 0; border: 1px solid #dce2eb; border-radius: 8px; padding: 11px 12px; }
+.catalog-search { display: flex; flex-wrap: wrap; gap: 9px; }
+.catalog-search input { flex: 1 1 240px; min-width: 0; border: 1px solid #dce2eb; border-radius: 8px; padding: 11px 12px; }
+.catalog-search select { max-width: 190px; min-width: 135px; border: 1px solid #dce2eb; border-radius: 8px; padding: 9px 10px; color: #526078; background: #fff; font-size: 11px; }
 .catalog-meta { display: flex; justify-content: space-between; gap: 12px; margin: 19px 0 10px; color: #8793a6; font-size: 11px; }
 .catalog-panel td:nth-child(6) { min-width: 260px; white-space: pre-wrap; }
 .catalog-panel td:nth-child(5), .catalog-panel td:nth-child(7) { min-width: 150px; white-space: pre-wrap; }
