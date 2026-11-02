@@ -15,6 +15,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   extractOCRImages, saveOCRKeywords, type OCRCandidate, type OCRFileResult } from './api'
 import { loadAdminApprovedPartials, saveAdminApprovedPartials,
   type ApprovedPartialKeyword, type ApprovedPartialRules } from './api'
+import { loadDropdownSettings, saveAdminDropdownSettings,
+  type AdminDropdownSettings } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -37,6 +39,7 @@ const keywordRequestStatusLabels: Record<string, string> = {
 type EditableKeywordField = '상품카테고리' | '리스크 등급' | '대체키워드' |
   '리스크 등급별 세부 심의기준' | '증빙자료유형'
 type NewKeywordForm = { term: string; category: string; risk: string; alternative: string; criteria: string; evidenceType: string }
+type AdminDropdownText = Record<keyof AdminDropdownSettings, string>
 
 function nextKeywordCode(category: string, rows: KeywordRow[]) {
   const categoryRows = rows.filter(row => row.상품카테고리.trim() === category.trim())
@@ -244,6 +247,16 @@ function App() {
   const [approvedPartialSaving, setApprovedPartialSaving] = useState(false)
   const [approvedPartialError, setApprovedPartialError] = useState('')
   const [approvedPartialMessage, setApprovedPartialMessage] = useState('')
+  const [adminDropdownSettings, setAdminDropdownSettings] = useState<AdminDropdownSettings>({
+    opt_categories: [], opt_risks: [], opt_details: [], opt_evidences: [], opt_alt_terms: [],
+  })
+  const [adminDropdownText, setAdminDropdownText] = useState<AdminDropdownText>({
+    opt_categories: '', opt_risks: '', opt_details: '', opt_evidences: '', opt_alt_terms: '',
+  })
+  const [dropdownBusy, setDropdownBusy] = useState(false)
+  const [dropdownSaving, setDropdownSaving] = useState(false)
+  const [dropdownError, setDropdownError] = useState('')
+  const [dropdownMessage, setDropdownMessage] = useState('')
   const [recommendations, setRecommendations] = useState<NormalizationRecommendation[]>([])
   const [selectedRecommendationIds, setSelectedRecommendationIds] = useState<string[]>([])
   const [recommendationBusy, setRecommendationBusy] = useState(false)
@@ -442,6 +455,20 @@ function App() {
   }, [page, user?.id, user?.app_metadata?.role, normalizationRefresh])
 
   useEffect(() => {
+    if (!user?.id) return
+    let active = true
+    void loadDropdownSettings().then(settings => {
+      if (!active) return
+      setAdminDropdownSettings(settings)
+      if (user.app_metadata?.role === 'admin') {
+        setAdminDropdownText(Object.fromEntries(Object.entries(settings)
+          .map(([key, values]) => [key, values.join('\n')])) as AdminDropdownText)
+      }
+    }).catch(() => { /* Dropdown values can fall back to values in the keyword catalog. */ })
+    return () => { active = false }
+  }, [user?.id])
+
+  useEffect(() => {
     if (page !== 'normalization-admin' || user?.app_metadata?.role !== 'admin') return
     let active = true
     setApprovedPartialBusy(true)
@@ -625,6 +652,33 @@ function App() {
     }
   }
 
+  async function saveDropdownSettings() {
+    const values = (text: string) => [...new Set(text.split(/\r?\n/).map(value => value.trim()).filter(Boolean))]
+    const settings = {
+      opt_categories: values(adminDropdownText.opt_categories), opt_risks: values(adminDropdownText.opt_risks),
+      opt_details: values(adminDropdownText.opt_details), opt_evidences: values(adminDropdownText.opt_evidences),
+      opt_alt_terms: values(adminDropdownText.opt_alt_terms),
+    }
+    if (!settings.opt_categories.length || !settings.opt_risks.length) {
+      setDropdownError('카테고리와 리스크 목록은 각각 한 개 이상 필요합니다.')
+      return
+    }
+    setDropdownSaving(true)
+    setDropdownError('')
+    setDropdownMessage('')
+    try {
+      const saved = await saveAdminDropdownSettings(settings)
+      setAdminDropdownSettings(saved)
+      setAdminDropdownText(Object.fromEntries(Object.entries(saved)
+        .map(([key, items]) => [key, items.join('\n')])) as AdminDropdownText)
+      setDropdownMessage('드롭다운 설정을 저장했습니다.')
+    } catch (error) {
+      setDropdownError(error instanceof Error ? error.message : '드롭다운 설정을 저장하지 못했습니다.')
+    } finally {
+      setDropdownSaving(false)
+    }
+  }
+
   async function submitAnalysis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!text.trim()) {
@@ -684,6 +738,9 @@ function App() {
     const query = approvedPartialSearch.trim().toLocaleLowerCase()
     return !query || `${row.kwd_no} ${row.term}`.toLocaleLowerCase().includes(query)
   }).slice(0, 200)
+  const editorCategories = adminDropdownSettings.opt_categories.length ? adminDropdownSettings.opt_categories : filters.categories
+  const editorRisks = adminDropdownSettings.opt_risks.length ? adminDropdownSettings.opt_risks : filters.risks
+  const editorEvidenceTypes = adminDropdownSettings.opt_evidences.length ? adminDropdownSettings.opt_evidences : (filters.evidence_types ?? [])
 
   function toggleFilter(value: string, selected: string[], setSelected: (values: string[]) => void) {
     setSelected(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value])
@@ -1286,6 +1343,37 @@ function App() {
                     onClick={saveApprovedPartialRules}>{approvedPartialSaving ? '저장 중…' : '승인 표현 저장'}</button>
                 </div>
               </section>
+              <section className="approved-partial-editor dropdown-settings-editor">
+                <div className="request-history-heading"><div><h2>공통 드롭다운 값</h2>
+                  <p>새 키워드, OCR 검토와 등록 요청 분류에 사용할 선택지를 관리합니다. 한 줄에 하나씩 입력하세요.</p></div></div>
+                {dropdownError && <p className="error-message" role="alert">{dropdownError}</p>}
+                {dropdownMessage && <p className="success-message" role="status">{dropdownMessage}</p>}
+                <label className="normalization-setting-field">카테고리
+                  <textarea value={adminDropdownText.opt_categories} disabled={dropdownBusy || dropdownSaving}
+                    onChange={event => setAdminDropdownText(previous => ({ ...previous, opt_categories: event.target.value }))} />
+                </label>
+                <label className="normalization-setting-field">리스크 등급
+                  <textarea value={adminDropdownText.opt_risks} disabled={dropdownBusy || dropdownSaving}
+                    onChange={event => setAdminDropdownText(previous => ({ ...previous, opt_risks: event.target.value }))} />
+                </label>
+                <label className="normalization-setting-field">심의 기준
+                  <textarea value={adminDropdownText.opt_details} disabled={dropdownBusy || dropdownSaving}
+                    onChange={event => setAdminDropdownText(previous => ({ ...previous, opt_details: event.target.value }))} />
+                </label>
+                <label className="normalization-setting-field">증빙 유형
+                  <textarea value={adminDropdownText.opt_evidences} disabled={dropdownBusy || dropdownSaving}
+                    onChange={event => setAdminDropdownText(previous => ({ ...previous, opt_evidences: event.target.value }))} />
+                </label>
+                <label className="normalization-setting-field">대체 키워드
+                  <textarea value={adminDropdownText.opt_alt_terms} disabled={dropdownBusy || dropdownSaving}
+                    onChange={event => setAdminDropdownText(previous => ({ ...previous, opt_alt_terms: event.target.value }))} />
+                </label>
+                <div className="admin-keyword-toolbar">
+                  <span>{dropdownBusy ? '설정 불러오는 중…' : '심의 기준·증빙 유형·대체 키워드에는 “-” 항목이 항상 유지됩니다.'}</span>
+                  <button className="primary-button" disabled={dropdownBusy || dropdownSaving}
+                    onClick={saveDropdownSettings}>{dropdownSaving ? '저장 중…' : '드롭다운 값 저장'}</button>
+                </div>
+              </section>
             </div>
           </section>
         </> : page === 'normalization-admin' ? <section className="state-card">
@@ -1322,12 +1410,12 @@ function App() {
                   <td><select aria-label={`${item.term} 카테고리`} value={registrationDrafts[item.id]?.category ?? ''}
                     disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
                       [item.id]: { ...previous[item.id], category: event.target.value } }))}>
-                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorCategories.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><select aria-label={`${item.term} 리스크`} value={registrationDrafts[item.id]?.risk ?? ''}
                     disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
                       [item.id]: { ...previous[item.id], risk: event.target.value } }))}>
-                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorRisks.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><textarea aria-label={`${item.term} 심의 기준`} value={registrationDrafts[item.id]?.criteria ?? ''}
                     disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
@@ -1335,7 +1423,7 @@ function App() {
                   <td><select aria-label={`${item.term} 증빙 유형`} value={registrationDrafts[item.id]?.evidence_type ?? ''}
                     disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
                       [item.id]: { ...previous[item.id], evidence_type: event.target.value } }))}>
-                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorEvidenceTypes.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><input aria-label={`${item.term} 대체 키워드`} value={registrationDrafts[item.id]?.alternative ?? '-'}
                     disabled={registrationBusy || registrationSaving} onChange={event => setRegistrationDrafts(previous => ({ ...previous,
@@ -1383,15 +1471,15 @@ function App() {
                     onChange={event => setNewKeywordForm({ ...newKeywordForm, term: event.target.value })} /></label>
                   <label>카테고리<select required value={newKeywordForm.category}
                     onChange={event => setNewKeywordForm({ ...newKeywordForm, category: event.target.value })}>
-                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorCategories.map(value => <option key={value}>{value}</option>)}
                   </select></label>
                   <label>리스크<select required value={newKeywordForm.risk}
                     onChange={event => setNewKeywordForm({ ...newKeywordForm, risk: event.target.value })}>
-                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorRisks.map(value => <option key={value}>{value}</option>)}
                   </select></label>
                   <label>증빙 유형<select required value={newKeywordForm.evidenceType}
                     onChange={event => setNewKeywordForm({ ...newKeywordForm, evidenceType: event.target.value })}>
-                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorEvidenceTypes.map(value => <option key={value}>{value}</option>)}
                   </select></label>
                   <label>대체 키워드<input maxLength={2000} value={newKeywordForm.alternative}
                     onChange={event => setNewKeywordForm({ ...newKeywordForm, alternative: event.target.value })} /></label>
@@ -1644,17 +1732,17 @@ function App() {
                     <td>{row.source_terms}</td>
                     <td><select aria-label={`${row.term} 추천 카테고리`} value={row.category}
                       onChange={event => updateRecommendation(row.recommendation_id, 'category', event.target.value)}>
-                      <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                      <option value="">선택</option>{editorCategories.map(value => <option key={value}>{value}</option>)}
                     </select></td>
                     <td><select aria-label={`${row.term} 추천 리스크`} value={row.risk}
                       onChange={event => updateRecommendation(row.recommendation_id, 'risk', event.target.value)}>
-                      <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                      <option value="">선택</option>{editorRisks.map(value => <option key={value}>{value}</option>)}
                     </select></td>
                     <td><textarea aria-label={`${row.term} 추천 심의 기준`} value={row.criteria}
                       onChange={event => updateRecommendation(row.recommendation_id, 'criteria', event.target.value)} /></td>
                     <td><select aria-label={`${row.term} 추천 증빙 유형`} value={row.evidence_type}
                       onChange={event => updateRecommendation(row.recommendation_id, 'evidence_type', event.target.value)}>
-                      <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                      <option value="">선택</option>{editorEvidenceTypes.map(value => <option key={value}>{value}</option>)}
                     </select></td>
                     <td><input aria-label={`${row.term} 추천 대체 키워드`} value={row.alternative}
                       onChange={event => updateRecommendation(row.recommendation_id, 'alternative', event.target.value)} /></td>
@@ -1825,17 +1913,17 @@ function App() {
                   <td>{Math.round(candidate.confidence * 100)}%</td><td>{candidate.source_files.join(', ')}</td>
                   <td><select aria-label="OCR 카테고리" value={candidate.category} disabled={ocrSaveBusy}
                     onChange={event => updateOCRCandidate(index, 'category', event.target.value)}>
-                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorCategories.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><select aria-label="OCR 리스크 등급" value={candidate.risk} disabled={ocrSaveBusy}
                     onChange={event => updateOCRCandidate(index, 'risk', event.target.value)}>
-                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorRisks.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><textarea aria-label="OCR 심의 기준" value={candidate.detail} disabled={ocrSaveBusy}
                     onChange={event => updateOCRCandidate(index, 'detail', event.target.value)} /></td>
                   <td><select aria-label="OCR 증빙 유형" value={candidate.evidence} disabled={ocrSaveBusy}
                     onChange={event => updateOCRCandidate(index, 'evidence', event.target.value)}>
-                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                    <option value="">선택</option>{editorEvidenceTypes.map(value => <option key={value}>{value}</option>)}
                   </select></td>
                   <td><input aria-label="OCR 대체 키워드" value={candidate.alternative} disabled={ocrSaveBusy}
                     onChange={event => updateOCRCandidate(index, 'alternative', event.target.value)} /></td>

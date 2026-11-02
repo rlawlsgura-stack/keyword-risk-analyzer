@@ -132,6 +132,8 @@ textarea::placeholder { color: #a6b0c0; }
 .approved-partial-editor .request-history-heading p { margin: 5px 0 0; color: #8490a2; font-size: 11px; }
 .approved-partial-editor .normalization-setting-field { max-width: 600px; }
 .approved-partial-editor textarea { min-height: 180px; }
+.dropdown-settings-editor .normalization-setting-field textarea { min-height: 110px; }
+.dropdown-settings-editor .admin-keyword-toolbar span { color: #8490a2; font-size: 10px; }
 .normalization-setting-field { display: grid; gap: 8px; color: #3c4b63; font-size: 12px; font-weight: 600; }
 .normalization-setting-field input, .normalization-setting-field textarea { width: 100%; border: 1px solid #dce2eb; border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 12px; }
 .normalization-setting-field textarea { min-height: 220px; resize: vertical; }

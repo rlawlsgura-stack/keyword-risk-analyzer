@@ -115,6 +115,10 @@ export type OCRFileResult = {
 }
 export type ApprovedPartialKeyword = { kwd_no: string; term: string }
 export type ApprovedPartialRules = Record<string, { term: string; expressions: string[] }>
+export type AdminDropdownSettings = {
+  opt_categories: string[]; opt_risks: string[]; opt_details: string[]
+  opt_evidences: string[]; opt_alt_terms: string[]
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -338,5 +342,19 @@ export async function saveAdminApprovedPartials(input: {
 }): Promise<{ kwd_no: string; term: string; expressions: string[] }> {
   return requestApi('/api/v1/admin/approved-partials', {
     method: 'PUT', body: JSON.stringify(input),
+  })
+}
+
+export async function loadAdminDropdownSettings(): Promise<AdminDropdownSettings> {
+  return requestApi('/api/v1/admin/dropdown-settings')
+}
+
+export async function loadDropdownSettings(): Promise<AdminDropdownSettings> {
+  return requestApi('/api/v1/dropdown-settings')
+}
+
+export async function saveAdminDropdownSettings(settings: AdminDropdownSettings): Promise<AdminDropdownSettings> {
+  return requestApi('/api/v1/admin/dropdown-settings', {
+    method: 'PUT', body: JSON.stringify(settings),
   })
 }

@@ -1,3 +1,8 @@
+## React preview - Add dropdown option management
+
+- Let admins manage shared category, risk, review-criteria, evidence, and alternative-keyword options.
+- Use the configured options in OCR review, registration requests, and keyword creation.
+
 ## React preview - Add approved partial expressions
 
 - Let admins approve keyword-contained expressions used by partial matching.

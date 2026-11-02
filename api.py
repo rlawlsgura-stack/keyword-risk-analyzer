@@ -191,6 +191,15 @@ class AdminNormalizationSettings(BaseModel):
     extra_suffixes: list[str] = Field(max_length=1000)
 
 
+class AdminDropdownSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    opt_categories: list[str] = Field(min_length=1, max_length=500)
+    opt_risks: list[str] = Field(min_length=1, max_length=200)
+    opt_details: list[str] = Field(max_length=1000)
+    opt_evidences: list[str] = Field(max_length=1000)
+    opt_alt_terms: list[str] = Field(max_length=1000)
+
+
 class UnmatchedSurface(BaseModel):
     model_config = ConfigDict(extra='forbid')
     surface: str = Field(min_length=1, max_length=150)
@@ -842,6 +851,58 @@ def save_admin_approved_partials(body: AdminApprovedPartialUpdate,
         updated.pop(body.kwd_no, None)
     repository.save_setting('approved_partial_expressions_v272', updated)
     return {'kwd_no': body.kwd_no, 'term': body.term, 'expressions': expressions}
+
+
+_DEFAULT_DROPDOWN_CONFIG = {
+    'opt_categories': ['공통(전체)', '식품', '건강기능식품', '화장품', '공산품'],
+    'opt_risks': ['1등급(사용금지)', '2등급(대체키워드사용)', '3등급(조건부사용)',
+                  '4등급(사용가능)', '5등급(테스트 등급)'],
+    'opt_details': ['-', '실증자료제출', '시험성적서제출', '기능입증자료제출', '표시기준준수', '전문의견서', '문헌자료제출'],
+    'opt_evidences': ['-', '인체적용시험결과서', '기능성평가보고서', '임상시험결과보고서', '실험데이터요약서', '제품성분분석표', '문헌자료', '시험성적서'],
+    'opt_alt_terms': ['-', '탄력', '보습', '진정', '미백', '주름개선', '자외선차단', '영양공급'],
+}
+
+
+@app.get('/api/v1/admin/dropdown-settings')
+def admin_dropdown_settings(actor=Depends(current_actor),
+                            credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                            repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    saved = repository.load_setting('dropdown_config', None) or {}
+    return {key: saved.get(key, values) for key, values in _DEFAULT_DROPDOWN_CONFIG.items()}
+
+
+@app.get('/api/v1/dropdown-settings')
+def dropdown_settings(actor=Depends(current_actor), repository=Depends(get_repository)):
+    saved = repository.load_setting('dropdown_config', None) or {}
+    return {key: saved.get(key, values) for key, values in _DEFAULT_DROPDOWN_CONFIG.items()}
+
+
+@app.put('/api/v1/admin/dropdown-settings')
+def save_admin_dropdown_settings(body: AdminDropdownSettings, actor=Depends(current_actor),
+                                 credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                 repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    config = {}
+    for key, values in body.model_dump().items():
+        cleaned = list(dict.fromkeys(value.strip() for value in values if value.strip()))
+        if key in {'opt_categories', 'opt_risks'} and not cleaned:
+            raise HTTPException(422, 'Category and risk dropdowns must each contain at least one value.')
+        if any(len(value) > 200 for value in cleaned):
+            raise HTTPException(422, 'Dropdown values must be at most 200 characters.')
+        if key in {'opt_details', 'opt_evidences', 'opt_alt_terms'} and '-' not in cleaned:
+            cleaned.append('-')
+        config[key] = cleaned
+    repository.save_setting('dropdown_config', config)
+    return config
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
