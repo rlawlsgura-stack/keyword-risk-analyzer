@@ -1,7 +1,7 @@
-## React preview - Add keyword editing
+## React preview - Add keyword editing and creation
 
-- Let admins edit existing keyword classifications and review criteria with revision checks.
-- Preserve row IDs and hit statistics; keep adding and deleting rows in Streamlit.
+- Let admins edit existing keyword classifications and review criteria, and add new rows with generated IDs.
+- Preserve existing row IDs and hit statistics; keep deletion in Streamlit.
 
 ## React preview - Add admin user role management
 

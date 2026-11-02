@@ -344,13 +344,21 @@ def save_admin_keywords(body: AdminKeywordSave, actor=Depends(current_actor),
     if len(set(codes)) != len(codes):
         raise HTTPException(422, 'Keyword numbers must be unique.')
     current_codes = set(current['kwd_no'].astype(str).str.strip())
-    if set(codes) != current_codes:
-        raise HTTPException(422, 'This editor only updates existing keyword rows.')
+    submitted_codes = set(codes)
+    if not current_codes.issubset(submitted_codes):
+        raise HTTPException(422, 'This editor does not delete existing keyword rows.')
+    new_codes = submitted_codes - current_codes
+    if len(new_codes) > 1000:
+        raise HTTPException(422, 'At most 1,000 new keyword rows can be saved at once.')
     current_by_code = current.set_index(current['kwd_no'].astype(str).str.strip())
     for row, code in zip(rows, codes):
         row['kwd_no'] = code
-        row[COUNT_COL] = str(current_by_code.at[code, COUNT_COL])
-        row[LAST_COL] = str(current_by_code.at[code, LAST_COL])
+        if code in current_codes:
+            row[COUNT_COL] = str(current_by_code.at[code, COUNT_COL])
+            row[LAST_COL] = str(current_by_code.at[code, LAST_COL])
+        else:
+            row[COUNT_COL] = '0'
+            row[LAST_COL] = ''
     import pandas as pd
     frame = pd.DataFrame(rows, columns=DB_COLS).fillna('').astype(str)
     try:

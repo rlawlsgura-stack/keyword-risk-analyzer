@@ -28,6 +28,33 @@ const keywordRequestStatusLabels: Record<string, string> = {
 }
 type EditableKeywordField = '상품카테고리' | '리스크 등급' | '대체키워드' |
   '리스크 등급별 세부 심의기준' | '증빙자료유형'
+type NewKeywordForm = { term: string; category: string; risk: string; alternative: string; criteria: string; evidenceType: string }
+
+function nextKeywordCode(category: string, rows: KeywordRow[]) {
+  const categoryRows = rows.filter(row => row.상품카테고리.trim() === category.trim())
+  const codePattern = /^([A-Z]+)(\d{3,})$/
+  const categoryCodes = categoryRows.map(row => row.kwd_no.match(codePattern)).filter(Boolean)
+  let prefix = ''
+  if (categoryCodes.length) {
+    const counts = new Map<string, number>()
+    for (const code of categoryCodes) counts.set(code![1], (counts.get(code![1]) ?? 0) + 1)
+    prefix = [...counts].sort((left, right) => right[1] - left[1])[0][0]
+  } else {
+    const defaultPrefixes: Record<string, string> = {
+      '공통(전체)': 'A', '식품': 'F', '건강기능식품': 'G', '화장품': 'B', '공산품': 'I',
+    }
+    const initial = category.trim().charAt(0).toLocaleUpperCase()
+    prefix = defaultPrefixes[category.trim()] ?? (/^[A-Z]$/.test(initial) ? initial : 'U')
+  }
+  const digitValues = (items: KeywordRow[]) => items.map(row => row.kwd_no.match(codePattern))
+    .filter((match): match is RegExpMatchArray => Boolean(match && match[1] === prefix))
+  const matchingCategoryCodes = digitValues(categoryRows)
+  const allMatchingCodes = digitValues(rows)
+  const source = matchingCategoryCodes.length ? matchingCategoryCodes : allMatchingCodes
+  const next = source.reduce((max, match) => Math.max(max, Number(match[2])), 0) + 1
+  const width = Math.max(3, ...matchingCategoryCodes.map(match => match[2].length))
+  return `${prefix}${String(next).padStart(width, '0')}`
+}
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
   // API offsets count Unicode code points; JavaScript string slicing counts UTF-16 units.
@@ -162,6 +189,10 @@ function App() {
   const [adminKeywordRefresh, setAdminKeywordRefresh] = useState(0)
   const [adminKeywordError, setAdminKeywordError] = useState('')
   const [adminKeywordMessage, setAdminKeywordMessage] = useState('')
+  const [newKeywordOpen, setNewKeywordOpen] = useState(false)
+  const [newKeywordForm, setNewKeywordForm] = useState<NewKeywordForm>({
+    term: '', category: '', risk: '', alternative: '-', criteria: '', evidenceType: '',
+  })
 
   useEffect(() => {
     if (!supabase) {
@@ -639,6 +670,41 @@ function App() {
     }
   }
 
+  function addAdminKeyword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const term = newKeywordForm.term.trim()
+    const category = newKeywordForm.category.trim()
+    const duplicate = adminKeywordRows.some(row => row.상품카테고리.trim() === category &&
+      row.키워드명.trim().toLocaleLowerCase() === term.toLocaleLowerCase())
+    if (!term || !category || !newKeywordForm.risk.trim() || !newKeywordForm.criteria.trim() || !newKeywordForm.evidenceType.trim()) {
+      setAdminKeywordError('키워드명, 카테고리, 리스크, 심의 기준과 증빙 유형을 입력하세요.')
+      return
+    }
+    if (duplicate) {
+      setAdminKeywordError('같은 카테고리에 같은 키워드명이 이미 있습니다.')
+      return
+    }
+    const code = nextKeywordCode(category, adminKeywordRows)
+    if (adminKeywordRows.some(row => row.kwd_no === code)) {
+      setAdminKeywordError('다음 키워드 번호가 이미 사용 중입니다. 원장을 다시 불러오세요.')
+      return
+    }
+    const row: KeywordRow = {
+      kwd_no: code, 키워드명: term, 상품카테고리: category, '리스크 등급': newKeywordForm.risk.trim(),
+      대체키워드: newKeywordForm.alternative.trim() || '-',
+      '리스크 등급별 세부 심의기준': newKeywordForm.criteria.trim(), 증빙자료유형: newKeywordForm.evidenceType.trim(),
+      '키워드 조회 수(누적카운트)': '0', '마지막 출력일자': '',
+    }
+    setAdminKeywordRows(previous => [...previous, row])
+    setAdminKeywordDirty(true)
+    setAdminKeywordError('')
+    setAdminKeywordMessage(`새 행 ${code}을 추가했습니다. 변경사항 저장을 눌러 DB에 반영하세요.`)
+    setAdminKeywordSearch(code)
+    setAdminKeywordPageNumber(1)
+    setNewKeywordForm({ term: '', category, risk: '', alternative: '-', criteria: '', evidenceType: '' })
+    setNewKeywordOpen(false)
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -764,10 +830,36 @@ function App() {
                     setAdminKeywordDirty(false)
                     setAdminKeywordRefresh(value => value + 1)
                   }}>원장 다시 불러오기</button>
+                <button className="secondary-button" disabled={adminKeywordBusy || adminKeywordSaving}
+                  onClick={() => { setNewKeywordOpen(value => !value); setAdminKeywordError('') }}>새 키워드 추가</button>
                 <button className="primary-button" disabled={!adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
                   onClick={saveAdminKeywordChanges}>{adminKeywordSaving ? '저장 중…' : '변경사항 저장'}</button>
               </div>
-              <p className="unmatched-note">번호·키워드명·조회 횟수·마지막 출력일은 읽기 전용입니다. 새 행 추가와 삭제는 기존 Streamlit 관리자 화면에서 계속할 수 있습니다.</p>
+              <p className="unmatched-note">번호·키워드명·조회 횟수·마지막 출력일은 읽기 전용입니다. 행 삭제는 기존 Streamlit 관리자 화면에서 할 수 있습니다.</p>
+              {newKeywordOpen && <form className="new-keyword-form" onSubmit={addAdminKeyword}>
+                <h2>새 키워드 행</h2>
+                <div className="new-keyword-fields">
+                  <label>키워드명<input required maxLength={500} value={newKeywordForm.term}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, term: event.target.value })} /></label>
+                  <label>카테고리<select required value={newKeywordForm.category}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, category: event.target.value })}>
+                    <option value="">선택</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                  </select></label>
+                  <label>리스크<select required value={newKeywordForm.risk}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, risk: event.target.value })}>
+                    <option value="">선택</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                  </select></label>
+                  <label>증빙 유형<select required value={newKeywordForm.evidenceType}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, evidenceType: event.target.value })}>
+                    <option value="">선택</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                  </select></label>
+                  <label>대체 키워드<input maxLength={2000} value={newKeywordForm.alternative}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, alternative: event.target.value })} /></label>
+                  <label className="criteria-field">심의 기준<textarea required maxLength={5000} value={newKeywordForm.criteria}
+                    onChange={event => setNewKeywordForm({ ...newKeywordForm, criteria: event.target.value })} /></label>
+                </div>
+                <button className="primary-button" type="submit">행 추가</button>
+              </form>}
               {adminKeywordDirty && <p className="admin-dirty-note">저장하지 않은 변경사항이 있습니다.</p>}
               {adminKeywordMessage && <p className="success-message" role="status">{adminKeywordMessage}</p>}
               {adminKeywordError && <p className="error-message" role="alert">{adminKeywordError}</p>}

@@ -115,6 +115,14 @@ textarea::placeholder { color: #a6b0c0; }
 .admin-keyword-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
 .admin-keyword-toolbar input { flex: 1 1 260px; min-width: 0; border: 1px solid #dce2eb; border-radius: 8px; padding: 10px 12px; }
 .admin-keyword-toolbar span { color: #8a95a7; font-size: 10px; white-space: nowrap; }
+.new-keyword-form { display: grid; gap: 13px; margin: 17px 0; padding: 16px; border: 1px solid #e5e9ef; border-radius: 9px; background: #fafbfc; }
+.new-keyword-form h2 { margin: 0; font-size: 14px; }
+.new-keyword-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+.new-keyword-fields label { display: grid; gap: 6px; color: #68758a; font-size: 10px; font-weight: 600; }
+.new-keyword-fields input, .new-keyword-fields select { min-width: 0; min-height: 36px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }
+.new-keyword-fields .criteria-field { grid-column: span 3; }
+.new-keyword-fields textarea { min-height: 95px; padding: 9px; font-size: 11px; }
+.new-keyword-form > .primary-button { justify-self: start; }
 .admin-keyword-table td { vertical-align: top; }
 .admin-keyword-table input { width: 145px; border: 1px solid #dce2eb; border-radius: 6px; padding: 8px; font-size: 11px; }
 .admin-keyword-table textarea { width: 250px; min-height: 85px; padding: 8px; font-size: 11px; line-height: 1.5; }
@@ -215,6 +223,8 @@ td strong { color: #2d3a52; }
   .report-panel { padding: 15px; }
   .regulation-form { padding: 15px; }
   .request-section { grid-template-columns: 1fr; }
+  .new-keyword-fields { grid-template-columns: 1fr; }
+  .new-keyword-fields .criteria-field { grid-column: auto; }
   .report-controls .secondary-button { margin-left: 0; }
   .preview-pill { display: none; }
   .editor-panel, .settings-panel { padding: 18px; }
