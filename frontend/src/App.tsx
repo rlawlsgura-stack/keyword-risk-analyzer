@@ -1398,7 +1398,7 @@ function App() {
       </button>}
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
-        <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
+        <p>분석, OCR, 키워드 관리 기능을 React에서 확인할 수 있습니다.</p>
       </div>
     </aside>
 

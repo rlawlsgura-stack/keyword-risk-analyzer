@@ -1,3 +1,7 @@
+## React preview - Refresh the sidebar description
+
+- Update the footer copy to match the current React analysis, OCR, and keyword administration features.
+
 ## React preview - Allow the alternate Vite port
 
 - Allow the local React preview on port 5174 through the API's default CORS configuration when port 5173 is already occupied.
