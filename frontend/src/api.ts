@@ -94,6 +94,7 @@ export type KeywordRequestRecord = {
   admin_reply: string
   created_at: string
 }
+export type RequestEmailNotifications = { enabled: boolean; configured: boolean }
 export type AdminUser = { id: string; email: string; role: 'admin' | 'member' | null; email_confirmed: boolean }
 export type UnmatchedRegistrationRequest = {
   id: string; term: string; term_norm: string; source_terms: string; occurrences: number
@@ -274,6 +275,16 @@ export async function updateKeywordRequest(requestId: string, status: string,
   adminReply: string): Promise<{ id: string; status: string; admin_reply: string }> {
   return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}`, {
     method: 'PUT', body: JSON.stringify({ status, admin_reply: adminReply }),
+  })
+}
+
+export async function loadRequestEmailNotifications(): Promise<RequestEmailNotifications> {
+  return requestApi('/api/v1/admin/keyword-request-notifications')
+}
+
+export async function saveRequestEmailNotifications(enabled: boolean): Promise<RequestEmailNotifications> {
+  return requestApi('/api/v1/admin/keyword-request-notifications', {
+    method: 'PUT', body: JSON.stringify({ enabled }),
   })
 }
 

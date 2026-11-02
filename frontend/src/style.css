@@ -170,6 +170,11 @@ textarea::placeholder { color: #a6b0c0; }
 .report-reset-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; padding: 12px; border: 1px solid #e8ecf2; border-radius: 8px; }
 .report-reset-controls strong { margin-right: 4px; color: #58657a; font-size: 11px; }
 .report-reset-controls small { flex-basis: 100%; color: #8490a2; font-size: 10px; }
+.request-email-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 16px; padding: 12px; border: 1px solid #e8ecf2; border-radius: 8px; }
+.request-email-settings > div { display: grid; flex: 1 1 220px; gap: 4px; }
+.request-email-settings strong { color: #58657a; font-size: 11px; }
+.request-email-settings small { color: #8490a2; font-size: 10px; }
+.request-email-settings label { display: flex; align-items: center; gap: 5px; color: #58657a; font-size: 11px; }
 .ocr-preview-card p, .ocr-preview-card small { color: #8490a2; font-size: 10px; }
 .ocr-preview-card details { font-size: 11px; }
 .ocr-preview-card details ul { max-height: 170px; overflow: auto; padding-left: 18px; line-height: 1.7; }

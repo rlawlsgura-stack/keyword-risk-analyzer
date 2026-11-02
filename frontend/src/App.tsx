@@ -5,7 +5,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
-  submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
+  submitKeywordRequest, updateKeywordRequest, loadRequestEmailNotifications,
+  saveRequestEmailNotifications, type RequestEmailNotifications, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords, deleteAdminKeywords,
   uploadAdminKeywords,
   downloadAdminKeywordTemplateXlsx,
@@ -269,6 +270,9 @@ function App() {
   const [requestSearchBusy, setRequestSearchBusy] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [requestMessage, setRequestMessage] = useState('')
+  const [requestEmailSettings, setRequestEmailSettings] = useState<RequestEmailNotifications | null>(null)
+  const [requestEmailBusy, setRequestEmailBusy] = useState(false)
+  const [requestEmailError, setRequestEmailError] = useState('')
   const [adminUserPage, setAdminUserPage] = useState(1)
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [adminUsersHasMore, setAdminUsersHasMore] = useState(false)
@@ -462,6 +466,17 @@ function App() {
     }).finally(() => { if (active) setRequestBusy(false) })
     return () => { active = false }
   }, [page, user?.id, requestRefresh])
+
+  useEffect(() => {
+    if (page !== 'requests' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    void loadRequestEmailNotifications().then(settings => {
+      if (active) setRequestEmailSettings(settings)
+    }).catch(error => {
+      if (active) setRequestEmailError(error instanceof Error ? error.message : '알림 설정을 불러오지 못했습니다.')
+    })
+    return () => { active = false }
+  }, [page, user?.id])
 
   useEffect(() => {
     if (page !== 'users' || user?.app_metadata?.role !== 'admin') return
@@ -1205,6 +1220,20 @@ function App() {
     }
   }
 
+  async function saveRequestEmailSetting() {
+    if (!requestEmailSettings) return
+    setRequestEmailBusy(true)
+    setRequestEmailError('')
+    try {
+      setRequestEmailSettings(await saveRequestEmailNotifications(requestEmailSettings.enabled))
+      setRequestMessage('문의 이메일 알림 설정을 저장했습니다.')
+    } catch (error) {
+      setRequestEmailError(error instanceof Error ? error.message : '알림 설정을 저장하지 못했습니다.')
+    } finally {
+      setRequestEmailBusy(false)
+    }
+  }
+
   async function saveAdminUserRole(item: AdminUser) {
     const nextRole = adminUserRoleDrafts[item.id]
     if (!nextRole || nextRole === item.role) return
@@ -1808,6 +1837,17 @@ function App() {
               {requestError && <p className="error-message" role="alert">{requestError}</p>}
             </div>
             <div className="panel request-history">
+              {role === 'admin' && <div className="request-email-settings">
+                <div><strong>?? ?? ??? ??</strong><small>{requestEmailSettings?.configured
+                  ? '?? ???? ???? ????.'
+                  : '?? ??? ?????. API ????? ?? ??? ???? ???? ???? ????.'}</small></div>
+                <label><input type="checkbox" checked={requestEmailSettings?.enabled ?? false}
+                  disabled={!requestEmailSettings || requestEmailBusy || (!requestEmailSettings.configured && !requestEmailSettings.enabled)}
+                  onChange={event => setRequestEmailSettings(settings => settings ? { ...settings, enabled: event.target.checked } : settings)} /> ??</label>
+                <button className="secondary-button" disabled={!requestEmailSettings || requestEmailBusy}
+                  onClick={saveRequestEmailSetting}>{requestEmailBusy ? '?? ??' : '?? ?? ??'}</button>
+              </div>}
+              {requestEmailError && <p className="error-message" role="alert">{requestEmailError}</p>}
               <div className="request-history-heading"><h2>문의 내역</h2><span>{requestBusy ? '불러오는 중…' : `${requestRecords.length}건`}</span></div>
               {requestRecords.length ? <div className="request-record-list">{requestRecords.map(item => <details className="request-record" key={item.id}>
                 <summary><strong>{item.keyword_name} · {item.kwd_no}</strong>

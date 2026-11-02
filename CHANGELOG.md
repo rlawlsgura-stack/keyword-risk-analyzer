@@ -1,3 +1,8 @@
+## React preview - Add inquiry email notification settings
+
+- Let administrators view the delivery configuration status and save the shared new-inquiry email notification toggle.
+- Keep provider secrets server-side and prevent enabling delivery before server configuration is present.
+
 ## React preview - Add administrator report resets
 
 - Add administrator-only controls to reset cumulative keyword counts or exclude the latest seven days of analysis records from report totals.

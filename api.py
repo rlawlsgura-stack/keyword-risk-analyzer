@@ -138,6 +138,10 @@ class KeywordRequestUpdate(BaseModel):
     admin_reply: str = Field(default='', max_length=4000)
 
 
+class AdminRequestNotificationsUpdate(BaseModel):
+    enabled: bool
+
+
 class AdminUserRoleUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     role: Literal['admin', 'member']
@@ -653,6 +657,38 @@ def update_keyword_request(request_id: UUID, body: KeywordRequestUpdate,
         raise HTTPException(403, 'Administrator role required')
     return repository.update_keyword_request(str(request_id), body.status,
                                             body.admin_reply.strip(), credentials.credentials)
+
+
+@app.get('/api/v1/admin/keyword-request-notifications')
+def get_admin_request_notifications(actor=Depends(current_actor),
+                                    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                    repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    from request_notifications import is_notification_configured
+    return {'enabled': repository.load_request_email_notifications(credentials.credentials),
+            'configured': is_notification_configured()}
+
+
+@app.put('/api/v1/admin/keyword-request-notifications')
+def save_admin_request_notifications(body: AdminRequestNotificationsUpdate,
+                                     actor=Depends(current_actor),
+                                     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                     repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    from request_notifications import is_notification_configured
+    configured = is_notification_configured()
+    if body.enabled and not configured:
+        raise HTTPException(503, 'Email notification delivery is not configured.')
+    enabled = repository.save_request_email_notifications(body.enabled, credentials.credentials)
+    return {'enabled': enabled, 'configured': configured}
 
 
 @app.get('/api/v1/admin/users')
