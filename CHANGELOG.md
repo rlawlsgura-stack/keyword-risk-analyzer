@@ -1,3 +1,8 @@
+## FIXED329 - Connect the React analysis to current app rules
+
+- Add authenticated category and risk filters, current matching rules, and idempotent analysis recording to the React preview.
+- Prepare the Render static service with its API origin and Supabase publishable key.
+
 ## FIXED328 - Start the React transition
 
 - Preserve the Streamlit app as FIXED328 and start a separate React/TypeScript analysis preview using the existing FastAPI service.
