@@ -4582,12 +4582,11 @@ if cloud_enabled():
             render_keyword_requests_tab()
 
 def build_unmatched_registration_candidates(selected):
-    required = ['term', '상품카테고리', '리스크 등급',
-                '리스크 등급별 세부 심의기준', '증빙자료유형']
+    required = ['term', '상품카테고리', '리스크 등급']
     if selected.empty:
         raise ValueError("정규화 후보를 선택하세요.")
     if selected[required].fillna('').astype(str).apply(lambda col: col.str.strip().eq('')).any().any():
-        raise ValueError("선택 후보의 키워드명, 카테고리, 리스크 등급, 심의기준, 증빙자료유형을 모두 입력하세요.")
+        raise ValueError("선택 후보의 키워드명, 카테고리, 리스크 등급을 입력하세요.")
     candidates = []
     for _, item in selected.iterrows():
         term = str(item['term']).strip()
@@ -4595,12 +4594,14 @@ def build_unmatched_registration_candidates(selected):
         if not 1 <= len(term) <= 150 or len(source_terms) > 500:
             raise ValueError("후보 키워드 또는 원본 표현 길이를 확인하세요.")
         occurrences = int(item.get('occurrences') or 0)
+        criteria = item.get('리스크 등급별 세부 심의기준', '')
+        evidence_type = item.get('증빙자료유형', '')
         candidates.append({
             'term': term, 'source_terms': source_terms, 'occurrences': occurrences,
             'category': str(item['상품카테고리']).strip(),
             'risk': str(item['리스크 등급']).strip(),
-            'criteria': str(item['리스크 등급별 세부 심의기준']).strip(),
-            'evidence_type': str(item['증빙자료유형']).strip(),
+            'criteria': '' if pd.isna(criteria) else str(criteria).strip(),
+            'evidence_type': '' if pd.isna(evidence_type) else str(evidence_type).strip(),
             'alternative': str(item.get('대체키워드', '-') or '-').strip(),
         })
     return candidates
@@ -4995,8 +4996,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 "occurrences": st.column_config.NumberColumn("출현 횟수", disabled=True),
                 "상품카테고리": st.column_config.SelectboxColumn("상품카테고리", options=[""] + list(st.session_state.opt_categories), required=True),
                 "리스크 등급": st.column_config.SelectboxColumn("리스크 등급", options=[""] + list(st.session_state.opt_risks), required=True),
-                "리스크 등급별 세부 심의기준": st.column_config.SelectboxColumn("세부 심의기준", options=[""] + list(st.session_state.opt_details), required=True),
-                "증빙자료유형": st.column_config.SelectboxColumn("증빙자료유형", options=[""] + list(st.session_state.opt_evidences), required=True),
+                "리스크 등급별 세부 심의기준": st.column_config.SelectboxColumn("세부 심의기준", options=[""] + list(st.session_state.opt_details), required=False),
+                "증빙자료유형": st.column_config.SelectboxColumn("증빙자료유형", options=[""] + list(st.session_state.opt_evidences), required=False),
                 "대체키워드": st.column_config.SelectboxColumn("대체키워드", options=_include_empty_option(list(st.session_state.opt_alt_terms)), required=False),
                 "request_date": st.column_config.TextColumn("요청 접수일", disabled=True),
                 "request_id": None,
