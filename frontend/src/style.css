@@ -167,6 +167,9 @@ textarea::placeholder { color: #a6b0c0; }
 .ocr-selectable-line:hover { background: rgba(55, 115, 255, .16); outline: 1px solid rgba(55, 115, 255, .38); }
 .ocr-selectable-line > span { display: block; width: max-content; flex: none; transform-origin: left center; }
 .ocr-selectable-line > span::selection { color: #111; background: rgba(80, 145, 255, .72); }
+.report-reset-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0; padding: 12px; border: 1px solid #e8ecf2; border-radius: 8px; }
+.report-reset-controls strong { margin-right: 4px; color: #58657a; font-size: 11px; }
+.report-reset-controls small { flex-basis: 100%; color: #8490a2; font-size: 10px; }
 .ocr-preview-card p, .ocr-preview-card small { color: #8490a2; font-size: 10px; }
 .ocr-preview-card details { font-size: 11px; }
 .ocr-preview-card details ul { max-height: 170px; overflow: auto; padding-left: 18px; line-height: 1.7; }

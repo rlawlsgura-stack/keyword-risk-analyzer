@@ -1060,6 +1060,21 @@ def top_keywords(days: int = Query(7, ge=1, le=366),
     return {'items': repository.report(days, limit)}
 
 
+@app.post('/api/v1/admin/reports/reset/{scope}')
+def reset_report_data(scope: Literal['all', 'last-7-days'], actor=Depends(current_actor),
+                      credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                      repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    if scope == 'all':
+        repository.reset_counts()
+        return {'scope': scope, 'reset': True}
+    return {'scope': scope, 'removed': repository.reset_week()}
+
+
 @app.post('/api/v1/regulation/questions')
 def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_actor),
                         repository=Depends(get_repository)):

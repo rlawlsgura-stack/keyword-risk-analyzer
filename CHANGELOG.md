@@ -1,3 +1,8 @@
+## React preview - Add administrator report resets
+
+- Add administrator-only controls to reset cumulative keyword counts or exclude the latest seven days of analysis records from report totals.
+- Require a confirmation and keep the API authorization check server-side.
+
 ## React preview - Improve analysis highlight interactions
 
 - Color matched text by risk grade and highlight mixed or unknown grades in yellow.

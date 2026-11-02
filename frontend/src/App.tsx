@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
-  askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode,
+  askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
@@ -235,6 +235,8 @@ function App() {
   const [reportItems, setReportItems] = useState<TopKeyword[]>([])
   const [reportBusy, setReportBusy] = useState(false)
   const [reportError, setReportError] = useState('')
+  const [reportResetBusy, setReportResetBusy] = useState(false)
+  const [reportResetMessage, setReportResetMessage] = useState('')
   const [regulationDirection, setRegulationDirection] = useState<RegulationQuestion['direction']>('keyword_to_law')
   const [regulationQuery, setRegulationQuery] = useState('')
   const [regulationContext, setRegulationContext] = useState('')
@@ -890,6 +892,28 @@ function App() {
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  async function resetReport(scope: 'all' | 'last-7-days') {
+    const prompt = scope === 'all'
+      ? '전체 누적 조회수를 0으로 초기화할까요? 분석 기록은 유지됩니다.'
+      : '최근 7일간의 분석 기록을 리포트 집계에서 제외할까요?'
+    if (!window.confirm(prompt)) return
+    setReportResetBusy(true)
+    setReportResetMessage('')
+    setReportError('')
+    try {
+      const result = await resetAdminReportData(scope)
+      const data = await loadTopKeywords(reportDays, reportLimit)
+      setReportItems(data.items)
+      setReportResetMessage(scope === 'all'
+        ? '누적 조회수를 초기화했습니다. 분석 기록은 유지됩니다.'
+        : `최근 7일 분석 기록 ${result.removed ?? 0}건을 리포트에서 제외했습니다.`)
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : '리포트 데이터를 초기화하지 못했습니다.')
+    } finally {
+      setReportResetBusy(false)
+    }
   }
 
   async function exportKeywordCatalog() {
@@ -2011,6 +2035,15 @@ function App() {
                 </label>
                 {reportItems.length > 0 && <button className="secondary-button" onClick={downloadReportCsv}>CSV 다운로드</button>}
               </div>
+              {role === 'admin' && <div className="report-reset-controls">
+                <strong>관리자 초기화</strong>
+                <button className="secondary-button" disabled={reportResetBusy}
+                  onClick={() => resetReport('all')}>{reportResetBusy ? '처리 중…' : '누적 조회수 초기화'}</button>
+                <button className="secondary-button" disabled={reportResetBusy}
+                  onClick={() => resetReport('last-7-days')}>{reportResetBusy ? '처리 중…' : '최근 7일 기록 리포트에서 제외'}</button>
+                <small>누적 조회수 초기화는 분석 기록을 보존하며, 7일 기록 삭제는 최근 기간 리포트 집계에서만 제외하며, 원본 기록은 유지합니다.</small>
+              </div>}
+              {reportResetMessage && <p className="success-message" role="status">{reportResetMessage}</p>}
               <p className="report-period-note">최근 {reportDays}일의 공유 분석 기록 기준입니다.</p>
               {reportBusy && <p className="catalog-status" role="status">리포트를 불러오는 중…</p>}
               {reportError && <p className="error-message" role="alert">{reportError}</p>}

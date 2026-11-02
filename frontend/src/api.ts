@@ -183,6 +183,10 @@ export async function loadTopKeywords(days: number, limit: number): Promise<{ it
   return requestApi(`/api/v1/reports/top-keywords?${params}`)
 }
 
+export async function resetAdminReportData(scope: 'all' | 'last-7-days'): Promise<{ removed?: number }> {
+  return requestApi(`/api/v1/admin/reports/reset/${scope}`, { method: 'POST' })
+}
+
 export async function askRegulation(question: RegulationQuestion): Promise<RegulationResult> {
   return requestApi('/api/v1/regulation/questions', {
     method: 'POST',
