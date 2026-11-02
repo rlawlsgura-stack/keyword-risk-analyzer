@@ -59,6 +59,21 @@ export type KeywordRow = {
 
 export type TopKeyword = { kwd_no: string; hit_count: number; term: string | null }
 export type AnalysisFilters = { categories: string[]; risks: string[]; evidence_types?: string[] }
+export type RegulationQuestion = {
+  direction: 'keyword_to_law' | 'law_to_keywords'
+  query: string
+  context_text: string
+  category: string
+}
+export type RegulationResult = {
+  status: string
+  administrator_review: boolean
+  answer: string
+  sources: { id: string; label: string; text: string; url: string }[]
+  keyword_matches: { kwd_no: string; 키워드명: string; 상품카테고리: string; '리스크 등급': string;
+    대체키워드: string; '리스크 등급별 세부 심의기준': string }[]
+  llm_used: boolean
+}
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -114,4 +129,11 @@ export async function loadAllKeywords(): Promise<KeywordRow[]> {
 export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {
   const params = new URLSearchParams({ days: String(days), limit: String(limit) })
   return requestApi(`/api/v1/reports/top-keywords?${params}`)
+}
+
+export async function askRegulation(question: RegulationQuestion): Promise<RegulationResult> {
+  return requestApi('/api/v1/regulation/questions', {
+    method: 'POST',
+    body: JSON.stringify(question),
+  })
 }

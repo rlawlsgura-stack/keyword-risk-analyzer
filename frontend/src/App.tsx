@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
-  loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult,
-  type AnalysisFilters, type KeywordRow, type Match, type TopKeyword } from './api'
+  askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode,
+  type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
+  type RegulationResult, type TopKeyword } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
   { value: 'exact', label: '정확 일치', description: '등록된 표현을 그대로 찾습니다.' },
   { value: 'partial', label: '부분 일치', description: '연속된 키워드 조각을 찾습니다.' },
 ]
+const regulationStatusLabels: Record<string, string> = {
+  supported: '근거가 확인됨', retrieved: '검색 자료 확인', conflict: '검토 필요', insufficient: '자료 부족',
+}
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
   // API offsets count Unicode code points; JavaScript string slicing counts UTF-16 units.
@@ -74,7 +78,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -88,6 +92,13 @@ function App() {
   const [reportItems, setReportItems] = useState<TopKeyword[]>([])
   const [reportBusy, setReportBusy] = useState(false)
   const [reportError, setReportError] = useState('')
+  const [regulationDirection, setRegulationDirection] = useState<RegulationQuestion['direction']>('keyword_to_law')
+  const [regulationQuery, setRegulationQuery] = useState('')
+  const [regulationContext, setRegulationContext] = useState('')
+  const [regulationCategory, setRegulationCategory] = useState('')
+  const [regulationResult, setRegulationResult] = useState<RegulationResult | null>(null)
+  const [regulationBusy, setRegulationBusy] = useState(false)
+  const [regulationError, setRegulationError] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -217,6 +228,24 @@ function App() {
     }
   }
 
+  async function submitRegulation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setRegulationBusy(true)
+    setRegulationError('')
+    setRegulationResult(null)
+    try {
+      const question: RegulationQuestion = { direction: regulationDirection,
+        query: regulationQuery.trim(),
+        context_text: regulationDirection === 'keyword_to_law' ? regulationContext : '',
+        category: regulationCategory }
+      setRegulationResult(await askRegulation(question))
+    } catch (error) {
+      setRegulationError(error instanceof Error ? error.message : '법령 검색을 완료하지 못했습니다.')
+    } finally {
+      setRegulationBusy(false)
+    }
+  }
+
   const role = user?.app_metadata?.role
   const allowed = role === 'member' || role === 'admin'
 
@@ -300,6 +329,9 @@ function App() {
       <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>
         <span className="nav-icon">↗</span> 분석 리포트
       </button>
+      <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>
+        <span className="nav-icon">§</span> 법령 근거 검색
+      </button>
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -308,7 +340,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : '분석 리포트'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : '법령 근거 검색'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -336,7 +368,71 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
-        </section> : page === 'report' ? <>
+        </section> : page === 'regulation' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">EVIDENCE / 04</div><h1>법령 근거 검색</h1>
+              <p>공식 법령·행정규칙·판례 검색 결과와 현재 키워드 DB 후보를 함께 확인합니다.</p></div>
+            <div className="preview-pill"><span /> 근거 조회</div>
+          </div>
+          <section className="catalog-section">
+            <form className="panel regulation-form" onSubmit={submitRegulation}>
+              <label>검색 방향
+                <select value={regulationDirection} disabled={regulationBusy}
+                  onChange={event => setRegulationDirection(event.target.value as RegulationQuestion['direction'])}>
+                  <option value="keyword_to_law">광고 문구에서 관련 법령 찾기</option>
+                  <option value="law_to_keywords">법령 조문에서 등록 키워드 찾기</option>
+                </select>
+              </label>
+              <label>{regulationDirection === 'keyword_to_law' ? '질문 또는 검색어' : '법령명과 조항'}
+                <input required minLength={2} maxLength={500} value={regulationQuery} disabled={regulationBusy}
+                  placeholder={regulationDirection === 'keyword_to_law' ? '예: 미백 기능성 화장품 광고 표현' : '예: 화장품법 제13조'}
+                  onChange={event => setRegulationQuery(event.target.value)} />
+              </label>
+              {regulationDirection === 'keyword_to_law' && <label>검토할 광고 문구 (선택)
+                <textarea maxLength={20000} value={regulationContext} disabled={regulationBusy}
+                  placeholder="광고 문구나 제품 설명을 입력하면 현재 키워드 DB 후보 검색에 함께 사용합니다."
+                  onChange={event => setRegulationContext(event.target.value)} />
+              </label>}
+              <label>상품 카테고리 (선택)
+                <select value={regulationCategory} disabled={regulationBusy}
+                  onChange={event => setRegulationCategory(event.target.value)}>
+                  <option value="">전체 카테고리</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                </select>
+              </label>
+              <button className="primary-button" type="submit" disabled={regulationBusy || !regulationQuery.trim()}>
+                {regulationBusy ? '공식 자료 검색 중…' : '근거 검색하기'}
+              </button>
+              <p className="regulation-caution">검색 결과와 키워드 DB 등급은 참고 자료이며, 법률 판단이나 위반 여부를 확정하지 않습니다.</p>
+            </form>
+            {regulationError && <p className="error-message regulation-error" role="alert">{regulationError}</p>}
+            {regulationResult && <section className="regulation-results" aria-live="polite">
+              <div className="panel regulation-answer">
+                <div className={`status-pill status-${regulationResult.status}`}>
+                  {regulationStatusLabels[regulationResult.status] ?? regulationResult.status}
+                </div>
+                <p>{regulationResult.answer}</p>
+                {regulationResult.administrator_review && <p className="review-note">자료 간 차이가 있거나 설명을 확정하지 못했습니다. 담당자가 원문을 검토해 주세요.</p>}
+                {regulationResult.llm_used && <small>검색 자료를 바탕으로 설명을 생성했습니다. 인용된 원문과 출처를 직접 확인하세요.</small>}
+              </div>
+              {regulationResult.keyword_matches.length > 0 && <div className="panel table-panel">
+                <h2 className="regulation-section-title">현재 키워드 DB 일치 항목</h2><div className="table-scroll"><table>
+                  <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>심의 기준</th></tr></thead>
+                  <tbody>{regulationResult.keyword_matches.map((item, index) => <tr key={`${item.kwd_no}-${index}`}>
+                    <td>{item.kwd_no}</td><td><strong>{item.키워드명}</strong></td><td>{item.상품카테고리 || '—'}</td>
+                    <td>{item['리스크 등급'] || '—'}</td><td>{item['리스크 등급별 세부 심의기준'] || '—'}</td>
+                  </tr>)}</tbody>
+                </table></div>
+              </div>}
+              <div className="regulation-sources"><h2 className="regulation-section-title">검색 출처 ({regulationResult.sources.length})</h2>
+                {regulationResult.sources.map(source => <details className="panel source-card" key={source.id}>
+                  <summary><strong>{source.label}</strong><span>{source.id}</span></summary>
+                  {source.url && <a href={source.url} target="_blank" rel="noreferrer">공식 원문 열기 ↗</a>}
+                  <pre>{source.text}</pre>
+                </details>)}
+              </div>
+            </section>}
+          </section>
+        </> : page === 'report' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">REPORT / 03</div><h1>분석 리포트</h1>
               <p>선택한 최근 기간에 가장 많이 검출된 키워드를 보여줍니다.</p></div>

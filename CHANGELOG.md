@@ -1,3 +1,8 @@
+## React preview - Add evidence-based regulation search
+
+- Add both search directions and show official sources plus matching keyword database entries.
+- Label search output as reference material and preserve review-needed states.
+
 ## React preview - Export the full keyword catalog
 
 - Add a paginated full-catalog CSV export that is independent of the current search and filters.

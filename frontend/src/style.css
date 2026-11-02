@@ -85,6 +85,28 @@ textarea::placeholder { color: #a6b0c0; }
 .report-controls input { width: 90px; }
 .report-controls .secondary-button { margin-left: auto; }
 .report-period-note, .catalog-status { margin: 17px 0 12px; color: #8793a6; font-size: 11px; }
+.regulation-form { display: grid; gap: 15px; padding: 22px; }
+.regulation-form label { display: grid; gap: 7px; color: #68758a; font-size: 11px; font-weight: 600; }
+.regulation-form input, .regulation-form select { width: 100%; min-height: 40px; border: 1px solid #dce2eb; border-radius: 8px; padding: 9px 11px; color: #344059; background: #fff; }
+.regulation-form textarea { min-height: 125px; }
+.regulation-form > .primary-button { justify-self: start; min-width: 150px; }
+.regulation-caution { margin: 0; color: #9a7850; font-size: 10px; line-height: 1.6; }
+.regulation-error { max-width: 1230px; margin-top: 15px; }
+.regulation-results { display: grid; gap: 14px; margin-top: 17px; }
+.regulation-answer { padding: 22px; }
+.regulation-answer > p { margin: 13px 0 0; color: #526078; font-size: 13px; line-height: 1.75; }
+.regulation-answer > small { display: block; margin-top: 12px; color: #8793a6; line-height: 1.6; }
+.status-pill { display: inline-block; padding: 5px 9px; border-radius: 20px; color: #405472; background: #edf1fa; font-size: 10px; font-weight: 700; }
+.status-conflict, .status-insufficient { color: #895b38; background: #fff2e2; }
+.review-note { padding: 10px 12px; border-radius: 7px; background: #fff7e8; }
+.regulation-section-title { margin: 0; padding: 18px 19px 0; color: #344059; font-size: 14px; }
+.regulation-sources { display: grid; gap: 9px; }
+.regulation-sources .regulation-section-title { padding: 0 2px; }
+.source-card { padding: 14px 17px; }
+.source-card summary { display: flex; justify-content: space-between; gap: 12px; cursor: pointer; color: #46546c; font-size: 12px; }
+.source-card summary span { color: #9aa5b5; font-size: 10px; }
+.source-card a { display: inline-block; margin-top: 13px; color: #526a91; font-size: 11px; }
+.source-card pre { max-height: 420px; overflow: auto; margin: 12px 0 0; padding: 12px; border-radius: 7px; color: #58647a; background: #f8f9fb; font-family: inherit; font-size: 11px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .results-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 16px; }
 .results-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
 .results-heading h2 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
@@ -146,6 +168,7 @@ td strong { color: #2d3a52; }
   .catalog-section { padding: 0 17px 45px; }
   .catalog-panel { padding: 15px; }
   .report-panel { padding: 15px; }
+  .regulation-form { padding: 15px; }
   .report-controls .secondary-button { margin-left: 0; }
   .preview-pill { display: none; }
   .editor-panel, .settings-panel { padding: 18px; }
