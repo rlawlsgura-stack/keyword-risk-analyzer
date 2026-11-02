@@ -4590,19 +4590,23 @@ def build_unmatched_registration_candidates(selected):
     candidates = []
     for _, item in selected.iterrows():
         term = str(item['term']).strip()
-        source_terms = str(item.get('source_terms') or '').strip()
+        raw_sources = item.get('source_terms', '')
+        source_terms = '' if pd.isna(raw_sources) else str(raw_sources).strip()
         if not 1 <= len(term) <= 150 or len(source_terms) > 500:
             raise ValueError("후보 키워드 또는 원본 표현 길이를 확인하세요.")
-        occurrences = int(item.get('occurrences') or 0)
+        raw_occurrences = item.get('occurrences', 0)
+        occurrences = 0 if pd.isna(raw_occurrences) else int(raw_occurrences or 0)
         criteria = item.get('리스크 등급별 세부 심의기준', '')
         evidence_type = item.get('증빙자료유형', '')
+        alternative = item.get('대체키워드', '-')
         candidates.append({
             'term': term, 'source_terms': source_terms, 'occurrences': occurrences,
             'category': str(item['상품카테고리']).strip(),
             'risk': str(item['리스크 등급']).strip(),
             'criteria': '' if pd.isna(criteria) else str(criteria).strip(),
             'evidence_type': '' if pd.isna(evidence_type) else str(evidence_type).strip(),
-            'alternative': str(item.get('대체키워드', '-') or '-').strip(),
+            'alternative': '-' if pd.isna(alternative) or not str(alternative).strip()
+            else str(alternative).strip(),
         })
     return candidates
 
@@ -4630,16 +4634,22 @@ def clear_registered_unmatched_candidates(selected, access_token):
     term_keys = unmatched_registration_source_keys(selected)
     if term_keys:
         repository.delete_unmatched_terms(term_keys, access_token)
-    request_ids = [str(value) for value in selected.get('request_id', []) if str(value).strip()]
+    request_ids = [str(value) for value in selected.get('request_id', [])
+                   if not pd.isna(value) and str(value).strip()]
     return repository.delete_unmatched_registration_requests(request_ids, access_token) if request_ids else 0
 
 
 def unmatched_recommendation_id(row):
-    request_id = str(row.get('request_id') or '').strip()
+    recommendation_id = row.get('recommendation_id')
+    if not pd.isna(recommendation_id) and str(recommendation_id).strip():
+        return str(recommendation_id).strip()
+    raw_request_id = row.get('request_id')
+    request_id = '' if pd.isna(raw_request_id) else str(raw_request_id).strip()
     if request_id:
         return f'request:{request_id}'
-    identity = '\0'.join(str(row.get(key) or '').strip()
-                          for key in ('term', 'source_terms', 'occurrences'))
+    identity = '\0'.join(
+        '' if pd.isna(row.get(key)) else str(row.get(key)).strip()
+        for key in ('term', 'source_terms', 'occurrences'))
     return 'local:' + hashlib.sha256(identity.encode()).hexdigest()
 
 
@@ -4879,6 +4889,14 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         st.info("아직 후보가 없습니다. 텍스트 분석 또는 한국어 OCR을 실행하면 자동으로 수집됩니다.")
 
     recommendations = list(st.session_state.get("unmatched_candidate_recommendations", []))
+    if cloud_enabled() and not recommendations:
+        version = int(st.session_state.get('unmatched_recommendation_version', 0))
+        recommendations = [{
+            'term': '', 'source_terms': '', 'occurrences': 0, 'request_id': '',
+            'request_date': '', 'term_norm': '', '상품카테고리': '', '리스크 등급': '',
+            '리스크 등급별 세부 심의기준': '', '증빙자료유형': '', '대체키워드': '-',
+            'recommendation_id': f'manual:new:{version}',
+        }]
     registration_requests = []
     if cloud_enabled() and is_admin():
         try:
@@ -4914,6 +4932,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
     select_column = "\uC120\uD0DD"
     if recommendations:
         st.markdown("#### 정규화 추천 및 분류 입력")
+        st.caption("새 행은 표의 + 버튼으로 추가할 수 있고, 셀 오른쪽 아래 채우기 핸들을 드래그해 선택 범위에 값을 채울 수 있습니다.")
         recommendation_df = pd.DataFrame(recommendations)
         recommendation_df.insert(0, select_column, False)
         for column, default in {
@@ -4988,7 +5007,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             alt="Unmatched keyword normalization recommendations",
             hide_index=True,
             width="stretch",
-            num_rows="fixed",
+            num_rows="add",
             on_change="ignore",
             column_config={
                 "\uC120\uD0DD": st.column_config.CheckboxColumn("\u200b", width=32, pinned=True, alignment="center"),
@@ -5007,6 +5026,12 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             },
             key=editor_key,
         )
+        edited_recommendations = edited_recommendations.copy()
+        for row_index, row in edited_recommendations.iterrows():
+            recommendation_id = row.get('recommendation_id')
+            if pd.isna(recommendation_id) or not str(recommendation_id).strip():
+                edited_recommendations.at[row_index, 'recommendation_id'] = (
+                    f'manual:{row_index}:{unmatched_recommendation_id(row.to_dict())}')
         if st.button("선택 항목 삭제", key='exclude_unmatched_recommendations'):
             selected_for_exclusion = edited_recommendations[
                 edited_recommendations['선택'].fillna(False)]
@@ -5030,6 +5055,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(local_ids)
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                    st.session_state['unmatched_recommendation_version'] = int(
+                        st.session_state.get('unmatched_recommendation_version', 0)) + 1
                     st.rerun()
                 except (StorageError, ValueError, PermissionError) as exc:
                     st.error(f"선택한 항목을 삭제하지 못했습니다: {exc}")
@@ -5054,12 +5081,14 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         if key in existing_keys:
                             continue
                         existing_keys.add(key)
+                        alternative = item.get("대체키워드", "-")
                         additions.append({
                             "kwd_no": next_kwd_no(category), "키워드명": term,
                             "상품카테고리": category, "리스크 등급": str(item["리스크 등급"]).strip(),
                             "리스크 등급별 세부 심의기준": str(item["리스크 등급별 세부 심의기준"]).strip(),
                             "증빙자료유형": str(item["증빙자료유형"]).strip(),
-                            "대체키워드": str(item.get("대체키워드", "-") or "-").strip(),
+                            "대체키워드": "-" if pd.isna(alternative) or not str(alternative).strip()
+                            else str(alternative).strip(),
                             "키워드 조회 수(누적카운트)": "0", "마지막 출력일자": "", "키워드 등록일자": "",
                         })
                     if additions:
@@ -5098,7 +5127,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                 selected = edited_recommendations[
                     edited_recommendations['선택'].fillna(False)]
                 request_ids = [str(value) for value in selected.get('request_id', [])
-                               if str(value).strip()]
+                               if not pd.isna(value) and str(value).strip()]
                 if not request_ids:
                     st.warning('거절할 등록 요청을 선택하세요.')
                 else:
@@ -5137,9 +5166,12 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         st.error('\ub4f1\ub85d \uc694\uccad \ucc98\ub9ac\uc911 \uc608\uc0c1\ud558\uc9c0 \ubabb\ud55c \uc624\ub958\uac00 \ubc1c\uc0dd\ud588\uc2b5\ub2c8\ub2e4.')
                         st.caption(type(exc).__name__)
                     else:
+                        _persist_unmatched_editor_state(editor_key, recommendations, select_column)
                         hidden = list(st.session_state.get('unmatched_recommendation_hidden_ids', []))
                         hidden.extend(selected['recommendation_id'].astype(str).tolist())
                         st.session_state['unmatched_recommendation_hidden_ids'] = list(dict.fromkeys(hidden))
+                        st.session_state['unmatched_recommendation_version'] = int(
+                            st.session_state.get('unmatched_recommendation_version', 0)) + 1
                         st.success('\uad00\ub9ac\uc790 \uc815\uaddc\ud654 \ucd94\ucc9c \ubc0f \ubd84\ub958 \uc785\ub825\ub780\uc5d0 \uc694\uccad\uc774 \ub204\uc801\ub418\uc5c8\uc2b5\ub2c8\ub2e4.')
                         st.rerun()
             else:
