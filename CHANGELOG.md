@@ -1,3 +1,8 @@
+## React preview - Restore administrator unmatched-candidate cleanup
+
+- Add page refresh and an administrator-only permanent-delete flow for selected shared candidates, with a separate confirmation step.
+- Add an authenticated API route that checks the administrator role before using the existing deletion RPC.
+
 ## React preview - Add threaded keyword inquiry conversations
 
 - Load request messages on demand and support administrator replies with per-question status, member follow-ups, and member message edits.

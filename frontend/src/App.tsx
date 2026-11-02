@@ -4,7 +4,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
-  submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
+  submitUnmatchedRegistrationRequests, deleteAdminUnmatchedTerms, findKeywords, loadKeywordRequests,
   submitKeywordRequest, loadKeywordRequestMessages, addKeywordRequestMessage,
   editKeywordRequestMessage, deleteKeywordRequestMessage, deleteKeywordRequest,
   type KeywordRequestMessage, loadRequestEmailNotifications,
@@ -455,6 +455,9 @@ function App() {
   const [unmatchedError, setUnmatchedError] = useState('')
   const [unmatchedRefresh, setUnmatchedRefresh] = useState(0)
   const [selectedUnmatched, setSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
+  const [deleteSelectedUnmatched, setDeleteSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
+  const [unmatchedDeleteConfirm, setUnmatchedDeleteConfirm] = useState(false)
+  const [unmatchedDeleteBusy, setUnmatchedDeleteBusy] = useState(false)
   const [unmatchedSubmitBusy, setUnmatchedSubmitBusy] = useState(false)
   const [unmatchedActionMessage, setUnmatchedActionMessage] = useState('')
   const [requestSearch, setRequestSearch] = useState('')
@@ -647,6 +650,11 @@ function App() {
     }).finally(() => { if (active) setUnmatchedBusy(false) })
     return () => { active = false }
   }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort, unmatchedRefresh])
+
+  useEffect(() => {
+    setDeleteSelectedUnmatched({})
+    setUnmatchedDeleteConfirm(false)
+  }, [unmatchedOffset, unmatchedSearch, unmatchedSort])
 
   useEffect(() => {
     if (page !== 'requests' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
@@ -1207,6 +1215,48 @@ function App() {
       }
       return next
     })
+  }
+
+  function toggleUnmatchedDeleteRow(row: UnmatchedTerm, checked: boolean) {
+    setDeleteSelectedUnmatched(previous => {
+      const next = { ...previous }
+      if (checked) next[row.term_norm] = row
+      else delete next[row.term_norm]
+      return next
+    })
+  }
+
+  function toggleUnmatchedDeletePage(checked: boolean) {
+    setDeleteSelectedUnmatched(previous => {
+      const next = { ...previous }
+      for (const row of unmatchedPage?.rows ?? []) {
+        if (checked) next[row.term_norm] = row
+        else delete next[row.term_norm]
+      }
+      return next
+    })
+  }
+
+  async function removeSelectedUnmatched() {
+    const terms = Object.keys(deleteSelectedUnmatched)
+    if (!terms.length || role !== 'admin') return
+    setUnmatchedDeleteBusy(true)
+    setUnmatchedError('')
+    setUnmatchedActionMessage('')
+    try {
+      const result = await deleteAdminUnmatchedTerms(terms)
+      setDeleteSelectedUnmatched({})
+      setSelectedUnmatched(previous => Object.fromEntries(
+        Object.entries(previous).filter(([term]) => !terms.includes(term)),
+      ))
+      setUnmatchedDeleteConfirm(false)
+      setUnmatchedActionMessage(`${result.deleted}개 누적 후보를 영구 삭제했습니다.`)
+      setUnmatchedRefresh(value => value + 1)
+    } catch (error) {
+      setUnmatchedError(error instanceof Error ? error.message : '선택한 누적 후보를 삭제하지 못했습니다.')
+    } finally {
+      setUnmatchedDeleteBusy(false)
+    }
   }
 
   async function submitUnmatchedRequests() {
@@ -2054,7 +2104,7 @@ function App() {
                 setUnmatchedSearch(unmatchedSearchInput.trim())
               }}>
                 <label className="sr-only" htmlFor="unmatched-search">미매칭 표현 검색</label>
-                <input id="unmatched-search" value={unmatchedSearchInput} maxLength={200}
+                <input id="unmatched-search" value={unmatchedSearchInput} maxLength={100}
                   placeholder="미매칭 표현 검색" onChange={event => setUnmatchedSearchInput(event.target.value)} />
                 <label className="sr-only" htmlFor="unmatched-sort">정렬 기준</label>
                 <select id="unmatched-sort" value={unmatchedSort}
@@ -2064,6 +2114,8 @@ function App() {
                 <button className="primary-button" type="submit" disabled={unmatchedBusy}>검색</button>
               </form>
               <div className="catalog-meta">
+                <button className="secondary-button" disabled={unmatchedBusy || unmatchedDeleteBusy}
+                  onClick={() => setUnmatchedRefresh(value => value + 1)}>목록 새로고침</button>
                 <span>{unmatchedBusy ? '목록을 불러오는 중…' : `${unmatchedPage?.total ?? 0}개 표현`}</span>
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedExportBusy || !unmatchedPage?.total}
                   onClick={exportUnmatchedCsv}>{unmatchedExportBusy ? 'CSV 준비 중…' : '전체 누적 CSV'}</button>
@@ -2075,16 +2127,33 @@ function App() {
                   checked={Boolean(unmatchedPage?.rows.some(row => row.review_status === 'pending')) &&
                     (unmatchedPage?.rows.filter(row => row.review_status === 'pending').every(row => selectedUnmatched[row.term_norm]) ?? false)}
                   onChange={event => toggleUnmatchedPage(event.target.checked)} /></th>
+                  {role === 'admin' && <th><input type="checkbox" aria-label="현재 페이지 누적 후보 전체 삭제 선택"
+                    checked={Boolean(unmatchedPage?.rows.length) && unmatchedPage!.rows.every(row => deleteSelectedUnmatched[row.term_norm])}
+                    onChange={event => toggleUnmatchedDeletePage(event.target.checked)} /></th>}
                   <th>미매칭 표현</th><th>누적 횟수</th><th>분석 횟수</th><th>상태</th><th>최초 수집</th><th>최근 수집</th></tr></thead>
                 <tbody>{unmatchedPage.rows.map(row => <tr key={row.term_norm}>
                   <td><input type="checkbox" aria-label={`${row.display_term} 선택`}
                     checked={Boolean(selectedUnmatched[row.term_norm])} disabled={row.review_status !== 'pending'}
                     onChange={event => toggleUnmatchedRow(row, event.target.checked)} /></td>
+                  {role === 'admin' && <td><input type="checkbox" aria-label={`${row.display_term} 영구 삭제 선택`}
+                    checked={Boolean(deleteSelectedUnmatched[row.term_norm])} disabled={unmatchedDeleteBusy}
+                    onChange={event => toggleUnmatchedDeleteRow(row, event.target.checked)} /></td>}
                   <td><strong>{row.display_term}</strong></td><td>{row.total_occurrences.toLocaleString()}</td>
                   <td>{row.analysis_count.toLocaleString()}</td><td>{unmatchedStatusLabels[row.review_status] ?? row.review_status}</td>
                   <td>{new Date(row.first_seen).toLocaleDateString('ko-KR')}</td><td>{new Date(row.last_seen).toLocaleDateString('ko-KR')}</td>
                 </tr>)}</tbody>
               </table></div> : !unmatchedBusy && <p className="empty-result">표시할 미매칭 후보가 없습니다.</p>)}
+              {role === 'admin' && Object.keys(deleteSelectedUnmatched).length > 0 && <div className="unmatched-admin-delete">
+                <span>{Object.keys(deleteSelectedUnmatched).length}개 누적 후보 선택</span>
+                {!unmatchedDeleteConfirm ? <button className="danger-button" type="button" disabled={unmatchedDeleteBusy}
+                  onClick={() => setUnmatchedDeleteConfirm(true)}>선택 표현 영구 삭제</button> : <div className="unmatched-delete-confirm" role="group" aria-label="누적 후보 삭제 확인">
+                  <strong>선택 표현의 누적 통계와 관련 기록을 영구 삭제합니다. 계속할까요?</strong>
+                  <button className="danger-button" type="button" disabled={unmatchedDeleteBusy}
+                    onClick={() => void removeSelectedUnmatched()}>{unmatchedDeleteBusy ? '삭제 중…' : '영구 삭제 확인'}</button>
+                  <button className="secondary-button" type="button" disabled={unmatchedDeleteBusy}
+                    onClick={() => setUnmatchedDeleteConfirm(false)}>취소</button>
+                </div>}
+              </div>}
               {selectedUnmatchedCount > 0 && <div className="unmatched-actions">
                 <span>{selectedUnmatchedCount}개 후보 선택됨 · 요청 후 관리자 검토 대기열로 이동합니다.
                   {selectedUnmatchedCount > 1000 && ' 한 번에 최대 1,000개까지 요청할 수 있습니다.'}</span>

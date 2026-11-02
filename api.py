@@ -204,6 +204,11 @@ class UnmatchedRegistrationReview(BaseModel):
     updates: list[UnmatchedRegistrationUpdate] = Field(default_factory=list, max_length=1000)
 
 
+class AdminUnmatchedDelete(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    terms: list[str] = Field(min_length=1, max_length=100)
+
+
 class AdminNormalizationSettings(BaseModel):
     model_config = ConfigDict(extra='forbid')
     ignored_symbols: list[str] = Field(min_length=1, max_length=100)
@@ -459,6 +464,25 @@ def unmatched_terms(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, 
 @app.get('/api/v1/unmatched-terms/export')
 def export_unmatched_terms(actor=Depends(current_actor), repository=Depends(get_repository)):
     return {'items': repository.export_unmatched_terms()}
+
+
+@app.post('/api/v1/admin/unmatched-terms/delete')
+def delete_admin_unmatched_terms(
+        body: AdminUnmatchedDelete, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    terms = [term.strip() for term in body.terms]
+    if any(not term or len(term) > 100 for term in terms) or len(set(terms)) != len(terms):
+        raise HTTPException(422, 'Candidate terms must be unique and between 1 and 100 characters')
+    try:
+        deleted = repository.delete_unmatched_terms(terms, credentials.credentials)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'deleted': deleted}
 
 
 @app.post('/api/v1/unmatched-terms/registration-requests')

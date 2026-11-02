@@ -211,6 +211,12 @@ export async function exportUnmatchedTerms(): Promise<UnmatchedTerm[]> {
   return result.items
 }
 
+export async function deleteAdminUnmatchedTerms(terms: string[]): Promise<{ deleted: number }> {
+  return requestApi('/api/v1/admin/unmatched-terms/delete', {
+    method: 'POST', body: JSON.stringify({ terms }),
+  })
+}
+
 export async function submitUnmatchedRegistrationRequests(candidates: {
   term: string
   source_terms: string
