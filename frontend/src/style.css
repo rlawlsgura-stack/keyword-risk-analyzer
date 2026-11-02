@@ -78,6 +78,12 @@ textarea::placeholder { color: #a6b0c0; }
 .catalog-panel td:nth-child(6) { min-width: 260px; white-space: pre-wrap; }
 .catalog-panel td:nth-child(5), .catalog-panel td:nth-child(7) { min-width: 150px; white-space: pre-wrap; }
 .catalog-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; padding-top: 17px; color: #718099; font-size: 12px; }
+.report-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 13px; }
+.report-controls label { display: grid; gap: 7px; color: #68758a; font-size: 11px; font-weight: 600; }
+.report-controls select, .report-controls input { min-height: 38px; border: 1px solid #dce2eb; border-radius: 8px; padding: 8px 10px; color: #344059; background: #fff; }
+.report-controls input { width: 90px; }
+.report-controls .secondary-button { margin-left: auto; }
+.report-period-note, .catalog-status { margin: 17px 0 12px; color: #8793a6; font-size: 11px; }
 .results-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 16px; }
 .results-actions { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
 .results-heading h2 { font-size: 22px; margin: 7px 0 0; letter-spacing: -.04em; }
@@ -128,6 +134,8 @@ td strong { color: #2d3a52; }
   .results-section { padding: 30px 17px 45px; }
   .catalog-section { padding: 0 17px 45px; }
   .catalog-panel { padding: 15px; }
+  .report-panel { padding: 15px; }
+  .report-controls .secondary-button { margin-left: 0; }
   .preview-pill { display: none; }
   .editor-panel, .settings-panel { padding: 18px; }
   .state-card, .login-card { margin: 25px 17px; padding: 25px; }

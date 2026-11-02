@@ -57,6 +57,8 @@ export type KeywordRow = {
   마지막 출력일자: string
 }
 
+export type TopKeyword = { kwd_no: string; hit_count: number; term: string | null }
+
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
   const { data, error } = await supabase.auth.getSession()
@@ -94,4 +96,9 @@ export async function loadKeywords(offset: number, query: string): Promise<{
 }> {
   const params = new URLSearchParams({ offset: String(offset), limit: '100', q: query })
   return requestApi(`/api/v1/keywords?${params}`)
+}
+
+export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {
+  const params = new URLSearchParams({ days: String(days), limit: String(limit) })
+  return requestApi(`/api/v1/reports/top-keywords?${params}`)
 }

@@ -1,3 +1,8 @@
+## React preview - Add period reports
+
+- Add authenticated rolling-period Top N keyword reports with CSV download.
+- Keep report reset and other administrative actions in the existing Streamlit app.
+
 ## React preview - Add the keyword catalog
 
 - Add authenticated, paginated, read-only keyword search to the React preview.

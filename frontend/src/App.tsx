@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
-  loadKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult, type KeywordRow,
-  type Match } from './api'
+  loadKeywords, loadTopKeywords, type AnalysisInput, type AnalysisMode, type AnalysisResult,
+  type KeywordRow, type Match, type TopKeyword } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -48,13 +48,18 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
   const [keywordPage, setKeywordPage] = useState<{ total: number; revision: string | null; items: KeywordRow[] } | null>(null)
   const [keywordBusy, setKeywordBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
+  const [reportDays, setReportDays] = useState(7)
+  const [reportLimit, setReportLimit] = useState(10)
+  const [reportItems, setReportItems] = useState<TopKeyword[]>([])
+  const [reportBusy, setReportBusy] = useState(false)
+  const [reportError, setReportError] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -123,6 +128,19 @@ function App() {
     }).finally(() => { if (active) setKeywordBusy(false) })
     return () => { active = false }
   }, [page, user?.id, keywordOffset, keywordQuery])
+
+  useEffect(() => {
+    if (page !== 'report' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    let active = true
+    setReportBusy(true)
+    setReportError('')
+    void loadTopKeywords(reportDays, reportLimit).then(data => {
+      if (active) setReportItems(data.items)
+    }).catch(error => {
+      if (active) setReportError(error instanceof Error ? error.message : '리포트를 불러오지 못했습니다.')
+    }).finally(() => { if (active) setReportBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, reportDays, reportLimit])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -196,6 +214,22 @@ function App() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  function downloadReportCsv() {
+    const rows = [
+      ['검색순위', 'kwd_no', '키워드명', '기간내_조회수'],
+      ...reportItems.map((item, index) => [String(index + 1), item.kwd_no, item.term ?? '', String(item.hit_count)]),
+    ]
+    const csv = '\uFEFF' + rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `top_keywords_${reportDays}days.csv`
+    document.body.append(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -208,15 +242,18 @@ function App() {
       <button className={`nav-item nav-button ${page === 'keywords' ? 'active' : ''}`} onClick={() => setPage('keywords')}>
         <span className="nav-icon">▤</span> 키워드 원장
       </button>
+      <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>
+        <span className="nav-icon">↗</span> 분석 리포트
+      </button>
       <div className="sidebar-bottom">
-        <div className="version-chip">REACT PREVIEW · CATALOG</div>
+        <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
       </div>
     </aside>
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : '키워드 원장'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : '분석 리포트'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -244,7 +281,40 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
-        </section> : page === 'keywords' ? <>
+        </section> : page === 'report' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">REPORT / 03</div><h1>분석 리포트</h1>
+              <p>선택한 최근 기간에 가장 많이 검출된 키워드를 보여줍니다.</p></div>
+              <div className="preview-pill"><span /> 공유 집계</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel report-panel">
+              <div className="report-controls">
+                <label>조회 기간
+                  <select value={reportDays} onChange={event => setReportDays(Number(event.target.value))}>
+                    <option value={7}>최근 7일</option><option value={30}>최근 30일</option>
+                    <option value={90}>최근 90일</option>
+                  </select>
+                </label>
+                <label>표시 개수
+                  <input type="number" min={1} max={100} value={reportLimit}
+                    onChange={event => setReportLimit(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} />
+                </label>
+                {reportItems.length > 0 && <button className="secondary-button" onClick={downloadReportCsv}>CSV 다운로드</button>}
+              </div>
+              <p className="report-period-note">최근 {reportDays}일의 공유 분석 기록 기준입니다.</p>
+              {reportBusy && <p className="catalog-status" role="status">리포트를 불러오는 중…</p>}
+              {reportError && <p className="error-message" role="alert">{reportError}</p>}
+              {!reportBusy && !reportError && (reportItems.length ? <div className="table-scroll"><table>
+                <thead><tr><th>순위</th><th>키워드 번호</th><th>키워드명</th><th>기간 내 조회수</th></tr></thead>
+                <tbody>{reportItems.map((item, index) => <tr key={item.kwd_no}>
+                  <td>{index + 1}</td><td>{item.kwd_no}</td><td><strong>{item.term || '등록 키워드 정보 없음'}</strong></td>
+                  <td>{item.hit_count.toLocaleString()}</td>
+                </tr>)}</tbody>
+              </table></div> : <p className="empty-result">해당 기간에 분석 기록이 없습니다.</p>)}
+            </div>
+          </section>
+        </> : page === 'keywords' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">CATALOG / 02</div><h1>키워드 원장</h1>
               <p>등록된 키워드와 분류 정보를 조회합니다. 원장 수정은 기존 관리자 화면에서 할 수 있습니다.</p></div>
