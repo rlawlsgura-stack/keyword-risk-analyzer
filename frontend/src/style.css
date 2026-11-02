@@ -177,6 +177,7 @@ td strong { color: #2d3a52; }
 .login-card label { font-size: 12px; font-weight: 600; color: #59677d; }
 .login-card input { border: 1px solid #dce2eb; border-radius: 8px; padding: 11px 12px; margin-bottom: 9px; }
 .login-card button { margin-top: 8px; }
+.login-card .recovery-link { margin-top: 11px; padding-left: 0; }
 .secondary-button { border: 1px solid #d7deea; border-radius: 8px; padding: 9px 13px; color: #344661; background: #fff; }
 .error-message { color: #a13d39 !important; background: #fff1f0; border: 1px solid #f6d7d4; border-radius: 8px; padding: 10px 12px; font-size: 12px; }
 .inline-error { margin-top: 15px; }

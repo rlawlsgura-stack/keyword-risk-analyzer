@@ -1,16 +1,17 @@
 # React transition preview
 
-FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts, recorded text analysis through `/api/v2/analyses` with clickable highlights and match details, read-only keyword catalog search, filters, and full CSV export through `/api/v1/keywords`, rolling-period Top N reports through `/api/v1/reports/top-keywords`, official-source regulation lookup through `/api/v1/regulation/questions`, unmatched-candidate review and registration requests through `/api/v1/unmatched-terms`, and existing-keyword inquiries, history, and admin responses through `/api/v1/keyword-requests`. The Streamlit app remains the operational UI for OCR, normalization editing, unmatched-registration moderation, and other administration.
+FIXED328 starts a separate React/TypeScript interface. The preview supports existing Supabase accounts and password recovery, recorded text analysis through `/api/v2/analyses` with clickable highlights and match details, read-only keyword catalog search, filters, and full CSV export through `/api/v1/keywords`, rolling-period Top N reports through `/api/v1/reports/top-keywords`, official-source regulation lookup through `/api/v1/regulation/questions`, unmatched-candidate review and registration requests through `/api/v1/unmatched-terms`, and existing-keyword inquiries, history, and admin responses through `/api/v1/keyword-requests`. The Streamlit app remains the operational UI for OCR, normalization editing, unmatched-registration moderation, and other administration.
 
 ## Local setup
 
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_PUBLISHABLE_KEY` to the project's **publishable** key. Set `VITE_API_BASE_URL` to the FastAPI origin. Never put `SUPABASE_SECRET_KEY` in a `VITE_` variable.
-2. Run `npm ci` and `npm run dev` in this directory.
-3. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include `http://localhost:5173` and `http://127.0.0.1:5173`.
+2. Add the frontend origin to Supabase Auth's allowed redirect URLs so password recovery emails can return to the React app.
+3. Run `npm ci` and `npm run dev` in this directory.
+4. Run FastAPI with `STORAGE_BACKEND=supabase`, `SUPABASE_URL`, and `SUPABASE_SECRET_KEY` configured. The API's default CORS origins include `http://localhost:5173` and `http://127.0.0.1:5173`.
 
 ## Deploying this preview
 
-The `render.yaml` Blueprint prepares an independent `keyword-risk-react-preview` static service with automatic deploys disabled. In Render, set its build-time `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_API_BASE_URL` (the public HTTPS API origin), then deploy it. On the FastAPI service set `API_CORS_ORIGINS` to the **exact HTTPS origin** of the static site and redeploy the API. For an existing Blueprint, Render does not populate newly added `sync: false` variables automatically, so set these values in the Dashboard. Keep the existing Streamlit service and URL active.
+In Supabase Auth, add the deployed static-site origin to the allowed redirect URLs for password recovery. On Render, set the frontend's build-time `VITE_SUPABASE_PUBLISHABLE_KEY` and `VITE_API_BASE_URL` (the public HTTPS API origin). On the FastAPI service set `API_CORS_ORIGINS` to the **exact HTTPS origin** of the static site and deploy both services. For an existing Blueprint, Render does not populate newly added `sync: false` variables automatically, so set these values in the Dashboard. Keep the existing Streamlit service and URL active.
 
 Each explicit analysis click uses an anonymous UUID. The v2 API uses the current Streamlit text matching rules, records hit counts and unmatched candidate observations in one idempotent database transaction, and loads the latest common matching settings. Failed requests can be retried without duplicate counts. The existing v1 API behavior remains available to integration clients.
 

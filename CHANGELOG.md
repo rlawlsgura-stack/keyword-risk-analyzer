@@ -1,3 +1,7 @@
+## React preview - Add password recovery
+
+- Add reset email requests, recovery-link handling, password confirmation, and update flow with Supabase Auth.
+
 ## React preview - Add keyword inquiries
 
 - Let members search for a registered keyword, submit risk or criteria change requests, and view request history.

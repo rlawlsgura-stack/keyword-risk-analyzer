@@ -77,6 +77,10 @@ function App() {
   const [checkingUser, setCheckingUser] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [authMode, setAuthMode] = useState<'login' | 'request-reset' | 'new-password' | 'password-updated'>('login')
+  const [resetEmailSent, setResetEmailSent] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [text, setText] = useState('')
   const [mode, setMode] = useState<AnalysisMode>('similar')
   const [partialMinLen, setPartialMinLen] = useState(2)
@@ -144,8 +148,9 @@ function App() {
     }
     const client = supabase
     let active = true
-    const { data: { subscription } } = client.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, nextSession) => {
       if (active) {
+        if (event === 'PASSWORD_RECOVERY') setAuthMode('new-password')
         setSession(nextSession)
         setRestoring(false)
       }
@@ -257,6 +262,34 @@ function App() {
     setPassword('')
     setBusy(false)
     if (error) setMessage('로그인에 실패했습니다. 이메일과 비밀번호를 확인해 주세요.')
+  }
+
+  async function requestPasswordReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) return
+    setBusy(true)
+    setMessage('')
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    })
+    setBusy(false)
+    if (error) setMessage('비밀번호 재설정 메일을 보내지 못했습니다. 이메일 주소와 설정을 확인해 주세요.')
+    else setResetEmailSent(true)
+  }
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) return
+    if (newPassword !== confirmPassword) {
+      setMessage('새 비밀번호가 서로 다릅니다.')
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setBusy(false)
+    if (error) setMessage('비밀번호를 변경하지 못했습니다. 새 비밀번호를 확인해 주세요.')
+    else setAuthMode('password-updated')
   }
 
   async function signOut() {
@@ -548,7 +581,41 @@ function App() {
         <h1>연결 설정이 필요합니다</h1>
         <p><code>frontend/.env.example</code>을 참고해 Supabase 공개 키와 API 주소를 설정해 주세요.</p>
       </section> : restoring || checkingUser ? <section className="state-card" role="status">로그인 상태를 확인하고 있습니다…</section>
-        : !session ? <section className="login-card">
+        : authMode === 'password-updated' ? <section className="state-card">
+          <h1>비밀번호를 변경했습니다</h1>
+          <p>새 비밀번호로 계정을 계속 사용할 수 있습니다.</p>
+          <button className="primary-button" onClick={() => setAuthMode('login')}>계속하기</button>
+        </section> : authMode === 'new-password' && session ? <section className="login-card">
+          <div className="eyebrow">RESET PASSWORD</div>
+          <h1>새 비밀번호 설정</h1>
+          <p>계정에 사용할 새 비밀번호를 입력해 주세요.</p>
+          <form onSubmit={changePassword}>
+            <label htmlFor="new-password">새 비밀번호</label>
+            <input id="new-password" type="password" autoComplete="new-password" required
+              value={newPassword} disabled={busy} onChange={event => setNewPassword(event.target.value)} />
+            <label htmlFor="confirm-password">새 비밀번호 확인</label>
+            <input id="confirm-password" type="password" autoComplete="new-password" required
+              value={confirmPassword} disabled={busy} onChange={event => setConfirmPassword(event.target.value)} />
+            <button className="primary-button" disabled={busy} type="submit">{busy ? '변경 중…' : '비밀번호 변경'}</button>
+          </form>
+          {message && <p className="error-message" role="alert">{message}</p>}
+        </section> : !session && authMode === 'request-reset' ? <section className="login-card">
+          <div className="eyebrow">PASSWORD RECOVERY</div>
+          <h1>재설정 링크 받기</h1>
+          {resetEmailSent ? <>
+            <p>계정이 존재하면 비밀번호 재설정 링크가 포함된 이메일을 보냈습니다.</p>
+            <button className="secondary-button" onClick={() => { setAuthMode('login'); setResetEmailSent(false); setMessage('') }}>로그인으로 돌아가기</button>
+          </> : <>
+            <p>가입한 이메일을 입력하면 재설정 링크를 보내드립니다.</p>
+            <form onSubmit={requestPasswordReset}>
+              <label htmlFor="reset-email">이메일</label>
+              <input id="reset-email" type="email" autoComplete="username" required
+                value={email} disabled={busy} onChange={event => setEmail(event.target.value)} />
+              <button className="primary-button" disabled={busy} type="submit">{busy ? '메일 보내는 중…' : '재설정 링크 보내기'}</button>
+            </form>
+            {message && <p className="error-message" role="alert">{message}</p>}
+          </>}
+        </section> : !session ? <section className="login-card">
           <div className="eyebrow">WELCOME BACK</div>
           <h1>계정에 로그인</h1>
           <p>기존 Keyword Risk Analyzer 계정을 사용합니다.</p>
@@ -560,6 +627,11 @@ function App() {
             <button className="primary-button" disabled={busy} type="submit">{busy ? '로그인 중…' : '로그인'}</button>
           </form>
           {message && <p className="error-message" role="alert">{message}</p>}
+          <button className="text-button recovery-link" onClick={() => {
+            setAuthMode('request-reset')
+            setResetEmailSent(false)
+            setMessage('')
+          }}>비밀번호를 잊으셨나요?</button>
         </section> : !allowed ? <section className="state-card">
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
