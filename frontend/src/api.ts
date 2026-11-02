@@ -129,7 +129,7 @@ export async function analyzeText(input: AnalysisInput, analysisId: string): Pro
 export async function loadKeywords(offset: number, query: string,
   filters: { category: string; risk: string; evidenceType: string }, limit = 100): Promise<{
   total: number
-  revision: string | null
+  revision: number | null
   items: KeywordRow[]
 }> {
   const params = new URLSearchParams({ offset: String(offset), limit: String(limit), q: query,
@@ -137,14 +137,21 @@ export async function loadKeywords(offset: number, query: string,
   return requestApi(`/api/v1/keywords?${params}`)
 }
 
-export async function loadAllKeywords(): Promise<KeywordRow[]> {
+export async function loadKeywordSnapshot(): Promise<{ items: KeywordRow[]; revision: number }> {
   const all: KeywordRow[] = []
   const noFilters = { category: '', risk: '', evidenceType: '' }
+  let revision: number | null = null
   while (true) {
     const page = await loadKeywords(all.length, '', noFilters, 500)
+    if (revision === null) revision = page.revision
+    else if (page.revision !== revision) throw new Error('키워드 원장이 불러오는 중 변경되었습니다. 다시 불러와 주세요.')
     all.push(...page.items)
-    if (all.length >= page.total || page.items.length === 0) return all
+    if (all.length >= page.total || page.items.length === 0) return { items: all, revision: revision ?? 0 }
   }
+}
+
+export async function loadAllKeywords(): Promise<KeywordRow[]> {
+  return (await loadKeywordSnapshot()).items
 }
 
 export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {
@@ -217,5 +224,11 @@ export async function updateAdminUserRole(userId: string, role: 'admin' | 'membe
   expectedRole: 'admin' | 'member' | null): Promise<AdminUser> {
   return requestApi(`/api/v1/admin/users/${encodeURIComponent(userId)}/role`, {
     method: 'PUT', body: JSON.stringify({ role, expected_role: expectedRole }),
+  })
+}
+
+export async function saveAdminKeywords(revision: number, rows: KeywordRow[]): Promise<{ revision: number }> {
+  return requestApi('/api/v1/admin/keywords', {
+    method: 'PUT', body: JSON.stringify({ revision, rows }),
   })
 }

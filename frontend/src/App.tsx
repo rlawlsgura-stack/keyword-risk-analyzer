@@ -6,7 +6,7 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
-  updateAdminUserRole, type AdminUser } from './api'
+  updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -26,6 +26,8 @@ const keywordRequestTypeLabels: Record<string, string> = {
 const keywordRequestStatusLabels: Record<string, string> = {
   대기: '대기', 검토중: '검토 중', 처리완료: '처리 완료',
 }
+type EditableKeywordField = '상품카테고리' | '리스크 등급' | '대체키워드' |
+  '리스크 등급별 세부 심의기준' | '증빙자료유형'
 
 function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
   // API offsets count Unicode code points; JavaScript string slicing counts UTF-16 units.
@@ -95,12 +97,12 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
   const [keywordFilter, setKeywordFilter] = useState({ category: '', risk: '', evidenceType: '' })
-  const [keywordPage, setKeywordPage] = useState<{ total: number; revision: string | null; items: KeywordRow[] } | null>(null)
+  const [keywordPage, setKeywordPage] = useState<{ total: number; revision: number | null; items: KeywordRow[] } | null>(null)
   const [keywordBusy, setKeywordBusy] = useState(false)
   const [keywordExportBusy, setKeywordExportBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
@@ -150,6 +152,16 @@ function App() {
   const [adminUserRoleDrafts, setAdminUserRoleDrafts] = useState<Record<string, 'admin' | 'member' | ''>>({})
   const [adminUserSavingId, setAdminUserSavingId] = useState<string | null>(null)
   const [adminUserMessage, setAdminUserMessage] = useState('')
+  const [adminKeywordRows, setAdminKeywordRows] = useState<KeywordRow[]>([])
+  const [adminKeywordRevision, setAdminKeywordRevision] = useState<number | null>(null)
+  const [adminKeywordSearch, setAdminKeywordSearch] = useState('')
+  const [adminKeywordPageNumber, setAdminKeywordPageNumber] = useState(1)
+  const [adminKeywordBusy, setAdminKeywordBusy] = useState(false)
+  const [adminKeywordSaving, setAdminKeywordSaving] = useState(false)
+  const [adminKeywordDirty, setAdminKeywordDirty] = useState(false)
+  const [adminKeywordRefresh, setAdminKeywordRefresh] = useState(0)
+  const [adminKeywordError, setAdminKeywordError] = useState('')
+  const [adminKeywordMessage, setAdminKeywordMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -280,6 +292,23 @@ function App() {
     return () => { active = false }
   }, [page, user?.id, user?.app_metadata?.role, adminUserPage, adminUserRefresh])
 
+  useEffect(() => {
+    if (page !== 'keyword-admin' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    setAdminKeywordBusy(true)
+    setAdminKeywordError('')
+    void loadKeywordSnapshot().then(snapshot => {
+      if (active) {
+        setAdminKeywordRows(snapshot.items)
+        setAdminKeywordRevision(snapshot.revision)
+        setAdminKeywordDirty(false)
+      }
+    }).catch(error => {
+      if (active) setAdminKeywordError(error instanceof Error ? error.message : '키워드 원장을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setAdminKeywordBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, user?.app_metadata?.role, adminKeywordRefresh])
+
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
@@ -376,6 +405,12 @@ function App() {
   const role = user?.app_metadata?.role
   const allowed = role === 'member' || role === 'admin'
   const selectedUnmatchedCount = Object.keys(selectedUnmatched).length
+  const adminKeywordMatches = adminKeywordRows.filter(row => {
+    const query = adminKeywordSearch.trim().toLocaleLowerCase()
+    return !query || [row.kwd_no, row.키워드명, row.대체키워드].some(value => value.toLocaleLowerCase().includes(query))
+  })
+  const adminKeywordPageCount = Math.max(1, Math.ceil(adminKeywordMatches.length / 50))
+  const adminKeywordPageRows = adminKeywordMatches.slice((adminKeywordPageNumber - 1) * 50, adminKeywordPageNumber * 50)
 
   function toggleFilter(value: string, selected: string[], setSelected: (values: string[]) => void) {
     setSelected(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value])
@@ -581,6 +616,29 @@ function App() {
     }
   }
 
+  function updateAdminKeyword(code: string, field: EditableKeywordField, value: string) {
+    setAdminKeywordRows(previous => previous.map(row => row.kwd_no === code ? { ...row, [field]: value } : row))
+    setAdminKeywordDirty(true)
+    setAdminKeywordMessage('')
+  }
+
+  async function saveAdminKeywordChanges() {
+    if (!adminKeywordDirty || adminKeywordRevision === null) return
+    setAdminKeywordSaving(true)
+    setAdminKeywordError('')
+    setAdminKeywordMessage('')
+    try {
+      const result = await saveAdminKeywords(adminKeywordRevision, adminKeywordRows)
+      setAdminKeywordRevision(result.revision)
+      setAdminKeywordDirty(false)
+      setAdminKeywordMessage('키워드 원장을 저장했습니다.')
+    } catch (error) {
+      setAdminKeywordError(error instanceof Error ? error.message : '키워드 원장을 저장하지 못했습니다.')
+    } finally {
+      setAdminKeywordSaving(false)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -608,6 +666,9 @@ function App() {
       {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>
         <span className="nav-icon">♙</span> 사용자 관리
       </button>}
+      {role === 'admin' && <button className={`nav-item nav-button ${page === 'keyword-admin' ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>
+        <span className="nav-icon">✎</span> 키워드 관리
+      </button>}
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -616,7 +677,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : '사용자 관리'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : '키워드 관리'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -683,6 +744,61 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
+        </section> : page === 'keyword-admin' && role === 'admin' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">ADMIN / 08</div><h1>키워드 관리</h1>
+              <p>기존 키워드의 카테고리, 리스크, 대체 표현, 심의 기준과 증빙 유형을 수정합니다.</p></div>
+            <div className="preview-pill"><span /> 관리자 전용</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel admin-users-panel admin-keywords-panel">
+              <div className="admin-keyword-toolbar">
+                <label className="sr-only" htmlFor="admin-keyword-search">키워드 원장 검색</label>
+                <input id="admin-keyword-search" value={adminKeywordSearch} maxLength={200}
+                  placeholder="번호·키워드명·대체 키워드 검색"
+                  onChange={event => { setAdminKeywordSearch(event.target.value); setAdminKeywordPageNumber(1) }} />
+                <span>{adminKeywordBusy ? '원장을 불러오는 중…' : `${adminKeywordMatches.length.toLocaleString()} / ${adminKeywordRows.length.toLocaleString()}개`}</span>
+                <button className="secondary-button" disabled={adminKeywordBusy || adminKeywordSaving}
+                  onClick={() => {
+                    if (adminKeywordDirty && !window.confirm('저장하지 않은 변경사항을 버리고 최신 원장을 불러올까요?')) return
+                    setAdminKeywordDirty(false)
+                    setAdminKeywordRefresh(value => value + 1)
+                  }}>원장 다시 불러오기</button>
+                <button className="primary-button" disabled={!adminKeywordDirty || adminKeywordBusy || adminKeywordSaving || adminKeywordRevision === null}
+                  onClick={saveAdminKeywordChanges}>{adminKeywordSaving ? '저장 중…' : '변경사항 저장'}</button>
+              </div>
+              <p className="unmatched-note">번호·키워드명·조회 횟수·마지막 출력일은 읽기 전용입니다. 새 행 추가와 삭제는 기존 Streamlit 관리자 화면에서 계속할 수 있습니다.</p>
+              {adminKeywordDirty && <p className="admin-dirty-note">저장하지 않은 변경사항이 있습니다.</p>}
+              {adminKeywordMessage && <p className="success-message" role="status">{adminKeywordMessage}</p>}
+              {adminKeywordError && <p className="error-message" role="alert">{adminKeywordError}</p>}
+              {!adminKeywordError && <div className="table-scroll admin-keyword-table"><table>
+                <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 유형</th></tr></thead>
+                <tbody>{adminKeywordPageRows.map(row => <tr key={row.kwd_no}>
+                  <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td>
+                  <td><input aria-label={`${row.kwd_no} 카테고리`} value={row.상품카테고리}
+                    disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '상품카테고리', event.target.value)} /></td>
+                  <td><input aria-label={`${row.kwd_no} 리스크`} value={row['리스크 등급']}
+                    disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '리스크 등급', event.target.value)} /></td>
+                  <td><input aria-label={`${row.kwd_no} 대체 키워드`} value={row.대체키워드}
+                    disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '대체키워드', event.target.value)} /></td>
+                  <td><textarea aria-label={`${row.kwd_no} 심의 기준`} value={row['리스크 등급별 세부 심의기준']}
+                    disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '리스크 등급별 세부 심의기준', event.target.value)} /></td>
+                  <td><input aria-label={`${row.kwd_no} 증빙 유형`} value={row.증빙자료유형}
+                    disabled={adminKeywordSaving || adminKeywordBusy} onChange={event => updateAdminKeyword(row.kwd_no, '증빙자료유형', event.target.value)} /></td>
+                </tr>)}</tbody>
+              </table></div>}
+              {!adminKeywordBusy && !adminKeywordError && adminKeywordPageRows.length === 0 && <p className="empty-result">검색 결과가 없습니다.</p>}
+              <div className="catalog-pagination">
+                <button className="secondary-button" disabled={adminKeywordBusy || adminKeywordPageNumber <= 1}
+                  onClick={() => setAdminKeywordPageNumber(value => Math.max(1, value - 1))}>이전</button>
+                <span>페이지 {adminKeywordPageNumber} / {adminKeywordPageCount}</span>
+                <button className="secondary-button" disabled={adminKeywordBusy || adminKeywordPageNumber >= adminKeywordPageCount}
+                  onClick={() => setAdminKeywordPageNumber(value => value + 1)}>다음</button>
+              </div>
+            </div>
+          </section>
+        </> : page === 'keyword-admin' ? <section className="state-card">
+          <h1>관리자 권한이 필요합니다</h1><p>키워드 원장은 관리자 계정만 수정할 수 있습니다.</p>
         </section> : page === 'users' && role === 'admin' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 07</div><h1>사용자 관리</h1>

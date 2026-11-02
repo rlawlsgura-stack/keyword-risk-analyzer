@@ -1,3 +1,8 @@
+## React preview - Add keyword editing
+
+- Let admins edit existing keyword classifications and review criteria with revision checks.
+- Preserve row IDs and hit statistics; keep adding and deleting rows in Streamlit.
+
 ## React preview - Add admin user role management
 
 - Add a paginated admin-only user list and role changes with expected-role conflict checks.

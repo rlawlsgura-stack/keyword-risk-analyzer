@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 
 from app_config import configure, cloud_enabled
-from repository import ConflictError, StorageError, SupabaseRepository
+from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, SupabaseRepository
 from service import analyze, analyze_current
 from matching_engine import DB_COLS
 from regulation_assistant import RegulationSearchError, answer_regulation_question
@@ -137,6 +137,25 @@ class AdminUserRoleUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     role: Literal['admin', 'member']
     expected_role: Literal['admin', 'member'] | None = None
+
+
+class AdminKeywordRow(BaseModel):
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+    kwd_no: str = Field(min_length=1, max_length=100)
+    keyword_name: str = Field(alias='키워드명', max_length=500)
+    category: str = Field(alias='상품카테고리', max_length=500)
+    risk_grade: str = Field(alias='리스크 등급', max_length=500)
+    alternative: str = Field(alias='대체키워드', max_length=2000)
+    criteria: str = Field(alias='리스크 등급별 세부 심의기준', max_length=5000)
+    evidence_type: str = Field(alias='증빙자료유형', max_length=500)
+    hit_count: str = Field(default='0', alias=COUNT_COL, max_length=32)
+    last_hit: str = Field(default='', alias=LAST_COL, max_length=100)
+
+
+class AdminKeywordSave(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    revision: int = Field(ge=0)
+    rows: list[AdminKeywordRow] = Field(min_length=1, max_length=10000)
 
 
 @app.exception_handler(StorageError)
@@ -303,6 +322,42 @@ def update_admin_user_role(user_id: UUID, body: AdminUserRoleUpdate,
         return repository.set_user_role(credentials.credentials, str(user_id), body.role, body.expected_role)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@app.put('/api/v1/admin/keywords')
+def save_admin_keywords(body: AdminKeywordSave, actor=Depends(current_actor),
+                        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                        repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to edit keywords')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+
+    current = repository.load_keywords()
+    if current.attrs.get('revision') != body.revision:
+        raise HTTPException(409, 'Keyword data changed. Reload it before saving.')
+    rows = [row.model_dump(by_alias=True) for row in body.rows]
+    codes = [row['kwd_no'].strip() for row in rows]
+    if len(set(codes)) != len(codes):
+        raise HTTPException(422, 'Keyword numbers must be unique.')
+    current_codes = set(current['kwd_no'].astype(str).str.strip())
+    if set(codes) != current_codes:
+        raise HTTPException(422, 'This editor only updates existing keyword rows.')
+    current_by_code = current.set_index(current['kwd_no'].astype(str).str.strip())
+    for row, code in zip(rows, codes):
+        row['kwd_no'] = code
+        row[COUNT_COL] = str(current_by_code.at[code, COUNT_COL])
+        row[LAST_COL] = str(current_by_code.at[code, LAST_COL])
+    import pandas as pd
+    frame = pd.DataFrame(rows, columns=DB_COLS).fillna('').astype(str)
+    try:
+        revision = repository.save_keywords(frame, body.revision)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'revision': revision}
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
