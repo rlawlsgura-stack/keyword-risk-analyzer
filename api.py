@@ -18,7 +18,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app_config import configure, cloud_enabled
 from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, SupabaseRepository
-from service import analyze, analyze_current
+from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 
@@ -221,6 +221,14 @@ class OCRKeywordSave(BaseModel):
     model_config = ConfigDict(extra='forbid')
     revision: int = Field(ge=0)
     candidates: list[OCRKeywordCandidate] = Field(min_length=1, max_length=1000)
+
+
+class AdminApprovedPartialUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kwd_no: str = Field(min_length=1, max_length=100)
+    term: str = Field(min_length=1, max_length=500)
+    expected_expressions: list[str] = Field(max_length=500)
+    expressions: list[str] = Field(max_length=500)
 
 
 def _next_keyword_code(category: str, rows: list[dict]) -> str:
@@ -782,6 +790,58 @@ def save_admin_normalization_settings(
     repository.save_setting('ignored_special_symbols', {'symbols': symbols})
     repository.save_setting('ko_suffix_whitelist', {'extra_suffixes': suffixes})
     return {'ignored_symbols': symbols, 'extra_suffixes': suffixes}
+
+
+@app.get('/api/v1/admin/approved-partials')
+def admin_approved_partials(actor=Depends(current_actor),
+                            credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                            repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    rows = repository.load_keywords()[['kwd_no', DB_COLS[1]]].to_dict('records')
+    rules = repository.load_setting('approved_partial_expressions_v272', {})
+    return {'keywords': [{'kwd_no': row['kwd_no'], 'term': row[DB_COLS[1]]} for row in rows],
+            'rules': rules}
+
+
+@app.put('/api/v1/admin/approved-partials')
+def save_admin_approved_partials(body: AdminApprovedPartialUpdate,
+                                 actor=Depends(current_actor),
+                                 credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                 repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    current = repository.load_keywords()
+    matched = current.loc[current['kwd_no'].astype(str).str.strip() == body.kwd_no.strip()]
+    if matched.empty or str(matched.iloc[0][DB_COLS[1]]) != body.term:
+        raise HTTPException(409, 'Keyword changed or no longer exists. Reload the editor.')
+    rules = repository.load_setting('approved_partial_expressions_v272', {})
+    existing = rules.get(body.kwd_no, {})
+    if existing.get('term') != body.term:
+        existing_expressions = []
+    else:
+        existing_expressions = existing.get('expressions', [])
+    if existing_expressions != body.expected_expressions:
+        raise HTTPException(409, 'Approved expressions changed. Reload before saving.')
+    from approved_matching import validate_expressions
+    try:
+        expressions = validate_expressions(body.term, body.expressions,
+            load_matching_config(repository, MatchingConfig(mode='exact')))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    updated = dict(rules)
+    if expressions:
+        updated[body.kwd_no] = {'term': body.term, 'expressions': expressions}
+    else:
+        updated.pop(body.kwd_no, None)
+    repository.save_setting('approved_partial_expressions_v272', updated)
+    return {'kwd_no': body.kwd_no, 'term': body.term, 'expressions': expressions}
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

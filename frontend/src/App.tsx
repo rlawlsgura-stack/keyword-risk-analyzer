@@ -13,6 +13,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type NormalizationRecommendation, normalizeUnmatchedTerms,
   loadUnmatchedRecommendationDraft, saveUnmatchedRecommendationDraft,
   extractOCRImages, saveOCRKeywords, type OCRCandidate, type OCRFileResult } from './api'
+import { loadAdminApprovedPartials, saveAdminApprovedPartials,
+  type ApprovedPartialKeyword, type ApprovedPartialRules } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -233,6 +235,15 @@ function App() {
   const [normalizationError, setNormalizationError] = useState('')
   const [normalizationMessage, setNormalizationMessage] = useState('')
   const [normalizationRefresh, setNormalizationRefresh] = useState(0)
+  const [approvedPartialKeywords, setApprovedPartialKeywords] = useState<ApprovedPartialKeyword[]>([])
+  const [approvedPartialRules, setApprovedPartialRules] = useState<ApprovedPartialRules>({})
+  const [approvedPartialSearch, setApprovedPartialSearch] = useState('')
+  const [approvedPartialCode, setApprovedPartialCode] = useState('')
+  const [approvedPartialText, setApprovedPartialText] = useState('')
+  const [approvedPartialBusy, setApprovedPartialBusy] = useState(false)
+  const [approvedPartialSaving, setApprovedPartialSaving] = useState(false)
+  const [approvedPartialError, setApprovedPartialError] = useState('')
+  const [approvedPartialMessage, setApprovedPartialMessage] = useState('')
   const [recommendations, setRecommendations] = useState<NormalizationRecommendation[]>([])
   const [selectedRecommendationIds, setSelectedRecommendationIds] = useState<string[]>([])
   const [recommendationBusy, setRecommendationBusy] = useState(false)
@@ -431,6 +442,25 @@ function App() {
   }, [page, user?.id, user?.app_metadata?.role, normalizationRefresh])
 
   useEffect(() => {
+    if (page !== 'normalization-admin' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    setApprovedPartialBusy(true)
+    setApprovedPartialError('')
+    void loadAdminApprovedPartials().then(({ keywords, rules }) => {
+      if (!active) return
+      const code = keywords[0]?.kwd_no ?? ''
+      setApprovedPartialKeywords(keywords)
+      setApprovedPartialRules(rules)
+      setApprovedPartialCode(code)
+      const selected = keywords.find(row => row.kwd_no === code)
+      setApprovedPartialText(rules[code]?.term === selected?.term ? (rules[code]?.expressions ?? []).join('\n') : '')
+    }).catch(error => {
+      if (active) setApprovedPartialError(error instanceof Error ? error.message : '승인 표현을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setApprovedPartialBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, user?.app_metadata?.role, normalizationRefresh])
+
+  useEffect(() => {
     if (page !== 'unmatched' || !user?.id) return
     let active = true
     setRecommendationDraftBusy(true)
@@ -566,6 +596,35 @@ function App() {
     }
   }
 
+  async function saveApprovedPartialRules() {
+    const keyword = approvedPartialKeywords.find(row => row.kwd_no === approvedPartialCode)
+    if (!keyword) return
+    const expressions = [...new Set(approvedPartialText.split(/\r?\n/).map(value => value.trim()).filter(Boolean))]
+    const saved = approvedPartialRules[approvedPartialCode]
+    const expected = saved?.term === keyword.term ? saved.expressions : []
+    setApprovedPartialSaving(true)
+    setApprovedPartialError('')
+    setApprovedPartialMessage('')
+    try {
+      const result = await saveAdminApprovedPartials({ kwd_no: keyword.kwd_no, term: keyword.term,
+        expected_expressions: expected, expressions })
+      setApprovedPartialRules(previous => {
+        const next = { ...previous }
+        if (result.expressions.length) next[result.kwd_no] = { term: result.term, expressions: result.expressions }
+        else delete next[result.kwd_no]
+        return next
+      })
+      setApprovedPartialText(result.expressions.join('\n'))
+      setApprovedPartialMessage(result.expressions.length
+        ? `${result.expressions.length}개 승인 표현을 저장했습니다. 이후 분석부터 적용됩니다.`
+        : '해당 키워드의 승인 표현을 제거했습니다.')
+    } catch (error) {
+      setApprovedPartialError(error instanceof Error ? error.message : '승인 표현을 저장하지 못했습니다.')
+    } finally {
+      setApprovedPartialSaving(false)
+    }
+  }
+
   async function submitAnalysis(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!text.trim()) {
@@ -621,6 +680,10 @@ function App() {
   })
   const adminKeywordPageCount = Math.max(1, Math.ceil(adminKeywordMatches.length / 50))
   const adminKeywordPageRows = adminKeywordMatches.slice((adminKeywordPageNumber - 1) * 50, adminKeywordPageNumber * 50)
+  const approvedPartialMatches = approvedPartialKeywords.filter(row => {
+    const query = approvedPartialSearch.trim().toLocaleLowerCase()
+    return !query || `${row.kwd_no} ${row.term}`.toLocaleLowerCase().includes(query)
+  }).slice(0, 200)
 
   function toggleFilter(value: string, selected: string[], setSelected: (values: string[]) => void) {
     setSelected(selected.includes(value) ? selected.filter(item => item !== value) : [...selected, value])
@@ -1183,6 +1246,46 @@ function App() {
                 <button className="primary-button" disabled={normalizationBusy || normalizationSaving}
                   onClick={saveNormalizationSettings}>{normalizationSaving ? '저장 중…' : '정규화 설정 저장'}</button>
               </div>
+              <section className="approved-partial-editor">
+                <div className="request-history-heading"><div><h2>일부 일치 승인 표현</h2>
+                  <p>부분 일치 모드에서만 사용합니다. 등록 키워드 안에 포함된 2글자 이상의 표현만 승인할 수 있습니다.</p></div>
+                  <span>{approvedPartialKeywords.length.toLocaleString()}개 키워드</span></div>
+                {approvedPartialError && <p className="error-message" role="alert">{approvedPartialError}</p>}
+                {approvedPartialMessage && <p className="success-message" role="status">{approvedPartialMessage}</p>}
+                <label className="normalization-setting-field">키워드 검색
+                  <input value={approvedPartialSearch} maxLength={200} disabled={approvedPartialBusy || approvedPartialSaving}
+                    onChange={event => setApprovedPartialSearch(event.target.value)} placeholder="번호 또는 키워드명" />
+                </label>
+                <label className="normalization-setting-field">키워드 선택
+                  <select value={approvedPartialCode} disabled={approvedPartialBusy || approvedPartialSaving}
+                    onChange={event => {
+                      const code = event.target.value
+                      const keyword = approvedPartialKeywords.find(row => row.kwd_no === code)
+                      const rule = approvedPartialRules[code]
+                      setApprovedPartialCode(code)
+                      setApprovedPartialText(rule?.term === keyword?.term ? rule.expressions.join('\n') : '')
+                      setApprovedPartialMessage('')
+                      setApprovedPartialError('')
+                    }}>
+                    <option value="">선택</option>{approvedPartialMatches.map(row =>
+                      <option value={row.kwd_no} key={row.kwd_no}>{row.kwd_no} · {row.term}</option>)}
+                  </select>
+                </label>
+                <label className="normalization-setting-field">승인 표현
+                  <textarea value={approvedPartialText} maxLength={20000} disabled={approvedPartialBusy || approvedPartialSaving || !approvedPartialCode}
+                    onChange={event => setApprovedPartialText(event.target.value)} placeholder="한 줄에 하나씩 입력하세요." />
+                  <small>표현은 선택한 키워드명에 실제로 포함되어야 합니다. 비우고 저장하면 해당 키워드의 승인을 삭제합니다.</small>
+                </label>
+                <div className="admin-keyword-toolbar">
+                  <button className="secondary-button" disabled={approvedPartialBusy || approvedPartialSaving}
+                    onClick={() => {
+                      if (window.confirm('저장하지 않은 승인 표현 변경을 버리고 목록을 다시 불러올까요?'))
+                        setNormalizationRefresh(value => value + 1)
+                    }}>목록 다시 불러오기</button>
+                  <button className="primary-button" disabled={!approvedPartialCode || approvedPartialBusy || approvedPartialSaving}
+                    onClick={saveApprovedPartialRules}>{approvedPartialSaving ? '저장 중…' : '승인 표현 저장'}</button>
+                </div>
+              </section>
             </div>
           </section>
         </> : page === 'normalization-admin' ? <section className="state-card">

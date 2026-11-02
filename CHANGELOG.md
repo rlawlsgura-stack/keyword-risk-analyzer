@@ -1,3 +1,8 @@
+## React preview - Add approved partial expressions
+
+- Let admins approve keyword-contained expressions used by partial matching.
+- Validate expressions against the current keyword and reject stale edits.
+
 ## React preview - Add keyword deletion
 
 - Let admins select keyword rows across catalog pages and delete them with a revision check.

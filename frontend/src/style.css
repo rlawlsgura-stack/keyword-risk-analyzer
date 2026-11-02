@@ -127,6 +127,11 @@ textarea::placeholder { color: #a6b0c0; }
 .new-keyword-fields textarea { min-height: 95px; padding: 9px; font-size: 11px; }
 .new-keyword-form > .primary-button { justify-self: start; }
 .normalization-admin-panel { display: grid; gap: 20px; max-width: 900px; }
+.approved-partial-editor { display: grid; gap: 15px; margin-top: 10px; padding-top: 22px; border-top: 1px solid #e8ecf2; }
+.approved-partial-editor h2 { margin: 0; font-size: 14px; }
+.approved-partial-editor .request-history-heading p { margin: 5px 0 0; color: #8490a2; font-size: 11px; }
+.approved-partial-editor .normalization-setting-field { max-width: 600px; }
+.approved-partial-editor textarea { min-height: 180px; }
 .normalization-setting-field { display: grid; gap: 8px; color: #3c4b63; font-size: 12px; font-weight: 600; }
 .normalization-setting-field input, .normalization-setting-field textarea { width: 100%; border: 1px solid #dce2eb; border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 12px; }
 .normalization-setting-field textarea { min-height: 220px; resize: vertical; }

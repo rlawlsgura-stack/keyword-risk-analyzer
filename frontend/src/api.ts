@@ -113,6 +113,8 @@ export type OCRFileResult = {
   lines: { text: string; confidence: number; bbox: number[] | null }[]
   preview_data?: string | null; image_width?: number; image_height?: number; preview_error?: string
 }
+export type ApprovedPartialKeyword = { kwd_no: string; term: string }
+export type ApprovedPartialRules = Record<string, { term: string; expressions: string[] }>
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -322,5 +324,19 @@ export async function saveAdminNormalizationSettings(settings: Omit<Normalizatio
 }> {
   return requestApi('/api/v1/admin/normalization-settings', {
     method: 'PUT', body: JSON.stringify(settings),
+  })
+}
+
+export async function loadAdminApprovedPartials(): Promise<{
+  keywords: ApprovedPartialKeyword[]; rules: ApprovedPartialRules
+}> {
+  return requestApi('/api/v1/admin/approved-partials')
+}
+
+export async function saveAdminApprovedPartials(input: {
+  kwd_no: string; term: string; expected_expressions: string[]; expressions: string[]
+}): Promise<{ kwd_no: string; term: string; expressions: string[] }> {
+  return requestApi('/api/v1/admin/approved-partials', {
+    method: 'PUT', body: JSON.stringify(input),
   })
 }
