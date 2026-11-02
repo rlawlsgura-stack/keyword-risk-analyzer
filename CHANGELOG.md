@@ -1,3 +1,8 @@
+## React preview - Improve analysis highlight interactions
+
+- Color matched text by risk grade and highlight mixed or unknown grades in yellow.
+- Support Ctrl/Cmd selection and copying of multiple keyword numbers.
+
 ## React preview - Add keyword spreadsheet upload
 
 - Support admin CSV/XLSX import in merge or explicit overwrite mode.
