@@ -4625,7 +4625,7 @@ def render_unmatched_candidate_pool():
     if review_rows:
         candidate_df = pd.DataFrame([
             {'미매칭 표현': row['surface'],
-             '\uB4F1\uB85D\uC77C\uC2DC': pd.to_datetime(row.get('first_seen'), utc=True).tz_convert('Asia/Seoul')
+             '\uB4F1\uB85D\uC77C\uC2DC': pd.to_datetime(row.get('first_seen'), utc=True).tz_convert('Asia/Seoul').tz_localize(None)
                           if row.get('first_seen') else pd.NaT,
              '처리상태': row.get('status', ''),
              '검출횟수(중복포함)': int(row.get('occurrences', 0) or 0),
@@ -4679,6 +4679,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             column_config={
                 selection_column: st.column_config.CheckboxColumn(
                     "\u200b", width=32, pinned=True, alignment='center'),
+                '\uB4F1\uB85D\uC77C\uC2DC': st.column_config.DatetimeColumn(
+                    '\uB4F1\uB85D\uC77C\uC2DC', format='YYYY-MM-DD HH:mm'),
             },
             disabled=[column for column in candidate_df.columns if column != selection_column],
             key=editor_key,
