@@ -94,6 +94,7 @@ export type KeywordRequestRecord = {
   admin_reply: string
   created_at: string
 }
+export type AdminUser = { id: string; email: string; role: 'admin' | 'member' | null; email_confirmed: boolean }
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -204,5 +205,17 @@ export async function updateKeywordRequest(requestId: string, status: string,
   adminReply: string): Promise<{ id: string; status: string; admin_reply: string }> {
   return requestApi(`/api/v1/keyword-requests/${encodeURIComponent(requestId)}`, {
     method: 'PUT', body: JSON.stringify({ status, admin_reply: adminReply }),
+  })
+}
+
+export async function loadAdminUsers(page: number): Promise<{ items: AdminUser[]; has_more: boolean }> {
+  const params = new URLSearchParams({ page: String(page), per_page: '100' })
+  return requestApi(`/api/v1/admin/users?${params}`)
+}
+
+export async function updateAdminUserRole(userId: string, role: 'admin' | 'member',
+  expectedRole: 'admin' | 'member' | null): Promise<AdminUser> {
+  return requestApi(`/api/v1/admin/users/${encodeURIComponent(userId)}/role`, {
+    method: 'PUT', body: JSON.stringify({ role, expected_role: expectedRole }),
   })
 }

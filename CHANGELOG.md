@@ -1,3 +1,8 @@
+## React preview - Add admin user role management
+
+- Add a paginated admin-only user list and role changes with expected-role conflict checks.
+- Preserve the rule that an administrator cannot remove their own admin role.
+
 ## React preview - Add password recovery
 
 - Add reset email requests, recovery-link handling, password confirmation, and update flow with Supabase Auth.

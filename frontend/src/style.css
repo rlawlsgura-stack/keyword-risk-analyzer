@@ -109,6 +109,9 @@ textarea::placeholder { color: #a6b0c0; }
 .request-admin-controls select { min-height: 36px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }
 .request-admin-controls textarea { min-height: 100px; padding: 10px; font-size: 11px; }
 .request-admin-controls .secondary-button { justify-self: start; }
+.admin-users-panel { padding: 20px; }
+.admin-users-panel select { min-width: 115px; border: 1px solid #dce2eb; border-radius: 7px; padding: 7px 9px; background: #fff; }
+.admin-user-id { min-width: 225px; color: #8a95a7; font-family: ui-monospace, monospace; font-size: 10px; }
 .catalog-meta { display: flex; justify-content: space-between; gap: 12px; margin: 19px 0 10px; color: #8793a6; font-size: 11px; }
 .catalog-panel td:nth-child(6) { min-width: 260px; white-space: pre-wrap; }
 .catalog-panel td:nth-child(5), .catalog-panel td:nth-child(7) { min-width: 150px; white-space: pre-wrap; }

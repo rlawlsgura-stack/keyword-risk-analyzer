@@ -5,7 +5,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
   type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
   submitUnmatchedRegistrationRequests, findKeywords, loadKeywordRequests,
-  submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord } from './api'
+  submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
+  updateAdminUserRole, type AdminUser } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -94,7 +95,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -140,6 +141,15 @@ function App() {
   const [requestSearchBusy, setRequestSearchBusy] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [requestMessage, setRequestMessage] = useState('')
+  const [adminUserPage, setAdminUserPage] = useState(1)
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
+  const [adminUsersHasMore, setAdminUsersHasMore] = useState(false)
+  const [adminUsersBusy, setAdminUsersBusy] = useState(false)
+  const [adminUsersError, setAdminUsersError] = useState('')
+  const [adminUserRefresh, setAdminUserRefresh] = useState(0)
+  const [adminUserRoleDrafts, setAdminUserRoleDrafts] = useState<Record<string, 'admin' | 'member' | ''>>({})
+  const [adminUserSavingId, setAdminUserSavingId] = useState<string | null>(null)
+  const [adminUserMessage, setAdminUserMessage] = useState('')
 
   useEffect(() => {
     if (!supabase) {
@@ -252,6 +262,23 @@ function App() {
     }).finally(() => { if (active) setRequestBusy(false) })
     return () => { active = false }
   }, [page, user?.id, requestRefresh])
+
+  useEffect(() => {
+    if (page !== 'users' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    setAdminUsersBusy(true)
+    setAdminUsersError('')
+    void loadAdminUsers(adminUserPage).then(data => {
+      if (active) {
+        setAdminUsers(data.items)
+        setAdminUsersHasMore(data.has_more)
+        setAdminUserRoleDrafts(Object.fromEntries(data.items.map(item => [item.id, item.role ?? ''])))
+      }
+    }).catch(error => {
+      if (active) setAdminUsersError(error instanceof Error ? error.message : '계정 목록을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setAdminUsersBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, user?.app_metadata?.role, adminUserPage, adminUserRefresh])
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -537,6 +564,23 @@ function App() {
     }
   }
 
+  async function saveAdminUserRole(item: AdminUser) {
+    const nextRole = adminUserRoleDrafts[item.id]
+    if (!nextRole || nextRole === item.role) return
+    setAdminUserSavingId(item.id)
+    setAdminUsersError('')
+    setAdminUserMessage('')
+    try {
+      await updateAdminUserRole(item.id, nextRole, item.role)
+      setAdminUserMessage(`${item.email || '계정'}의 역할을 변경했습니다.`)
+      setAdminUserRefresh(value => value + 1)
+    } catch (error) {
+      setAdminUsersError(error instanceof Error ? error.message : '계정 역할을 변경하지 못했습니다.')
+    } finally {
+      setAdminUserSavingId(null)
+    }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand-mark">K<span>·</span>R</div>
@@ -561,6 +605,9 @@ function App() {
       <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>
         <span className="nav-icon">✉</span> 키워드 문의
       </button>
+      {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>
+        <span className="nav-icon">♙</span> 사용자 관리
+      </button>}
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -569,7 +616,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : '키워드 문의'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : '사용자 관리'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -636,6 +683,50 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
+        </section> : page === 'users' && role === 'admin' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">ADMIN / 07</div><h1>사용자 관리</h1>
+              <p>계정 역할을 조회하고 member/admin 권한을 변경합니다.</p></div>
+            <div className="preview-pill"><span /> 관리자 전용</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel admin-users-panel">
+              <div className="request-history-heading"><h2>계정 목록</h2>
+                <span>{adminUsersBusy ? '불러오는 중…' : `페이지 ${adminUserPage}`}</span></div>
+              {adminUserMessage && <p className="success-message" role="status">{adminUserMessage}</p>}
+              {adminUsersError && <p className="error-message" role="alert">{adminUsersError}</p>}
+              {!adminUsersError && <div className="table-scroll"><table>
+                <thead><tr><th>이메일</th><th>계정 ID</th><th>이메일 확인</th><th>현재 역할</th><th>역할 변경</th><th /></tr></thead>
+                <tbody>{adminUsers.map(item => {
+                  const draft = adminUserRoleDrafts[item.id] ?? item.role ?? ''
+                  const unchanged = draft === (item.role ?? '')
+                  const selfDemotion = item.id === user?.id && draft === 'member'
+                  return <tr key={item.id}>
+                    <td><strong>{item.email || '—'}</strong></td><td className="admin-user-id">{item.id}</td>
+                    <td>{item.email_confirmed ? '확인됨' : '미확인'}</td><td>{item.role ?? '미지정'}</td>
+                    <td><select aria-label={`${item.email} 역할`} value={draft} disabled={adminUsersBusy || adminUserSavingId === item.id}
+                      onChange={event => setAdminUserRoleDrafts(previous => ({ ...previous,
+                        [item.id]: event.target.value as 'admin' | 'member' | '' }))}>
+                      <option value="">미지정</option><option value="member">member</option><option value="admin">admin</option>
+                    </select></td>
+                    <td><button className="secondary-button" disabled={unchanged || !draft || selfDemotion || adminUserSavingId === item.id}
+                      onClick={() => saveAdminUserRole(item)}>
+                      {adminUserSavingId === item.id ? '저장 중…' : '저장'}
+                    </button></td>
+                  </tr>
+                })}</tbody>
+              </table></div>}
+              <div className="catalog-pagination">
+                <button className="secondary-button" disabled={adminUsersBusy || adminUserPage <= 1}
+                  onClick={() => setAdminUserPage(value => Math.max(1, value - 1))}>이전</button>
+                <span>페이지 {adminUserPage}</span>
+                <button className="secondary-button" disabled={adminUsersBusy || !adminUsersHasMore}
+                  onClick={() => setAdminUserPage(value => value + 1)}>다음</button>
+              </div>
+            </div>
+          </section>
+        </> : page === 'users' ? <section className="state-card">
+          <h1>관리자 권한이 필요합니다</h1><p>사용자 관리는 관리자 계정만 이용할 수 있습니다.</p>
         </section> : page === 'requests' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">REQUESTS / 06</div><h1>키워드 문의</h1>

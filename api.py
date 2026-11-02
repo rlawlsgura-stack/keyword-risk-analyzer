@@ -133,6 +133,12 @@ class KeywordRequestUpdate(BaseModel):
     admin_reply: str = Field(default='', max_length=4000)
 
 
+class AdminUserRoleUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    role: Literal['admin', 'member']
+    expected_role: Literal['admin', 'member'] | None = None
+
+
 @app.exception_handler(StorageError)
 def storage_error(request: Request, exc: StorageError):
     return JSONResponse(status_code=409 if isinstance(exc, ConflictError) else 503,
@@ -263,6 +269,40 @@ def update_keyword_request(request_id: UUID, body: KeywordRequestUpdate,
         raise HTTPException(403, 'Administrator role required')
     return repository.update_keyword_request(str(request_id), body.status,
                                             body.admin_reply.strip(), credentials.credentials)
+
+
+@app.get('/api/v1/admin/users')
+def admin_users(page: int = Query(1, ge=1), per_page: int = Query(100, ge=1, le=1000),
+                actor=Depends(current_actor),
+                credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to manage accounts')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    return {'items': repository.list_users(credentials.credentials, page, per_page),
+            'has_more': repository.has_users_page(credentials.credentials, page + 1)}
+
+
+@app.put('/api/v1/admin/users/{user_id}/role')
+def update_admin_user_role(user_id: UUID, body: AdminUserRoleUpdate,
+                           actor=Depends(current_actor),
+                           credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                           repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required to manage accounts')
+    if not credentials:
+        raise HTTPException(401, 'Bearer token required', headers={'WWW-Authenticate': 'Bearer'})
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    try:
+        return repository.set_user_role(credentials.credentials, str(user_id), body.role, body.expected_role)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @app.get('/api/v1/analyses/{analysis_id}')
