@@ -4653,6 +4653,75 @@ def unmatched_recommendation_id(row):
     return 'local:' + hashlib.sha256(identity.encode()).hexdigest()
 
 
+def _order_manual_unmatched_recommendations(recommendations):
+    manual_rows = st.session_state.get('unmatched_manual_recommendations', [])
+    placements = st.session_state.get('unmatched_manual_recommendation_placements', {})
+    before, after = {}, {}
+    for row in manual_rows:
+        placement = placements.get(row['recommendation_id'], {})
+        anchor = placement.get('anchor_id')
+        target = before if placement.get('position') == 'before' else after
+        target.setdefault(anchor, []).append(row)
+
+    ordered, emitted = [], set()
+
+    def append_tree(row):
+        recommendation_id = row['recommendation_id']
+        if recommendation_id in emitted:
+            return
+        for child in before.get(recommendation_id, []):
+            append_tree(child)
+        ordered.append(row)
+        emitted.add(recommendation_id)
+        for child in after.get(recommendation_id, []):
+            append_tree(child)
+
+    for row in recommendations:
+        append_tree(row)
+    for row in manual_rows:
+        append_tree(row)
+    return ordered
+
+
+def _persist_added_unmatched_rows(edited_rows, recommendations):
+    manual_rows = st.session_state.setdefault('unmatched_manual_recommendations', [])
+    placements = st.session_state.setdefault('unmatched_manual_recommendation_placements', {})
+    known_ids = {row['recommendation_id'] for row in recommendations}
+    known_ids.update(row['recommendation_id'] for row in manual_rows)
+    anchor_id = recommendations[-1]['recommendation_id'] if recommendations else None
+    for _, item in edited_rows.iloc[len(recommendations):].iterrows():
+        recommendation_id = str(item.get('recommendation_id') or '')
+        if not recommendation_id or recommendation_id in known_ids:
+            continue
+        row = {}
+        for column in (
+                'term', 'source_terms', '상품카테고리', '리스크 등급',
+                '리스크 등급별 세부 심의기준', '증빙자료유형', '대체키워드'):
+            value = item.get(column, '')
+            row[column] = '' if pd.isna(value) else str(value).strip()
+        occurrences = item.get('occurrences', 0)
+        row.update({
+            'occurrences': 0 if pd.isna(occurrences) else int(occurrences),
+            'request_id': '', 'request_date': '', 'term_norm': '',
+            'recommendation_id': recommendation_id,
+        })
+        manual_rows.append(row)
+        placements[recommendation_id] = {'anchor_id': anchor_id, 'position': 'after'}
+        known_ids.add(recommendation_id)
+        anchor_id = recommendation_id
+
+
+def _remove_manual_unmatched_recommendations(recommendation_ids):
+    remove_ids = set(recommendation_ids)
+    st.session_state['unmatched_manual_recommendations'] = [
+        row for row in st.session_state.get('unmatched_manual_recommendations', [])
+        if row['recommendation_id'] not in remove_ids
+    ]
+    placements = st.session_state.get('unmatched_manual_recommendation_placements', {})
+    for recommendation_id in remove_ids:
+        placements.pop(recommendation_id, None)
+
+
 def render_unmatched_candidate_pool():
     st.subheader("미매칭 후보군 분석 및 검토")
     if cloud_enabled():
@@ -4924,6 +4993,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
         {**row, 'recommendation_id': unmatched_recommendation_id(row)}
         for row in recommendations
     ]
+    recommendations = _order_manual_unmatched_recommendations(recommendations)
     hidden_recommendation_ids = set(
         st.session_state.get('unmatched_recommendation_hidden_ids', []))
     recommendations = [row for row in recommendations
@@ -4932,7 +5002,7 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
     select_column = "\uC120\uD0DD"
     if recommendations:
         st.markdown("#### 정규화 추천 및 분류 입력")
-        st.caption("새 행은 표의 + 버튼으로 추가할 수 있고, 셀 오른쪽 아래 채우기 핸들을 드래그해 선택 범위에 값을 채울 수 있습니다.")
+        st.caption("새 행은 + 버튼으로 추가하거나 행을 선택해 위·아래에 삽입할 수 있습니다. 셀 오른쪽 아래 채우기 핸들을 드래그하면 인접 범위에 값을 채웁니다.")
         recommendation_df = pd.DataFrame(recommendations)
         recommendation_df.insert(0, select_column, False)
         for column, default in {
@@ -5032,6 +5102,37 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
             if pd.isna(recommendation_id) or not str(recommendation_id).strip():
                 edited_recommendations.at[row_index, 'recommendation_id'] = (
                     f'manual:{row_index}:{unmatched_recommendation_id(row.to_dict())}')
+        insert_position = None
+        insert_above, insert_below = st.columns(2)
+        if insert_above.button('선택 행 위에 빈 행 추가', key='insert_unmatched_row_above'):
+            insert_position = 'before'
+        if insert_below.button('선택 행 아래에 빈 행 추가', key='insert_unmatched_row_below'):
+            insert_position = 'after'
+        if insert_position:
+            selected_for_insertion = edited_recommendations[
+                edited_recommendations[select_column].fillna(False)]
+            if len(selected_for_insertion) != 1:
+                st.warning('삽입 위치로 사용할 행을 하나만 선택하세요.')
+            else:
+                _persist_unmatched_editor_state(editor_key, recommendations, select_column)
+                _persist_added_unmatched_rows(edited_recommendations, recommendations)
+                anchor_id = str(selected_for_insertion.iloc[0]['recommendation_id'])
+                manual_rows = st.session_state.setdefault('unmatched_manual_recommendations', [])
+                placements = st.session_state.setdefault(
+                    'unmatched_manual_recommendation_placements', {})
+                new_row = {
+                    'term': '', 'source_terms': '', 'occurrences': 0, 'request_id': '',
+                    'request_date': '', 'term_norm': '', '상품카테고리': '', '리스크 등급': '',
+                    '리스크 등급별 세부 심의기준': '', '증빙자료유형': '', '대체키워드': '-',
+                    'recommendation_id': f'manual:{uuid4()}',
+                }
+                manual_rows.append(new_row)
+                placements[new_row['recommendation_id']] = {
+                    'anchor_id': anchor_id, 'position': insert_position,
+                }
+                st.session_state['unmatched_recommendation_version'] = int(
+                    st.session_state.get('unmatched_recommendation_version', 0)) + 1
+                st.rerun()
         if st.button("선택 항목 삭제", key='exclude_unmatched_recommendations'):
             selected_for_exclusion = edited_recommendations[
                 edited_recommendations['선택'].fillna(False)]
@@ -5100,6 +5201,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         except (StorageError, PermissionError, ValueError) as exc:
                             st.error(f"DB \uc800\uc7a5\uc740 \uc644\ub8cc\ud588\uc9c0\ub9cc \ubbf8\ub9e4\uce6d \ud45c\ud604\uacfc \uc694\uccad \uc815\ub9ac\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4: {exc}")
                             return
+                        _remove_manual_unmatched_recommendations(
+                            selected['recommendation_id'].astype(str).tolist())
                         st.session_state.pop("keyword_editor_draft_dropdown", None)
                         st.session_state.pop("keyword_editor_draft_free", None)
                         st.session_state["keyword_editor_version"] = int(
@@ -5120,6 +5223,8 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                             st.error(f"\ubbf8\ub9e4\uce6d \ud45c\ud604\uacfc \uc694\uccad \uc815\ub9ac\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4: {exc}")
                             return
                         if cleared or unmatched_registration_source_keys(selected):
+                            _remove_manual_unmatched_recommendations(
+                                selected['recommendation_id'].astype(str).tolist())
                             st.success(f"\uc774\ubbf8 \ub4f1\ub85d\ub41c \ud6c4\ubcf4\uc758 \ubbf8\ub9e4\uce6d \ud1b5\uacc4\uc640 \uc694\uccad {cleared}\uac74\uc744 \uc815\ub9ac\ud588\uc2b5\ub2c8\ub2e4.")
                             st.rerun()
                         st.info("선택 후보는 이미 같은 카테고리에 등록되어 있습니다.")
