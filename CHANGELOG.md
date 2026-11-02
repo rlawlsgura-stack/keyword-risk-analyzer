@@ -1,3 +1,7 @@
+## React preview - Preserve regulation search history
+
+- Keep the latest 20 successful regulation searches with their answers, matches, and sources until the user clears the conversation.
+
 ## React preview - Add OCR and analysis context to regulation search
 
 - Allow regulation searches to include selected OCR candidates and the current analysis text.

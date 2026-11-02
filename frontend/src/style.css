@@ -208,6 +208,9 @@ textarea::placeholder { color: #a6b0c0; }
 .regulation-form input[type="checkbox"] { width: 15px; min-height: 15px; margin: 0; padding: 0; accent-color: #4667a7; }
 .regulation-caution { margin: 0; color: #9a7850; font-size: 10px; line-height: 1.6; }
 .regulation-error { max-width: 1230px; margin-top: 15px; }
+.regulation-history-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 8px; color: #7a879b; font-size: 11px; }
+.regulation-question { display: flex; gap: 12px; align-items: baseline; margin-bottom: -3px; padding: 12px 15px; border-radius: 8px; background: #edf2fb; color: #42536f; font-size: 12px; }
+.regulation-question p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .regulation-results { display: grid; gap: 14px; margin-top: 17px; }
 .regulation-answer { padding: 22px; }
 .regulation-answer > p { margin: 13px 0 0; color: #526078; font-size: 13px; line-height: 1.75; }

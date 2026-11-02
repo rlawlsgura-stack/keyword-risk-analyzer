@@ -244,7 +244,7 @@ function App() {
   const [regulationOCRSelection, setRegulationOCRSelection] = useState<string[]>([])
   const [regulationIncludeAnalysisText, setRegulationIncludeAnalysisText] = useState(false)
   const [regulationCategory, setRegulationCategory] = useState('')
-  const [regulationResult, setRegulationResult] = useState<RegulationResult | null>(null)
+  const [regulationHistory, setRegulationHistory] = useState<{ question: string; result: RegulationResult }[]>([])
   const [regulationBusy, setRegulationBusy] = useState(false)
   const [regulationError, setRegulationError] = useState('')
   const [unmatchedSearchInput, setUnmatchedSearchInput] = useState('')
@@ -807,7 +807,6 @@ function App() {
     event.preventDefault()
     setRegulationBusy(true)
     setRegulationError('')
-    setRegulationResult(null)
     try {
       const contextParts = [regulationContext.trim()]
       const selectedOCRText = [...new Set(ocrCandidates.map(candidate => candidate.term.trim()).filter(Boolean))]
@@ -818,7 +817,8 @@ function App() {
         query: regulationQuery.trim(),
         context_text: contextParts.filter(Boolean).join('\n\n').slice(0, 20000),
         category: regulationCategory }
-      setRegulationResult(await askRegulation(question))
+      const result = await askRegulation(question)
+      setRegulationHistory(previous => [...previous, { question: question.query, result }].slice(-20))
     } catch (error) {
       setRegulationError(error instanceof Error ? error.message : '법령 검색을 완료하지 못했습니다.')
     } finally {
@@ -2050,32 +2050,41 @@ function App() {
               <p className="regulation-caution">검색 결과와 키워드 DB 등급은 참고 자료이며, 법률 판단이나 위반 여부를 확정하지 않습니다.</p>
             </form>
             {regulationError && <p className="error-message regulation-error" role="alert">{regulationError}</p>}
-            {regulationResult && <section className="regulation-results" aria-live="polite">
-              <div className="panel regulation-answer">
-                <div className={`status-pill status-${regulationResult.status}`}>
-                  {regulationStatusLabels[regulationResult.status] ?? regulationResult.status}
-                </div>
-                <p>{regulationResult.answer}</p>
-                {regulationResult.administrator_review && <p className="review-note">자료 간 차이가 있거나 설명을 확정하지 못했습니다. 담당자가 원문을 검토해 주세요.</p>}
-                {regulationResult.llm_used && <small>검색 자료를 바탕으로 설명을 생성했습니다. 인용된 원문과 출처를 직접 확인하세요.</small>}
+            {regulationHistory.length > 0 && <div className="regulation-history-list">
+              <div className="regulation-history-toolbar">
+                <span>검색 기록 ({regulationHistory.length})</span>
+                <button type="button" className="text-button" disabled={regulationBusy}
+                  onClick={() => setRegulationHistory([])}>대화 지우기</button>
               </div>
-              {regulationResult.keyword_matches.length > 0 && <div className="panel table-panel">
+              {regulationHistory.map((turn, index) => <section className="regulation-results" aria-live="polite"
+                key={`${index}-${turn.question}`}>
+                <div className="regulation-question"><strong>질문</strong><p>{turn.question}</p></div>
+              <div className="panel regulation-answer">
+                <div className={`status-pill status-${turn.result.status}`}>
+                  {regulationStatusLabels[turn.result.status] ?? turn.result.status}
+                </div>
+                <p>{turn.result.answer}</p>
+                {turn.result.administrator_review && <p className="review-note">자료 간 차이가 있거나 설명을 확정하지 못했습니다. 담당자가 원문을 검토해 주세요.</p>}
+                {turn.result.llm_used && <small>검색 자료를 바탕으로 설명을 생성했습니다. 인용된 원문과 출처를 직접 확인하세요.</small>}
+              </div>
+              {turn.result.keyword_matches.length > 0 && <div className="panel table-panel">
                 <h2 className="regulation-section-title">현재 키워드 DB 일치 항목</h2><div className="table-scroll"><table>
                   <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>심의 기준</th></tr></thead>
-                  <tbody>{regulationResult.keyword_matches.map((item, index) => <tr key={`${item.kwd_no}-${index}`}>
+                  <tbody>{turn.result.keyword_matches.map((item, index) => <tr key={`${item.kwd_no}-${index}`}>
                     <td>{item.kwd_no}</td><td><strong>{item.키워드명}</strong></td><td>{item.상품카테고리 || '—'}</td>
                     <td>{item['리스크 등급'] || '—'}</td><td>{item['리스크 등급별 세부 심의기준'] || '—'}</td>
                   </tr>)}</tbody>
                 </table></div>
               </div>}
-              <div className="regulation-sources"><h2 className="regulation-section-title">검색 출처 ({regulationResult.sources.length})</h2>
-                {regulationResult.sources.map(source => <details className="panel source-card" key={source.id}>
+              <div className="regulation-sources"><h2 className="regulation-section-title">검색 출처 ({turn.result.sources.length})</h2>
+                {turn.result.sources.map(source => <details className="panel source-card" key={source.id}>
                   <summary><strong>{source.label}</strong><span>{source.id}</span></summary>
                   {source.url && <a href={source.url} target="_blank" rel="noreferrer">공식 원문 열기 ↗</a>}
                   <pre>{source.text}</pre>
                 </details>)}
               </div>
-            </section>}
+            </section>)}
+            </div>}
           </section>
         </> : page === 'report' ? <>
           <div className="page-heading">
