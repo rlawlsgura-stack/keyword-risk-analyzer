@@ -1,3 +1,8 @@
+## React preview - Add shared normalization settings
+
+- Let admins edit the shared ignored-symbol list and additional Korean suffix whitelist.
+- Apply saved settings to subsequent analysis requests through the existing matching service.
+
 ## React preview - Add registration request approval
 
 - Let admins review, classify, approve, and reject queued unmatched keyword registration requests.

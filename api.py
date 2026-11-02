@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app_config import configure, cloud_enabled
 from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, SupabaseRepository
 from service import analyze, analyze_current
-from matching_engine import DB_COLS
+from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 
 configure()
@@ -174,6 +174,12 @@ class UnmatchedRegistrationReview(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_ids: list[UUID] = Field(min_length=1, max_length=1000)
     updates: list[UnmatchedRegistrationUpdate] = Field(default_factory=list, max_length=1000)
+
+
+class AdminNormalizationSettings(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    ignored_symbols: list[str] = Field(min_length=1, max_length=100)
+    extra_suffixes: list[str] = Field(max_length=1000)
 
 
 def _next_keyword_code(category: str, rows: list[dict]) -> str:
@@ -514,6 +520,46 @@ def save_admin_keywords(body: AdminKeywordSave, actor=Depends(current_actor),
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'revision': revision}
+
+
+@app.get('/api/v1/admin/normalization-settings')
+def admin_normalization_settings(
+        actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    symbols = repository.load_setting('ignored_special_symbols', None)
+    suffixes = repository.load_setting('ko_suffix_whitelist', {'extra_suffixes': []})
+    return {
+        'ignored_symbols': symbols.get('symbols') or list(MatchingConfig().ignored_symbols),
+        'extra_suffixes': suffixes.get('extra_suffixes', []),
+        'default_suffix_count': len(_KO_SUFFIX_WHITELIST),
+    }
+
+
+@app.put('/api/v1/admin/normalization-settings')
+def save_admin_normalization_settings(
+        body: AdminNormalizationSettings, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    symbols = list(dict.fromkeys(body.ignored_symbols))
+    if any(len(symbol) != 1 or symbol.isspace() for symbol in symbols):
+        raise HTTPException(422, 'Ignored symbols must each be one non-whitespace character.')
+    suffixes = list(dict.fromkeys(value.strip() for value in body.extra_suffixes if value.strip()))
+    if any(len(value) > 30 for value in suffixes):
+        raise HTTPException(422, 'Each suffix must be at most 30 characters.')
+    repository.save_setting('ignored_special_symbols', {'symbols': symbols})
+    repository.save_setting('ko_suffix_whitelist', {'extra_suffixes': suffixes})
+    return {'ignored_symbols': symbols, 'extra_suffixes': suffixes}
 
 
 @app.get('/api/v1/analyses/{analysis_id}')

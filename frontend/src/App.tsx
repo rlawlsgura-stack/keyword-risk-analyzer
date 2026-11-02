@@ -8,7 +8,8 @@ import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   submitKeywordRequest, updateKeywordRequest, type KeywordRequestRecord, loadAdminUsers,
   updateAdminUserRole, type AdminUser, loadKeywordSnapshot, saveAdminKeywords,
   loadAdminUnmatchedRequests, rejectAdminUnmatchedRequests, approveAdminUnmatchedRequests,
-  type UnmatchedRegistrationRequest } from './api'
+  type UnmatchedRegistrationRequest, loadAdminNormalizationSettings,
+  saveAdminNormalizationSettings, type NormalizationSettings } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
   { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
@@ -126,7 +127,7 @@ function App() {
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin' | 'registration-admin'>('analysis')
+  const [page, setPage] = useState<'analysis' | 'keywords' | 'report' | 'regulation' | 'unmatched' | 'requests' | 'users' | 'keyword-admin' | 'registration-admin' | 'normalization-admin'>('analysis')
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
@@ -205,6 +206,16 @@ function App() {
   }>>({})
   const [registrationSaving, setRegistrationSaving] = useState(false)
   const [registrationMessage, setRegistrationMessage] = useState('')
+  const [normalizationSettings, setNormalizationSettings] = useState<NormalizationSettings>({
+    ignored_symbols: [], extra_suffixes: [], default_suffix_count: 0,
+  })
+  const [normalizationSymbolsInput, setNormalizationSymbolsInput] = useState('')
+  const [normalizationSuffixesInput, setNormalizationSuffixesInput] = useState('')
+  const [normalizationBusy, setNormalizationBusy] = useState(false)
+  const [normalizationSaving, setNormalizationSaving] = useState(false)
+  const [normalizationError, setNormalizationError] = useState('')
+  const [normalizationMessage, setNormalizationMessage] = useState('')
+  const [normalizationRefresh, setNormalizationRefresh] = useState(0)
 
   useEffect(() => {
     if (!supabase) {
@@ -372,6 +383,22 @@ function App() {
     return () => { active = false }
   }, [page, user?.id, user?.app_metadata?.role, registrationRefresh])
 
+  useEffect(() => {
+    if (page !== 'normalization-admin' || user?.app_metadata?.role !== 'admin') return
+    let active = true
+    setNormalizationBusy(true)
+    setNormalizationError('')
+    void loadAdminNormalizationSettings().then(settings => {
+      if (!active) return
+      setNormalizationSettings(settings)
+      setNormalizationSymbolsInput(settings.ignored_symbols.join(''))
+      setNormalizationSuffixesInput(settings.extra_suffixes.join('\n'))
+    }).catch(error => {
+      if (active) setNormalizationError(error instanceof Error ? error.message : '정규화 설정을 불러오지 못했습니다.')
+    }).finally(() => { if (active) setNormalizationBusy(false) })
+    return () => { active = false }
+  }, [page, user?.id, user?.app_metadata?.role, normalizationRefresh])
+
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!supabase) return
@@ -449,6 +476,29 @@ function App() {
       setRegistrationError(error instanceof Error ? error.message : '등록 요청을 승인하지 못했습니다.')
     } finally {
       setRegistrationSaving(false)
+    }
+  }
+
+  async function saveNormalizationSettings() {
+    const ignored_symbols = Array.from(new Set(Array.from(normalizationSymbolsInput).filter(value => value.trim())))
+    const extra_suffixes = [...new Set(normalizationSuffixesInput.split(/[\n,]/).map(value => value.trim()).filter(Boolean))]
+    if (!ignored_symbols.length) {
+      setNormalizationError('무시 기호를 한 개 이상 입력하세요. 기존 분석 설정은 빈 목록에서 기본 기호로 복귀합니다.')
+      return
+    }
+    setNormalizationSaving(true)
+    setNormalizationError('')
+    setNormalizationMessage('')
+    try {
+      const saved = await saveAdminNormalizationSettings({ ignored_symbols, extra_suffixes })
+      setNormalizationSettings({ ...saved, default_suffix_count: normalizationSettings.default_suffix_count })
+      setNormalizationSymbolsInput(saved.ignored_symbols.join(''))
+      setNormalizationSuffixesInput(saved.extra_suffixes.join('\n'))
+      setNormalizationMessage('정규화 설정을 저장했습니다. 이후 분석부터 적용됩니다.')
+    } catch (error) {
+      setNormalizationError(error instanceof Error ? error.message : '정규화 설정을 저장하지 못했습니다.')
+    } finally {
+      setNormalizationSaving(false)
     }
   }
 
@@ -803,6 +853,9 @@ function App() {
       {role === 'admin' && <button className={`nav-item nav-button ${page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('registration-admin')}>
         <span className="nav-icon">✓</span> 등록 요청 검토
       </button>}
+      {role === 'admin' && <button className={`nav-item nav-button ${page === 'normalization-admin' ? 'active' : ''}`} onClick={() => setPage('normalization-admin')}>
+        <span className="nav-icon">⌁</span> 정규화 설정
+      </button>}
       <div className="sidebar-bottom">
         <div className="version-chip">REACT PREVIEW</div>
         <p>분석 기능을 먼저 옮기는 전환용 화면입니다.</p>
@@ -811,7 +864,7 @@ function App() {
 
     <main className="main-content">
       <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : '키워드 관리'}</div>
+        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : page === 'normalization-admin' ? '정규화 설정' : '키워드 관리'}</div>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
@@ -878,6 +931,36 @@ function App() {
           <h1>사용 권한을 확인해 주세요</h1>
           <p>관리자가 계정에 사용자 또는 관리자 권한을 부여해야 합니다.</p>
           <button className="secondary-button" onClick={signOut}>로그아웃</button>
+        </section> : page === 'normalization-admin' && role === 'admin' ? <>
+          <div className="page-heading">
+            <div><div className="eyebrow">ADMIN / 10</div><h1>정규화 설정</h1>
+              <p>모든 사용자의 분석에 적용되는 기호 정규화와 한국어 조사·어미 허용 목록을 관리합니다.</p></div>
+            <div className="preview-pill"><span /> 관리자 전용</div>
+          </div>
+          <section className="catalog-section">
+            <div className="panel settings-panel normalization-admin-panel">
+              {normalizationError && <p className="error-message" role="alert">{normalizationError}</p>}
+              {normalizationMessage && <p className="success-message" role="status">{normalizationMessage}</p>}
+              <label className="normalization-setting-field">무시할 기호
+                <input value={normalizationSymbolsInput} maxLength={100} disabled={normalizationBusy || normalizationSaving}
+                  aria-label="무시할 기호 목록" onChange={event => setNormalizationSymbolsInput(event.target.value)} />
+                <small>기호를 구분자 없이 입력하세요. 각 한 글자 기호를 공백으로 바꾸어 비교합니다. 기본값: / &amp; , *</small>
+              </label>
+              <label className="normalization-setting-field">추가 허용 조사·어미
+                <textarea value={normalizationSuffixesInput} maxLength={30000} disabled={normalizationBusy || normalizationSaving}
+                  aria-label="추가 허용 조사와 어미" onChange={event => setNormalizationSuffixesInput(event.target.value)} />
+                <small>한 줄에 하나씩 입력하세요. 쉼표로 구분해 입력해도 됩니다. 기본 허용 목록 {normalizationSettings.default_suffix_count}개에 추가됩니다.</small>
+              </label>
+              <div className="admin-keyword-toolbar">
+                <button className="secondary-button" disabled={normalizationBusy || normalizationSaving}
+                  onClick={() => setNormalizationRefresh(value => value + 1)}>저장된 값 다시 불러오기</button>
+                <button className="primary-button" disabled={normalizationBusy || normalizationSaving}
+                  onClick={saveNormalizationSettings}>{normalizationSaving ? '저장 중…' : '정규화 설정 저장'}</button>
+              </div>
+            </div>
+          </section>
+        </> : page === 'normalization-admin' ? <section className="state-card">
+          <h1>관리자 권한이 필요합니다.</h1><p>정규화 설정은 관리자 계정만 변경할 수 있습니다.</p>
         </section> : page === 'registration-admin' && role === 'admin' ? <>
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 09</div><h1>등록 요청 검토</h1>

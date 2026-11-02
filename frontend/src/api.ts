@@ -99,6 +99,7 @@ export type UnmatchedRegistrationRequest = {
   id: string; term: string; term_norm: string; source_terms: string; occurrences: number
   category: string; risk: string; criteria: string; evidence_type: string; alternative: string; created_at: string
 }
+export type NormalizationSettings = { ignored_symbols: string[]; extra_suffixes: string[]; default_suffix_count: number }
 
 async function requestApi(path: string, init?: RequestInit) {
   if (!supabase) throw new Error('연결 설정이 필요합니다.')
@@ -256,5 +257,17 @@ export async function approveAdminUnmatchedRequests(requestIds: string[], update
 }> {
   return requestApi('/api/v1/admin/unmatched-registration-requests/approve', {
     method: 'POST', body: JSON.stringify({ request_ids: requestIds, updates }),
+  })
+}
+
+export async function loadAdminNormalizationSettings(): Promise<NormalizationSettings> {
+  return requestApi('/api/v1/admin/normalization-settings')
+}
+
+export async function saveAdminNormalizationSettings(settings: Omit<NormalizationSettings, 'default_suffix_count'>): Promise<{
+  ignored_symbols: string[]; extra_suffixes: string[]
+}> {
+  return requestApi('/api/v1/admin/normalization-settings', {
+    method: 'PUT', body: JSON.stringify(settings),
   })
 }
