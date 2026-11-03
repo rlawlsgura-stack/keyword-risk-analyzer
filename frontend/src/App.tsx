@@ -940,6 +940,10 @@ function App() {
   }
 
   async function signOut() {
+    if (busy) {
+      setMessage('분석 또는 저장 처리가 끝난 뒤 로그아웃해 주세요.')
+      return
+    }
     if (pending.current?.unmatchedPending) {
       setMessage('미매칭 후보 저장이 끝날 때까지 로그아웃할 수 없습니다. 텍스트 분석에서 저장을 다시 시도해 주세요.')
       return
