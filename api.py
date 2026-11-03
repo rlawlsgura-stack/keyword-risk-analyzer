@@ -9,6 +9,8 @@ from typing import Literal
 from uuid import UUID
 
 import requests
+from datetime import date
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -1226,7 +1228,16 @@ def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
 
 @app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)])
 def top_keywords(days: int = Query(7, ge=1, le=366),
-                 limit: int = Query(10, ge=1, le=100), repository=Depends(get_repository)):
+                 limit: int = Query(10, ge=1, le=100),
+                 start_date: date | None = None, end_date: date | None = None,
+                 repository=Depends(get_repository)):
+    if (start_date is None) != (end_date is None):
+        raise HTTPException(422, 'Both start_date and end_date are required.')
+    if start_date is not None and end_date is not None:
+        if end_date < start_date:
+            raise HTTPException(422, 'end_date must be on or after start_date.')
+        return {'items': repository.report_range(start_date.isoformat(),
+                                                 end_date.isoformat(), limit)}
     return {'items': repository.report(days, limit)}
 
 

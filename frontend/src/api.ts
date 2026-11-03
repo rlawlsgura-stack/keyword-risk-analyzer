@@ -184,8 +184,8 @@ export async function loadAllKeywords(): Promise<KeywordRow[]> {
   return (await loadKeywordSnapshot()).items
 }
 
-export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {
-  const params = new URLSearchParams({ days: String(days), limit: String(limit) })
+export async function loadTopKeywords(startDate: string, endDate: string, limit: number): Promise<{ items: TopKeyword[] }> {
+  const params = new URLSearchParams({ start_date: startDate, end_date: endDate, limit: String(limit) })
   return requestApi(`/api/v1/reports/top-keywords?${params}`)
 }
 

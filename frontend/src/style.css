@@ -214,6 +214,8 @@ textarea::placeholder { color: #a6b0c0; }
 .report-controls label { display: grid; gap: 7px; color: #68758a; font-size: 11px; font-weight: 600; }
 .report-controls select, .report-controls input { min-height: 38px; border: 1px solid #dce2eb; border-radius: 8px; padding: 8px 10px; color: #344059; background: #fff; }
 .report-controls input { width: 90px; }
+.report-date-range { display: flex; align-items: center; gap: 8px; }
+.report-controls .report-date-range input[type="date"] { width: 155px; }
 .report-controls .secondary-button { margin-left: auto; }
 .report-period-note, .catalog-status { margin: 17px 0 12px; color: #8793a6; font-size: 11px; }
 .regulation-form { display: grid; gap: 15px; padding: 22px; }

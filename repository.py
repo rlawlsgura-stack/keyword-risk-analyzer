@@ -430,6 +430,10 @@ class SupabaseRepository:
     def report(self, days=7, limit=10):
         return self.rpc('top_keywords', p_days=days, p_limit=limit)
 
+    def report_range(self, start_date, end_date, limit=10):
+        return self.rpc('top_keywords_range', p_start_date=start_date,
+                        p_end_date=end_date, p_limit=limit)
+
     def reset_counts(self):
         self.rpc('reset_counts')
 

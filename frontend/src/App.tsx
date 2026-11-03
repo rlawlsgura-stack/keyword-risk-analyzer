@@ -35,6 +35,19 @@ const unmatchedStatusLabels: Record<string, string> = {
   pending: '검토 대기', approved: '등록 완료', registration_requested: '등록 요청', ignored: '관리자 거절',
 }
 
+function kstDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function shiftDate(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
 function makeCsv(rows: string[][]) {
   const cell = (value: string) => {
     const safeValue = /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value
@@ -437,7 +450,8 @@ function App() {
   const [keywordBusy, setKeywordBusy] = useState(false)
   const [keywordExportBusy, setKeywordExportBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
-  const [reportDays, setReportDays] = useState(7)
+  const [reportEndDate, setReportEndDate] = useState(() => kstDateString())
+  const [reportStartDate, setReportStartDate] = useState(() => shiftDate(kstDateString(), -6))
   const [reportLimit, setReportLimit] = useState(10)
   const [reportItems, setReportItems] = useState<TopKeyword[]>([])
   const [reportBusy, setReportBusy] = useState(false)
@@ -638,13 +652,13 @@ function App() {
     let active = true
     setReportBusy(true)
     setReportError('')
-    void loadTopKeywords(reportDays, reportLimit).then(data => {
+    void loadTopKeywords(reportStartDate, reportEndDate, reportLimit).then(data => {
       if (active) setReportItems(data.items)
     }).catch(error => {
       if (active) setReportError(error instanceof Error ? error.message : '리포트를 불러오지 못했습니다.')
     }).finally(() => { if (active) setReportBusy(false) })
     return () => { active = false }
-  }, [page, user?.id, reportDays, reportLimit])
+  }, [page, user?.id, reportStartDate, reportEndDate, reportLimit])
 
   useEffect(() => {
     if (page !== 'unmatched' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
@@ -1120,7 +1134,7 @@ function App() {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `top_keywords_${reportDays}days.csv`
+    link.download = `top_keywords_${reportStartDate}_${reportEndDate}.csv`
     document.body.append(link)
     link.click()
     link.remove()
@@ -1137,7 +1151,7 @@ function App() {
     setReportError('')
     try {
       const result = await resetAdminReportData(scope)
-      const data = await loadTopKeywords(reportDays, reportLimit)
+      const data = await loadTopKeywords(reportStartDate, reportEndDate, reportLimit)
       setReportItems(data.items)
       setReportResetMessage(scope === 'all'
         ? '누적 조회수를 초기화했습니다. 분석 기록은 유지됩니다.'
@@ -2329,10 +2343,13 @@ function App() {
             <div className="panel report-panel">
               <div className="report-controls">
                 <label>조회 기간
-                  <select value={reportDays} onChange={event => setReportDays(Number(event.target.value))}>
-                    <option value={7}>최근 7일</option><option value={30}>최근 30일</option>
-                    <option value={90}>최근 90일</option>
-                  </select>
+                  <span className="report-date-range">
+                    <input aria-label="Start date" type="date" max={reportEndDate} value={reportStartDate}
+                      onChange={event => setReportStartDate(event.target.value)} />
+                    <span>~</span>
+                    <input aria-label="End date" type="date" min={reportStartDate} max={kstDateString()}
+                      value={reportEndDate} onChange={event => setReportEndDate(event.target.value)} />
+                  </span>
                 </label>
                 <label>표시 개수
                   <input type="number" min={1} max={100} value={reportLimit}
@@ -2349,7 +2366,7 @@ function App() {
                 <small>누적 조회수 초기화는 분석 기록을 보존하며, 7일 기록 삭제는 최근 기간 리포트 집계에서만 제외하며, 원본 기록은 유지합니다.</small>
               </div>}
               {reportResetMessage && <p className="success-message" role="status">{reportResetMessage}</p>}
-              <p className="report-period-note">최근 {reportDays}일의 공유 분석 기록 기준입니다.</p>
+              <p className="report-period-note">Shared analysis records for the selected period, in Korea Standard Time. ({reportStartDate} ~ {reportEndDate})</p>
               {reportBusy && <p className="catalog-status" role="status">리포트를 불러오는 중…</p>}
               {reportError && <p className="error-message" role="alert">{reportError}</p>}
               {!reportBusy && !reportError && (reportItems.length ? <div className="table-scroll"><table>
