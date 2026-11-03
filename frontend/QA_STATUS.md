@@ -17,12 +17,12 @@
 - [x] `git diff --check` completed without whitespace errors (2026-11-03).
 - [x] Full local Python suite completed: 101 passed, 9 skipped, 187 subtests passed (2026-11-03). The run exposed and fixed a response-shape inconsistency where legacy v1 analysis retries gained the new v2 catalog-row fields; detailed keyword rows are now added only on the current v2 analysis path.
 - [x] Updated the integration assertion to compare matching-engine fields while allowing the intentional detail metadata added to serialized matches (2026-11-03).
+- [x] Commit `50c6e694da52bfb3ae1144a0e6fbef9c5ef7d949` is live on the Render API service. Unauthenticated smoke checks for keyword catalog, report, unmatched candidates, and administrator users all returned HTTP 401 (2026-11-03).
 
 ## Remaining before switching the production UI
 
 - [ ] Visually verify that the React report page displays the recorded terms and that its CSV download opens correctly.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
-- [ ] Deploy and verify the v1/v2 replay-shape fix on the React preview API after the current changes are pushed.
 
 The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, so interactive browser checks could not be performed. The local Python suite passes; restore browser access to resume the account-based screen checks. Do not switch the production UI before they pass.
