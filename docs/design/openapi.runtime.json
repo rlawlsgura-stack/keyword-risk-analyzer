@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Keyword Risk Analyzer API",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "paths": {
     "/healthz": {
@@ -31,6 +31,88 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ocr/extract": {
+      "post": {
+        "summary": "Extract Ocr Candidates",
+        "operationId": "extract_ocr_candidates_api_v1_ocr_extract_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_extract_ocr_candidates_api_v1_ocr_extract_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ocr/keywords": {
+      "post": {
+        "summary": "Save Ocr Keywords",
+        "operationId": "save_ocr_keywords_api_v1_ocr_keywords_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OCRKeywordSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -72,6 +154,1334 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/analysis-filters": {
+      "get": {
+        "summary": "Analysis Filters",
+        "operationId": "analysis_filters_api_v2_analysis_filters_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v2/analyses": {
+      "post": {
+        "summary": "Create Current Analysis",
+        "operationId": "create_current_analysis_api_v2_analyses_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentAnalysisResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/unmatched-terms": {
+      "get": {
+        "summary": "Unmatched Terms",
+        "operationId": "unmatched_terms_api_v1_unmatched_terms_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 200,
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "occurrences",
+                "registered"
+              ],
+              "type": "string",
+              "default": "occurrences",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/unmatched-terms/export": {
+      "get": {
+        "summary": "Export Unmatched Terms",
+        "operationId": "export_unmatched_terms_api_v1_unmatched_terms_export_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/unmatched-terms/delete": {
+      "post": {
+        "summary": "Delete Admin Unmatched Terms",
+        "operationId": "delete_admin_unmatched_terms_api_v1_admin_unmatched_terms_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUnmatchedDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/unmatched-terms/registration-requests": {
+      "post": {
+        "summary": "Submit Unmatched Registration Requests",
+        "operationId": "submit_unmatched_registration_requests_api_v1_unmatched_terms_registration_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/unmatched-terms/normalize": {
+      "post": {
+        "summary": "Normalize Unmatched Terms",
+        "operationId": "normalize_unmatched_terms_api_v1_unmatched_terms_normalize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedNormalizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/unmatched-terms/recommendation-draft": {
+      "get": {
+        "summary": "Unmatched Recommendation Draft",
+        "operationId": "unmatched_recommendation_draft_api_v1_unmatched_terms_recommendation_draft_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Save Unmatched Recommendation Draft",
+        "operationId": "save_unmatched_recommendation_draft_api_v1_unmatched_terms_recommendation_draft_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedRecommendationDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/unmatched-registration-requests": {
+      "get": {
+        "summary": "Admin Unmatched Registration Requests",
+        "operationId": "admin_unmatched_registration_requests_api_v1_admin_unmatched_registration_requests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/unmatched-registration-requests/reject": {
+      "post": {
+        "summary": "Reject Admin Unmatched Registration Requests",
+        "operationId": "reject_admin_unmatched_registration_requests_api_v1_admin_unmatched_registration_requests_reject_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedRegistrationReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/unmatched-registration-requests/approve": {
+      "post": {
+        "summary": "Approve Admin Unmatched Registration Requests",
+        "operationId": "approve_admin_unmatched_registration_requests_api_v1_admin_unmatched_registration_requests_approve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnmatchedRegistrationReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/keyword-requests": {
+      "get": {
+        "summary": "Keyword Requests",
+        "operationId": "keyword_requests_api_v1_keyword_requests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "Submit Keyword Request",
+        "operationId": "submit_keyword_request_api_v1_keyword_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordRequestSubmission"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/keyword-requests/{request_id}": {
+      "put": {
+        "summary": "Update Keyword Request",
+        "operationId": "update_keyword_request_api_v1_keyword_requests__request_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordRequestUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Keyword Request",
+        "operationId": "delete_keyword_request_api_v1_keyword_requests__request_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/keyword-requests/{request_id}/messages": {
+      "get": {
+        "summary": "Keyword Request Messages",
+        "operationId": "keyword_request_messages_api_v1_keyword_requests__request_id__messages_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add Keyword Request Message",
+        "operationId": "add_keyword_request_message_api_v1_keyword_requests__request_id__messages_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordRequestMessageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/keyword-requests/{request_id}/messages/{message_id}": {
+      "put": {
+        "summary": "Edit Own Keyword Request Message",
+        "operationId": "edit_own_keyword_request_message_api_v1_keyword_requests__request_id__messages__message_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeywordRequestMessageEdit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Own Keyword Request Message",
+        "operationId": "delete_own_keyword_request_message_api_v1_keyword_requests__request_id__messages__message_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/keyword-request-notifications": {
+      "get": {
+        "summary": "Get Admin Request Notifications",
+        "operationId": "get_admin_request_notifications_api_v1_admin_keyword_request_notifications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Save Admin Request Notifications",
+        "operationId": "save_admin_request_notifications_api_v1_admin_keyword_request_notifications_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminRequestNotificationsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "summary": "Admin Users",
+        "operationId": "admin_users_api_v1_admin_users_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 100,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/role": {
+      "put": {
+        "summary": "Update Admin User Role",
+        "operationId": "update_admin_user_role_api_v1_admin_users__user_id__role_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserRoleUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/keywords": {
+      "put": {
+        "summary": "Save Admin Keywords",
+        "operationId": "save_admin_keywords_api_v1_admin_keywords_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminKeywordSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/keywords/delete": {
+      "post": {
+        "summary": "Delete Admin Keywords",
+        "operationId": "delete_admin_keywords_api_v1_admin_keywords_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminKeywordDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/normalization-settings": {
+      "get": {
+        "summary": "Admin Normalization Settings",
+        "operationId": "admin_normalization_settings_api_v1_admin_normalization_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Save Admin Normalization Settings",
+        "operationId": "save_admin_normalization_settings_api_v1_admin_normalization_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminNormalizationSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/approved-partials": {
+      "get": {
+        "summary": "Admin Approved Partials",
+        "operationId": "admin_approved_partials_api_v1_admin_approved_partials_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Save Admin Approved Partials",
+        "operationId": "save_admin_approved_partials_api_v1_admin_approved_partials_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminApprovedPartialUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/dropdown-settings": {
+      "get": {
+        "summary": "Admin Dropdown Settings",
+        "operationId": "admin_dropdown_settings_api_v1_admin_dropdown_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Save Admin Dropdown Settings",
+        "operationId": "save_admin_dropdown_settings_api_v1_admin_dropdown_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDropdownSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dropdown-settings": {
+      "get": {
+        "summary": "Dropdown Settings",
+        "operationId": "dropdown_settings_api_v1_dropdown_settings_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/keywords/upload": {
+      "post": {
+        "summary": "Upload Admin Keywords",
+        "operationId": "upload_admin_keywords_api_v1_admin_keywords_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_admin_keywords_api_v1_admin_keywords_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/keywords/template.xlsx": {
+      "get": {
+        "summary": "Download Admin Keyword Template",
+        "operationId": "download_admin_keyword_template_api_v1_admin_keywords_template_xlsx_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -169,6 +1579,39 @@
               "default": "",
               "title": "Q"
             }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Category"
+            }
+          },
+          {
+            "name": "risk",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Risk"
+            }
+          },
+          {
+            "name": "evidence_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100,
+              "default": "",
+              "title": "Evidence Type"
+            }
           }
         ],
         "responses": {
@@ -226,6 +1669,88 @@
               "default": 10,
               "title": "Limit"
             }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopKeywordsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/reports/reset/{scope}": {
+      "post": {
+        "summary": "Reset Report Data",
+        "operationId": "reset_report_data_api_v1_admin_reports_reset__scope__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "all",
+                "last-7-days"
+              ],
+              "type": "string",
+              "title": "Scope"
+            }
           }
         ],
         "responses": {
@@ -249,10 +1774,424 @@
           }
         }
       }
+    },
+    "/api/v1/regulation/questions": {
+      "post": {
+        "summary": "Regulation Question",
+        "operationId": "regulation_question_api_v1_regulation_questions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegulationQuestionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AdminApprovedPartialUpdate": {
+        "properties": {
+          "kwd_no": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Kwd No"
+          },
+          "term": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Term"
+          },
+          "expected_expressions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Expected Expressions"
+          },
+          "expressions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Expressions"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kwd_no",
+          "term",
+          "expected_expressions",
+          "expressions"
+        ],
+        "title": "AdminApprovedPartialUpdate"
+      },
+      "AdminDropdownSettings": {
+        "properties": {
+          "opt_categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Opt Categories"
+          },
+          "opt_risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Opt Risks"
+          },
+          "opt_details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Opt Details"
+          },
+          "opt_evidences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Opt Evidences"
+          },
+          "opt_alt_terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Opt Alt Terms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "opt_categories",
+          "opt_risks",
+          "opt_details",
+          "opt_evidences",
+          "opt_alt_terms"
+        ],
+        "title": "AdminDropdownSettings"
+      },
+      "AdminKeywordDelete": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "kwd_nos": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Kwd Nos"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "kwd_nos"
+        ],
+        "title": "AdminKeywordDelete"
+      },
+      "AdminKeywordRow": {
+        "properties": {
+          "kwd_no": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Kwd No"
+          },
+          "키워드명": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "키워드명"
+          },
+          "상품카테고리": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "상품카테고리"
+          },
+          "리스크 등급": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "리스크 등급"
+          },
+          "대체키워드": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "대체키워드"
+          },
+          "리스크 등급별 세부 심의기준": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "리스크 등급별 세부 심의기준"
+          },
+          "증빙자료유형": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "증빙자료유형"
+          },
+          "키워드 조회 수(누적카운트)": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "키워드 조회 수(누적카운트)",
+            "default": "0"
+          },
+          "마지막 출력일자": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "마지막 출력일자",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kwd_no",
+          "키워드명",
+          "상품카테고리",
+          "리스크 등급",
+          "대체키워드",
+          "리스크 등급별 세부 심의기준",
+          "증빙자료유형"
+        ],
+        "title": "AdminKeywordRow"
+      },
+      "AdminKeywordSave": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/AdminKeywordRow"
+            },
+            "type": "array",
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Rows"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "rows"
+        ],
+        "title": "AdminKeywordSave"
+      },
+      "AdminNormalizationSettings": {
+        "properties": {
+          "ignored_symbols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Ignored Symbols"
+          },
+          "extra_suffixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Extra Suffixes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ignored_symbols",
+          "extra_suffixes"
+        ],
+        "title": "AdminNormalizationSettings"
+      },
+      "AdminRequestNotificationsUpdate": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "AdminRequestNotificationsUpdate"
+      },
+      "AdminUnmatchedDelete": {
+        "properties": {
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Terms"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "terms"
+        ],
+        "title": "AdminUnmatchedDelete"
+      },
+      "AdminUserRoleUpdate": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "member"
+            ],
+            "title": "Role"
+          },
+          "expected_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "admin",
+                  "member"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Role"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "AdminUserRoleUpdate"
+      },
+      "AnalysisMatchResponse": {
+        "properties": {
+          "term": {
+            "type": "string",
+            "title": "Term"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category",
+            "default": ""
+          },
+          "risk": {
+            "type": "string",
+            "title": "Risk",
+            "default": ""
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          },
+          "kwd_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kwd No"
+          },
+          "alternative": {
+            "type": "string",
+            "title": "Alternative",
+            "default": ""
+          },
+          "evidence_type": {
+            "type": "string",
+            "title": "Evidence Type",
+            "default": ""
+          },
+          "hit_count": {
+            "type": "string",
+            "title": "Hit Count",
+            "default": ""
+          },
+          "last_search_date": {
+            "type": "string",
+            "title": "Last Search Date",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "term",
+          "start",
+          "end"
+        ],
+        "title": "AnalysisMatchResponse"
+      },
       "AnalysisRequest": {
         "properties": {
           "text": {
@@ -390,6 +2329,205 @@
         ],
         "title": "AnalysisRequest"
       },
+      "Body_extract_ocr_candidates_api_v1_ocr_extract_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_extract_ocr_candidates_api_v1_ocr_extract_post"
+      },
+      "Body_upload_admin_keywords_api_v1_admin_keywords_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "merge",
+              "overwrite"
+            ],
+            "title": "Mode"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "mode",
+          "revision"
+        ],
+        "title": "Body_upload_admin_keywords_api_v1_admin_keywords_upload_post"
+      },
+      "CurrentAnalysisRequest": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Analysis Id"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "similar",
+              "partial"
+            ],
+            "title": "Mode",
+            "default": "similar"
+          },
+          "strip_bracket_notes": {
+            "type": "boolean",
+            "title": "Strip Bracket Notes",
+            "default": true
+          },
+          "normalize_whitespace": {
+            "type": "boolean",
+            "title": "Normalize Whitespace",
+            "default": true
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "title": "Ignore Case",
+            "default": true
+          },
+          "normalize_symbols": {
+            "type": "boolean",
+            "title": "Normalize Symbols",
+            "default": true
+          },
+          "partial_min_len": {
+            "type": "integer",
+            "maximum": 20.0,
+            "minimum": 2.0,
+            "title": "Partial Min Len",
+            "default": 2
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Categories"
+          },
+          "risks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "title": "Risks"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "text"
+        ],
+        "title": "CurrentAnalysisRequest"
+      },
+      "CurrentAnalysisResponse": {
+        "properties": {
+          "analysis_id": {
+            "type": "string",
+            "title": "Analysis Id"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisMatchResponse"
+            },
+            "type": "array",
+            "title": "Matches"
+          },
+          "unique_keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unique Keywords"
+          },
+          "unique_keyword_rows": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Unique Keyword Rows"
+          },
+          "keyword_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword Revision"
+          },
+          "catalog_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Revision"
+          },
+          "offset_unit": {
+            "type": "string",
+            "const": "unicode_codepoint",
+            "title": "Offset Unit"
+          },
+          "end_exclusive": {
+            "type": "boolean",
+            "title": "End Exclusive"
+          },
+          "recorded": {
+            "type": "boolean",
+            "title": "Recorded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "analysis_id",
+          "matches",
+          "unique_keywords",
+          "unique_keyword_rows",
+          "offset_unit",
+          "end_exclusive",
+          "recorded"
+        ],
+        "title": "CurrentAnalysisResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -402,6 +2540,517 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "KeywordRequestMessageCreate": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body"
+          },
+          "reply_to_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Id"
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 20,
+            "title": "Status",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "KeywordRequestMessageCreate"
+      },
+      "KeywordRequestMessageEdit": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Body"
+          },
+          "request_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "risk_grade_adjustment",
+                  "review_criteria_change",
+                  "new_keyword_registration"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Type"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "KeywordRequestMessageEdit"
+      },
+      "KeywordRequestSubmission": {
+        "properties": {
+          "kwd_no": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Kwd No"
+          },
+          "request_type": {
+            "type": "string",
+            "enum": [
+              "risk_grade_adjustment",
+              "review_criteria_change"
+            ],
+            "title": "Request Type"
+          },
+          "request_detail": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Request Detail"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kwd_no",
+          "request_type",
+          "request_detail"
+        ],
+        "title": "KeywordRequestSubmission"
+      },
+      "KeywordRequestUpdate": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "대기",
+              "검토중",
+              "처리완료"
+            ],
+            "title": "Status"
+          },
+          "admin_reply": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Admin Reply",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "KeywordRequestUpdate"
+      },
+      "OCRKeywordCandidate": {
+        "properties": {
+          "term": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Term"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Category"
+          },
+          "risk": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Risk"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Detail"
+          },
+          "evidence": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Evidence"
+          },
+          "alternative": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Alternative",
+            "default": "-"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "term",
+          "category",
+          "risk",
+          "detail",
+          "evidence"
+        ],
+        "title": "OCRKeywordCandidate"
+      },
+      "OCRKeywordSave": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Revision"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/OCRKeywordCandidate"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Candidates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "candidates"
+        ],
+        "title": "OCRKeywordSave"
+      },
+      "RegulationQuestionRequest": {
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "keyword_to_law",
+              "law_to_keywords"
+            ],
+            "title": "Direction"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 2,
+            "title": "Query"
+          },
+          "context_text": {
+            "type": "string",
+            "maxLength": 20000,
+            "title": "Context Text",
+            "default": ""
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Category",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "direction",
+          "query"
+        ],
+        "title": "RegulationQuestionRequest"
+      },
+      "TopKeywordResponse": {
+        "properties": {
+          "kwd_no": {
+            "type": "string",
+            "title": "Kwd No"
+          },
+          "hit_count": {
+            "type": "integer",
+            "title": "Hit Count"
+          },
+          "term": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Term"
+          },
+          "search_rank": {
+            "type": "integer",
+            "title": "Search Rank"
+          },
+          "keyword_data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Keyword Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kwd_no",
+          "hit_count",
+          "search_rank",
+          "keyword_data"
+        ],
+        "title": "TopKeywordResponse"
+      },
+      "TopKeywordsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TopKeywordResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "keyword_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword Revision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "TopKeywordsResponse"
+      },
+      "UnmatchedNormalizationRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedSurface"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Candidates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "UnmatchedNormalizationRequest"
+      },
+      "UnmatchedRecommendationDraft": {
+        "properties": {
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payload"
+        ],
+        "title": "UnmatchedRecommendationDraft"
+      },
+      "UnmatchedRegistrationCandidate": {
+        "properties": {
+          "term": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Term"
+          },
+          "source_terms": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Source Terms",
+            "default": ""
+          },
+          "occurrences": {
+            "type": "integer",
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
+            "title": "Occurrences",
+            "default": 0
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Category",
+            "default": ""
+          },
+          "risk": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Risk",
+            "default": ""
+          },
+          "criteria": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Criteria",
+            "default": ""
+          },
+          "evidence_type": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Evidence Type",
+            "default": ""
+          },
+          "alternative": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Alternative",
+            "default": "-"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "term"
+        ],
+        "title": "UnmatchedRegistrationCandidate"
+      },
+      "UnmatchedRegistrationRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedRegistrationCandidate"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Candidates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "title": "UnmatchedRegistrationRequest"
+      },
+      "UnmatchedRegistrationReview": {
+        "properties": {
+          "request_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Request Ids"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedRegistrationUpdate"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Updates"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_ids"
+        ],
+        "title": "UnmatchedRegistrationReview"
+      },
+      "UnmatchedRegistrationUpdate": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Category"
+          },
+          "risk": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Risk"
+          },
+          "criteria": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Criteria"
+          },
+          "evidence_type": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Evidence Type"
+          },
+          "alternative": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Alternative",
+            "default": "-"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "request_id",
+          "category",
+          "risk",
+          "criteria",
+          "evidence_type"
+        ],
+        "title": "UnmatchedRegistrationUpdate"
+      },
+      "UnmatchedSurface": {
+        "properties": {
+          "surface": {
+            "type": "string",
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Surface"
+          },
+          "occurrences": {
+            "type": "integer",
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
+            "title": "Occurrences",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "surface"
+        ],
+        "title": "UnmatchedSurface"
       },
       "ValidationError": {
         "properties": {

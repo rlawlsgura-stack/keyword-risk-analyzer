@@ -24,15 +24,36 @@ import { loadDropdownSettings, saveAdminDropdownSettings,
   type AdminDropdownSettings } from './api'
 
 const modes: { value: AnalysisMode; label: string; description: string }[] = [
-  { value: 'similar', label: '유사 키워드 포함', description: '등록된 표현과 변형을 함께 찾습니다.' },
-  { value: 'exact', label: '정확 일치', description: '등록된 표현을 그대로 찾습니다.' },
-  { value: 'partial', label: '부분 일치', description: '연속된 키워드 조각을 찾습니다.' },
+  { value: 'exact', label: '키워드 완전 일치', description: '등록 표현 전체를 문장 안에서 찾습니다.' },
+  { value: 'similar', label: '키워드 일부 일치', description: 'Kiwi 내용어 토큰과 승인 표현을 비교합니다.' },
+  { value: 'partial', label: '글자 수 매칭 - 탐색용', description: '최소 글자 수를 충족하는 연속 문자열을 찾습니다.' },
 ]
 const regulationStatusLabels: Record<string, string> = {
   supported: '근거가 확인됨', retrieved: '검색 자료 확인', conflict: '검토 필요', insufficient: '자료 부족',
 }
 const unmatchedStatusLabels: Record<string, string> = {
   pending: '검토 대기', approved: '등록 완료', registration_requested: '등록 요청', ignored: '관리자 거절',
+}
+
+function kstDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date)
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+function shiftDate(value: string, days: number) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+function makeCsv(rows: string[][]) {
+  const cell = (value: string) => {
+    const safeValue = /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value
+    return `"${safeValue.replaceAll('"', '""')}"`
+  }
+  return '\uFEFF' + rows.map(row => row.map(cell).join(',')).join('\r\n')
 }
 const keywordRequestTypeLabels: Record<string, string> = {
   risk_grade_adjustment: '리스크 등급 조정', review_criteria_change: '심의 기준 변경',
@@ -85,79 +106,139 @@ function recommendationDraftPayload(rows: NormalizationRecommendation[], selecte
   }
 }
 
-function HighlightedText({ text, matches }: { text: string; matches: Match[] }) {
+function formatStreamlitDate(value: string) {
+  if (!value) return ''
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/)
+  if (dateOnly) return `${dateOnly[1]} 00:00:00`
+  const naiveDate = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/)
+  if (naiveDate && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) return `${naiveDate[1]} ${naiveDate[2]}`
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value.trim()
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date)
+  const fields = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${fields.year}-${fields.month}-${fields.day} ${fields.hour}:${fields.minute}:${fields.second}`
+}
+
+const datetimeColumns = new Set(['키워드 등록일자', '키워드등록일자', '마지막 출력일자', '마지막 검색일자'])
+const streamlitColumnLabels: Record<string, string> = {
+  '리스크 등급별 세부 심의기준': '리스크 등급별 세부 심의기준 (셀을 더블 클릭하여 전체 내용을 확인하세요)',
+  '마지막 출력일자': '마지막 검색일자',
+}
+
+function HighlightedText({ text, matches, keywordRows, mode, partialMinLen }: {
+  text: string
+  matches: Match[]
+  keywordRows: KeywordRow[]
+  mode: AnalysisMode
+  partialMinLen: number
+}) {
   // API offsets count Unicode code points; JavaScript string slicing counts UTF-16 units.
   const characters = Array.from(text)
   const pieces: ReactNode[] = []
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null)
-  const [selectedCodes, setSelectedCodes] = useState<string[]>([])
-  const [copyMessage, setCopyMessage] = useState('')
   const riskClasses: Record<string, string> = {
-    '1등급(사용금지)': 'highlight-risk-1', '2등급(대체키워드사용)': 'highlight-risk-2',
-    '3등급(조건부사용)': 'highlight-risk-3', '4등급(사용가능)': 'highlight-risk-4',
-    '5등급(테스트 등급)': 'highlight-risk-5',
-  }
-  async function copySelectedCodes() {
-    try {
-      await navigator.clipboard.writeText(selectedCodes.join('\n'))
-      setCopyMessage('선택한 키워드 번호를 복사했습니다.')
-    } catch {
-      setCopyMessage('클립보드 접근이 차단되었습니다.')
-    }
+    '\u0031\ub4f1\uae09(\uc0ac\uc6a9\uae08\uc9c0)': 'highlight-risk-1',
+    '\u0032\ub4f1\uae09(\ub300\uccb4\ud0a4\uc6cc\ub4dc\uc0ac\uc6a9)': 'highlight-risk-2',
+    '\u0033\ub4f1\uae09(\uc870\uac74\ubd80\uc0ac\uc6a9)': 'highlight-risk-3',
+    '\u0034\ub4f1\uae09(\uc0ac\uc6a9\uac00\ub2a5)': 'highlight-risk-4',
+    '\u0035\ub4f1\uae09(\ud14c\uc2a4\ud2b8 \ub4f1\uae09)': 'highlight-risk-5',
   }
   let cursor = 0
   const sorted = [...matches].sort((a, b) => a.start - b.start || b.end - a.end)
-  const groups: Match[][] = []
+  const groups: { start: number; end: number; matches: Match[] }[] = []
   for (const match of sorted) {
-    const lastGroup = groups[groups.length - 1]
-    if (lastGroup && lastGroup[0].start === match.start && lastGroup[0].end === match.end) lastGroup.push(match)
-    else groups.push([match])
+    const previous = groups[groups.length - 1]
+    if (previous && match.start < previous.end) {
+      previous.end = Math.max(previous.end, match.end)
+      previous.matches.push(match)
+    } else groups.push({ start: match.start, end: match.end, matches: [match] })
   }
+  const [hiddenNumbers, setHiddenNumbers] = useState<Set<string>>(() => new Set())
+  const [selectedSurface, setSelectedSurface] = useState('')
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null)
+  useEffect(() => {
+    const closeOutside = (event: MouseEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.keyword-info')) setActiveTooltip(null)
+    }
+    const closeEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveTooltip(null)
+    }
+    document.addEventListener('click', closeOutside)
+    document.addEventListener('keydown', closeEscape)
+    return () => {
+      document.removeEventListener('click', closeOutside)
+      document.removeEventListener('keydown', closeEscape)
+    }
+  }, [])
   for (const group of groups) {
-    const match = group[0]
-    if (!Number.isInteger(match.start) || !Number.isInteger(match.end) ||
-        match.start < cursor || match.end > characters.length || match.end <= match.start) continue
-    if (match.start > cursor) pieces.push(characters.slice(cursor, match.start).join(''))
-    const key = `${match.start}-${match.end}`
-    const keywords = group.filter((item, index) => item.kwd_no &&
-      group.findIndex(candidate => candidate.kwd_no === item.kwd_no) === index)
-    const selectedMatch = selectedKeyword ? group.find(item => item.kwd_no === selectedKeyword) : undefined
-    const risks = [...new Set(group.map(item => riskClasses[item.risk]).filter(Boolean))]
+    const { start, end } = group
+    if (!Number.isInteger(start) || !Number.isInteger(end) ||
+        start < cursor || end > characters.length || end <= start) continue
+    if (start > cursor) pieces.push(characters.slice(cursor, start).join(''))
+    const key = `${start}-${end}`
+    const surface = characters.slice(start, end).join('')
+    const keywords = group.matches.filter((item, index) => item.kwd_no &&
+      group.matches.findIndex(candidate => candidate.kwd_no === item.kwd_no) === index)
+    const risks = [...new Set(group.matches.map(item => riskClasses[item.risk]).filter(Boolean))]
     const riskClass = risks.length === 1 ? risks[0] : 'highlight-risk-mixed'
+    const codeKeys = keywords.map(item => `${item.kwd_no}|${item.start}|${item.end}`)
     pieces.push(<span className="highlight-group" key={key}>
-      <button className="highlight-toggle" aria-expanded={Boolean(expanded[key])}
-        onClick={() => setExpanded(previous => ({ ...previous, [key]: !previous[key] }))}>
-        <mark className={riskClass} title={group.map(item => item.term).join(', ')}>{characters.slice(match.start, match.end).join('')}</mark>
-      </button>
-      {expanded[key] && keywords.length > 0 && <span className="highlight-keywords" aria-label="연결된 키워드 번호">
-        {keywords.map((item, index) => <button className={`keyword-tag ${item.kwd_no && selectedCodes.includes(item.kwd_no) ? 'selected' : ''}`} key={item.kwd_no ?? index}
-          aria-expanded={selectedKeyword === item.kwd_no} aria-pressed={Boolean(item.kwd_no && selectedCodes.includes(item.kwd_no))}
-          onClick={event => {
-            if ((event.ctrlKey || event.metaKey) && item.kwd_no) {
-              setSelectedCodes(previous => previous.includes(item.kwd_no!)
-                ? previous.filter(code => code !== item.kwd_no) : [...previous, item.kwd_no!])
-              setCopyMessage('')
-            } else setSelectedKeyword(selectedKeyword === item.kwd_no ? null : item.kwd_no)
-          }}>{item.kwd_no}</button>)}
-        {selectedMatch && <span className="keyword-detail"><strong>{selectedMatch.term}</strong>
-          <span>{[selectedMatch.category, selectedMatch.risk].filter(Boolean).join(' · ') || '분류 정보 없음'}</span>
-          {selectedMatch.detail && <small>{selectedMatch.detail}</small>}
-        </span>}
-      </span>}
+      <mark className={riskClass} title={group.matches.map(item => item.term).join(', ')}
+        onClick={() => setHiddenNumbers(previous => {
+          const next = new Set(previous)
+          const hide = codeKeys.some(code => !next.has(code))
+          codeKeys.forEach(code => hide ? next.add(code) : next.delete(code))
+          return next
+        })}>{'【'}<strong>{surface}</strong>{'】'}</mark>
+      {keywords.length > 0 && <span className="highlight-keywords"><span className="keyword-number-group"
+        hidden={keywords.every(item => hiddenNumbers.has(`${item.kwd_no}|${item.start}|${item.end}`))}>{keywords.map((item, index) => {
+        const codeKey = `${item.kwd_no}|${item.start}|${item.end}`
+        const detailId = `keyword-detail-${item.start}-${item.end}-${index}`
+        const row: Record<string, string> = keywordRows.find(candidate => candidate.kwd_no === item.kwd_no) ?? {}
+        const matchedText = characters.slice(item.start, item.end).join('')
+        const fields: [string, string][] = Object.entries(row)
+          .filter(([column, value]) => column !== '키워드 등록일자' && column !== '키워드등록일자' &&
+            (Boolean(value) || column === '마지막 출력일자'))
+          .map(([column, value]) => [column === '마지막 출력일자' ? '마지막 검색일자' : column,
+            datetimeColumns.has(column) ? formatStreamlitDate(value) : value])
+        const searchDateIndex = fields.findIndex(([label]) => label === '마지막 검색일자')
+        const registrationDate = row['키워드 등록일자'] || row['키워드등록일자'] || ''
+        fields.splice(searchDateIndex < 0 ? fields.length : searchDateIndex + 1, 0,
+          ['키워드 등록일자', formatStreamlitDate(registrationDate)])
+        const condition = mode === 'similar'
+          ? 'Kiwi 내용어 토큰 또는 관리자 승인 표현이 일치했습니다.'
+          : mode === 'partial'
+            ? `최소 ${partialMinLen}글자 조건을 충족한 부분 문자열이 일치했습니다.`
+            : '키워드 완전 일치 방식으로 등록 표현이 입력 문구에서 발견됐습니다.'
+        fields.push(['매칭 결과', `입력 문구 ‘${matchedText}’ ↔ DB 등록 키워드 ‘${item.term}’`],
+          ['매칭 조건', condition])
+        return <span className="keyword-info" key={codeKey} hidden={hiddenNumbers.has(codeKey)}>
+          <button type="button" id={detailId} className={`keyword-code ${riskClasses[item.risk] ?? 'highlight-risk-mixed'} ${selectedSurface === matchedText ? 'group-selected' : ''}`}
+            aria-label={`${item.kwd_no} 상세 정보`} aria-expanded={activeTooltip === codeKey}
+            onClick={event => {
+              event.stopPropagation()
+              if (event.ctrlKey || event.metaKey) {
+                setSelectedSurface(previous => previous === matchedText ? '' : matchedText)
+                setActiveTooltip(null)
+              } else {
+                setSelectedSurface('')
+                setActiveTooltip(previous => previous === codeKey ? null : codeKey)
+              }
+        }}>{item.kwd_no}</button>
+          {activeTooltip === codeKey && <span className="keyword-detail" role="tooltip" aria-labelledby={detailId}>
+            <table><tbody>{fields.map(([label, value], rowIndex) => <tr key={`${label}-${rowIndex}`}>
+              <th scope="row">{label}</th><td>{value}</td>
+            </tr>)}</tbody></table>
+          </span>}
+        </span>
+      })}</span></span>}
     </span>)
-    cursor = match.end
+    cursor = end
   }
   pieces.push(characters.slice(cursor).join(''))
-  return <div className="highlighted-text-wrap">
-    <div className="highlighted-text">{pieces}</div>
-    {selectedCodes.length > 0 && <div className="highlight-selection" aria-live="polite">
-      <span>선택한 키워드 번호: {selectedCodes.join(', ')}</span>
-      <button className="text-button" onClick={copySelectedCodes}>번호 복사</button>
-      <button className="text-button" onClick={() => { setSelectedCodes([]); setCopyMessage('') }}>선택 해제</button>
-      {copyMessage && <small>{copyMessage}</small>}
-    </div>}
-  </div>
+  return <div className="highlighted-text">{pieces}</div>
 }
 
 function OCRSelectableImage({ file }: { file: OCRFileResult }) {
@@ -407,8 +488,8 @@ function App() {
   const [resetEmailSent, setResetEmailSent] = useState(false)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [text, setText] = useState('')
-  const [mode, setMode] = useState<AnalysisMode>('similar')
+  const [text, setText] = useState('이 문장에는 필러와 안티에이징이라는 키워드가 포함되어 있습니다.')
+  const [mode, setMode] = useState<AnalysisMode>('exact')
   const [partialMinLen, setPartialMinLen] = useState(2)
   const [options, setOptions] = useState({ strip_bracket_notes: true, normalize_whitespace: true,
     ignore_case: true, normalize_symbols: true })
@@ -416,7 +497,7 @@ function App() {
   const [categories, setCategories] = useState<string[]>([])
   const [risks, setRisks] = useState<string[]>([])
   const [filterMessage, setFilterMessage] = useState('')
-  const pending = useRef<{ payload: string; id: string } | null>(null)
+  const pending = useRef<{ payload: string; id: string; input: AnalysisInput; text: string; unmatchedPending: boolean } | null>(null)
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -429,7 +510,8 @@ function App() {
   const [keywordBusy, setKeywordBusy] = useState(false)
   const [keywordExportBusy, setKeywordExportBusy] = useState(false)
   const [keywordError, setKeywordError] = useState('')
-  const [reportDays, setReportDays] = useState(7)
+  const [reportEndDate, setReportEndDate] = useState(() => kstDateString())
+  const [reportStartDate, setReportStartDate] = useState(() => shiftDate(kstDateString(), -6))
   const [reportLimit, setReportLimit] = useState(10)
   const [reportItems, setReportItems] = useState<TopKeyword[]>([])
   const [reportBusy, setReportBusy] = useState(false)
@@ -630,13 +712,13 @@ function App() {
     let active = true
     setReportBusy(true)
     setReportError('')
-    void loadTopKeywords(reportDays, reportLimit).then(data => {
+    void loadTopKeywords(reportStartDate, reportEndDate, reportLimit).then(data => {
       if (active) setReportItems(data.items)
     }).catch(error => {
       if (active) setReportError(error instanceof Error ? error.message : '리포트를 불러오지 못했습니다.')
     }).finally(() => { if (active) setReportBusy(false) })
     return () => { active = false }
-  }, [page, user?.id, reportDays, reportLimit])
+  }, [page, user?.id, reportStartDate, reportEndDate, reportLimit])
 
   useEffect(() => {
     if (page !== 'unmatched' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
@@ -858,6 +940,14 @@ function App() {
   }
 
   async function signOut() {
+    if (busy) {
+      setMessage('분석 또는 저장 처리가 끝난 뒤 로그아웃해 주세요.')
+      return
+    }
+    if (pending.current?.unmatchedPending) {
+      setMessage('미매칭 후보 저장이 끝날 때까지 로그아웃할 수 없습니다. 텍스트 분석에서 저장을 다시 시도해 주세요.')
+      return
+    }
     setBusy(true)
     setMessage('')
     const { error } = await supabase?.auth.signOut() ?? { error: null }
@@ -983,23 +1073,51 @@ function App() {
       setMessage('분석할 텍스트를 입력해 주세요.')
       return
     }
+    const input: AnalysisInput = { text, mode, partial_min_len: partialMinLen,
+      ...options, categories, risks }
+    const payload = JSON.stringify(input)
+    if (pending.current?.unmatchedPending && pending.current.payload !== payload) {
+      setMessage('미매칭 후보 저장이 완료될 때까지 다른 분석을 시작할 수 없습니다. 먼저 저장을 재시도해 주세요.')
+      return
+    }
     setBusy(true)
     setMessage('')
     setResult(null)
     try {
-      const input: AnalysisInput = { text, mode, partial_min_len: partialMinLen,
-        ...options, categories, risks }
-      const payload = JSON.stringify(input)
       const id = pending.current?.payload === payload ? pending.current.id : crypto.randomUUID()
-      pending.current = { payload, id }
+      pending.current = { payload, id, input, text, unmatchedPending: Boolean(pending.current?.unmatchedPending) }
       const data = await analyzeText(input, id)
       if (data.offset_unit !== 'unicode_codepoint' || !data.end_exclusive) {
         throw new Error('지원하지 않는 분석 위치 형식입니다.')
       }
       setResult({ text, data })
-      pending.current = null
+      if (data.unmatched_collection_pending) {
+        pending.current = { payload, id, input, text, unmatchedPending: true }
+      } else {
+        pending.current = null
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '분석 중 오류가 발생했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function retryUnmatchedCollection() {
+    const retry = pending.current
+    if (!retry?.unmatchedPending || busy) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const data = await analyzeText(retry.input, retry.id)
+      setResult({ text: retry.text, data })
+      if (data.unmatched_collection_pending) {
+        setMessage('미매칭 후보 저장이 아직 완료되지 않았습니다. 다시 시도해 주세요.')
+      } else {
+        pending.current = null
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '미매칭 후보 저장을 다시 시도하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -1053,11 +1171,11 @@ function App() {
   function downloadCsv() {
     if (!result) return
     const cells = [
-      ['kwd_no', '키워드명', '상품카테고리', '리스크등급', '심의기준', '시작위치', '끝위치'],
+      ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '리스크 등급별 세부 심의기준', 'start', 'end'],
       ...result.data.matches.map(match => [match.kwd_no ?? '', match.term, match.category,
         match.risk, match.detail, String(match.start), String(match.end)]),
     ]
-    const csv = '\uFEFF' + cells.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const csv = makeCsv(cells)
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
@@ -1104,15 +1222,27 @@ function App() {
   }
 
   function downloadReportCsv() {
+    const keywordColumns = reportItems[0]?.keyword_data ? Object.keys(reportItems[0].keyword_data) : []
+    const countColumn = keywordColumns.includes('대체키워드')
+      ? '대체키워드' : keywordColumns.includes('증빙자료유형') ? '증빙자료유형' : ''
+    const insertAt = countColumn ? keywordColumns.indexOf(countColumn) + 1 : keywordColumns.length
+    const columns = [...keywordColumns.slice(0, insertAt), '기간내_조회수', ...keywordColumns.slice(insertAt)]
     const rows = [
-      ['검색순위', 'kwd_no', '키워드명', '기간내_조회수'],
-      ...reportItems.map((item, index) => [String(index + 1), item.kwd_no, item.term ?? '', String(item.hit_count)]),
+      ['검색순위', ...columns.map(column => column === '마지막 출력일자' ? '마지막 검색일자' : column)],
+      ...reportItems.map(item => {
+        const values = columns.map(column => column === '기간내_조회수'
+          ? String(item.hit_count)
+          : item.keyword_data?.[column] ?? '')
+        const dateIndex = columns.indexOf('마지막 출력일자')
+        if (dateIndex >= 0) values[dateIndex] = formatStreamlitDate(values[dateIndex])
+        return [String(item.search_rank), ...values]
+      }),
     ]
-    const csv = '\uFEFF' + rows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+    const csv = makeCsv(rows)
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = `top_keywords_${reportDays}days.csv`
+    link.download = 'period_topN_report.csv'
     document.body.append(link)
     link.click()
     link.remove()
@@ -1129,7 +1259,7 @@ function App() {
     setReportError('')
     try {
       const result = await resetAdminReportData(scope)
-      const data = await loadTopKeywords(reportDays, reportLimit)
+      const data = await loadTopKeywords(reportStartDate, reportEndDate, reportLimit)
       setReportItems(data.items)
       setReportResetMessage(scope === 'all'
         ? '누적 조회수를 초기화했습니다. 분석 기록은 유지됩니다.'
@@ -1152,7 +1282,7 @@ function App() {
         row['리스크 등급'], row.대체키워드, row['리스크 등급별 세부 심의기준'],
         row.증빙자료유형, row['키워드 조회 수(누적카운트)'], row['마지막 출력일자']]
         .map(value => String(value ?? '')))]
-      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const csv = makeCsv(csvRows)
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
@@ -1181,7 +1311,7 @@ function App() {
       const csvRows = [headers, ...rows.map(row => [row.display_term, String(row.total_occurrences),
         String(row.analysis_count), labels[row.review_status] ?? row.review_status,
         formatDate(row.first_seen), formatDate(row.last_seen)])]
-      const csv = '\uFEFF' + csvRows.map(row => row.map(value => `"${value.replaceAll('"', '""')}"`).join(',')).join('\r\n')
+      const csv = makeCsv(csvRows)
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
@@ -1595,58 +1725,34 @@ function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand-mark">K<span>·</span>R</div>
-      <div className="brand-name">Keyword Risk<br />Analyzer</div>
-      <div className="sidebar-divider" />
-      <div className="sidebar-label">WORKSPACE</div>
-      <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>
-        <span className="nav-icon">⌕</span> 텍스트 분석
-      </button>
-      <button className={`nav-item nav-button ${page === 'ocr' ? 'active' : ''}`} onClick={() => setPage('ocr')}>
-        <span className="nav-icon">▧</span> 이미지 OCR
-      </button>
-      <button className={`nav-item nav-button ${page === 'keywords' ? 'active' : ''}`} onClick={() => setPage('keywords')}>
-        <span className="nav-icon">▤</span> 키워드 원장
-      </button>
-      <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>
-        <span className="nav-icon">↗</span> 분석 리포트
-      </button>
-      <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>
-        <span className="nav-icon">§</span> 법령 근거 검색
-      </button>
-      <button className={`nav-item nav-button ${page === 'unmatched' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>
-        <span className="nav-icon">?</span> 미매칭 후보
-      </button>
-      <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>
-        <span className="nav-icon">✉</span> 키워드 문의
-      </button>
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>
-        <span className="nav-icon">♙</span> 사용자 관리
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'keyword-admin' ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>
-        <span className="nav-icon">✎</span> 키워드 관리
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('registration-admin')}>
-        <span className="nav-icon">✓</span> 등록 요청 검토
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'normalization-admin' ? 'active' : ''}`} onClick={() => setPage('normalization-admin')}>
-        <span className="nav-icon">⌁</span> 정규화 설정
-      </button>}
-      <div className="sidebar-bottom">
-        <div className="version-chip">REACT PREVIEW</div>
-        <p>분석, OCR, 키워드 관리 기능을 React에서 확인할 수 있습니다.</p>
-      </div>
-    </aside>
-
-    <main className="main-content">
-      <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'ocr' ? '이미지 OCR' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : page === 'normalization-admin' ? '정규화 설정' : '키워드 관리'}</div>
+      <div className="app-title-row">
+        <h1 className="app-title">🔎 광고심의 자동화 솔루션</h1>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
           <button className="text-button" disabled={busy} onClick={signOut}>로그아웃</button>
         </div>}
-      </header>
+      </div>
+      {allowed && <nav className="main-tabs" aria-label="주요 기능">
+        <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>스크립트 분석</button>
+        <button className={`nav-item nav-button ${page === 'ocr' ? 'active' : ''}`} onClick={() => setPage('ocr')}>이미지 OCR분석</button>
+        <button className={`nav-item nav-button ${page === 'unmatched' || page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>미매칭 후보군</button>
+        <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>키워드 문의내역</button>
+        <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>심의 Chat-bot</button>
+        <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>분석리포트</button>
+        {role === 'admin' && <button className={`nav-item nav-button ${['keyword-admin', 'normalization-admin', 'keywords'].includes(page) ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>키워드 관리</button>}
+        {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>사용자 관리</button>}
+      </nav>}
+    </aside>
+
+    <main className="main-content">
+      {pending.current?.unmatchedPending && <div className="error-message inline-error" role="alert">
+        이전 분석의 미매칭 후보 저장이 완료되지 않았습니다.
+        <button className="secondary-button" disabled={busy} onClick={retryUnmatchedCollection}>
+          미매칭 후보 저장 재시도
+        </button>
+      </div>}
+
 
       {!configurationReady ? <section className="state-card">
         <h1>연결 설정이 필요합니다</h1>
@@ -1711,7 +1817,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 10</div><h1>정규화 설정</h1>
               <p>모든 사용자의 분석에 적용되는 기호 정규화와 한국어 조사·어미 허용 목록을 관리합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+            <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel settings-panel normalization-admin-panel">
@@ -1812,7 +1919,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 09</div><h1>등록 요청 검토</h1>
               <p>사용자가 제출한 미매칭 키워드 등록 요청을 확인하고 거절 처리합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+            <button className="secondary-button" onClick={() => setPage('unmatched')}>미매칭 후보군으로 돌아가기</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel admin-users-panel">
@@ -1870,7 +1978,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 08</div><h1>키워드 관리</h1>
               <p>기존 키워드의 카테고리, 리스크, 대체 표현, 심의 기준과 증빙 유형을 수정합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+<button className="secondary-button" onClick={() => setPage('keywords')}>키워드 원장 조회</button><button className="secondary-button" onClick={() => setPage('normalization-admin')}>정규화 설정</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel admin-users-panel admin-keywords-panel">
@@ -2095,7 +2204,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">REVIEW / 05</div><h1>미매칭 후보</h1>
               <p>분석 중 등록 키워드와 일치하지 않은 표현의 누적 현황입니다.</p></div>
-            <div className="preview-pill"><span /> 공유 후보</div>
+            {role === 'admin' && <button className="secondary-button" onClick={() => setPage('registration-admin')}>등록 요청 검토</button>}
+                        <div className="preview-pill"><span /> 공유 후보</div>
           </div>
           <section className="catalog-section">
             <div className="panel catalog-panel">
@@ -2313,24 +2423,26 @@ function App() {
           </section>
         </> : page === 'report' ? <>
           <div className="page-heading">
-            <div><div className="eyebrow">REPORT / 03</div><h1>분석 리포트</h1>
+            <div><div className="eyebrow">REPORT / 03</div><h1>📈 분석리포트</h1>
               <p>선택한 최근 기간에 가장 많이 검출된 키워드를 보여줍니다.</p></div>
               <div className="preview-pill"><span /> 공유 집계</div>
           </div>
           <section className="catalog-section">
             <div className="panel report-panel">
               <div className="report-controls">
-                <label>조회 기간
-                  <select value={reportDays} onChange={event => setReportDays(Number(event.target.value))}>
-                    <option value={7}>최근 7일</option><option value={30}>최근 30일</option>
-                    <option value={90}>최근 90일</option>
-                  </select>
+                <label>기간
+                  <span className="report-date-range">
+                    <input aria-label="Start date" type="date" max={reportEndDate} value={reportStartDate}
+                      onChange={event => setReportStartDate(event.target.value)} />
+                    <span>~</span>
+                    <input aria-label="End date" type="date" min={reportStartDate} max={kstDateString()}
+                      value={reportEndDate} onChange={event => setReportEndDate(event.target.value)} />
+                  </span>
                 </label>
-                <label>표시 개수
+                <label>Top N
                   <input type="number" min={1} max={100} value={reportLimit}
                     onChange={event => setReportLimit(Math.min(100, Math.max(1, Number(event.target.value) || 1)))} />
                 </label>
-                {reportItems.length > 0 && <button className="secondary-button" onClick={downloadReportCsv}>CSV 다운로드</button>}
               </div>
               {role === 'admin' && <div className="report-reset-controls">
                 <strong>관리자 초기화</strong>
@@ -2341,16 +2453,29 @@ function App() {
                 <small>누적 조회수 초기화는 분석 기록을 보존하며, 7일 기록 삭제는 최근 기간 리포트 집계에서만 제외하며, 원본 기록은 유지합니다.</small>
               </div>}
               {reportResetMessage && <p className="success-message" role="status">{reportResetMessage}</p>}
-              <p className="report-period-note">최근 {reportDays}일의 공유 분석 기록 기준입니다.</p>
+              <p className="report-period-note">선택한 기간의 키워드 조회 수입니다. ({reportStartDate} ~ {reportEndDate})</p>
               {reportBusy && <p className="catalog-status" role="status">리포트를 불러오는 중…</p>}
               {reportError && <p className="error-message" role="alert">{reportError}</p>}
-              {!reportBusy && !reportError && (reportItems.length ? <div className="table-scroll"><table>
-                <thead><tr><th>순위</th><th>키워드 번호</th><th>키워드명</th><th>기간 내 조회수</th></tr></thead>
-                <tbody>{reportItems.map((item, index) => <tr key={item.kwd_no}>
-                  <td>{index + 1}</td><td>{item.kwd_no}</td><td><strong>{item.term || '등록 키워드 정보 없음'}</strong></td>
-                  <td>{item.hit_count.toLocaleString()}</td>
-                </tr>)}</tbody>
-              </table></div> : <p className="empty-result">해당 기간에 분석 기록이 없습니다.</p>)}
+              {!reportBusy && !reportError && (reportItems.length ? <><div className="table-scroll"><table>
+                {(() => {
+                  const keywordColumns = Object.keys(reportItems[0].keyword_data ?? {})
+                  const countColumn = keywordColumns.includes('대체키워드')
+                    ? '대체키워드' : keywordColumns.includes('증빙자료유형') ? '증빙자료유형' : ''
+                  const insertAt = countColumn ? keywordColumns.indexOf(countColumn) + 1 : keywordColumns.length
+                  const columns = [...keywordColumns.slice(0, insertAt), '기간내_조회수', ...keywordColumns.slice(insertAt)]
+                  return <>
+                    <thead><tr><th>검색순위</th>{columns.map(column =>
+                      <th key={column}>{streamlitColumnLabels[column] ?? column}</th>)}</tr></thead>
+                    <tbody>{reportItems.map(item => <tr key={item.kwd_no}>
+                      <td>{item.search_rank}</td>{columns.map(column => <td key={column}>
+                        {column === '기간내_조회수' ? item.hit_count.toLocaleString()
+                          : datetimeColumns.has(column) ? formatStreamlitDate(item.keyword_data?.[column] ?? '')
+                            : item.keyword_data?.[column] ?? ''}
+                      </td>)}
+                    </tr>)}</tbody>
+                  </>
+                })()}
+              </table></div><button className="secondary-button result-download" onClick={downloadReportCsv}>리포트 CSV 다운로드 (선택 기간 Top N)</button></> : <p className="empty-result">해당 기간에 분석 기록이 없습니다.</p>)}
             </div>
           </section>
         </> : page === 'ocr' ? <>
@@ -2433,7 +2558,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">CATALOG / 02</div><h1>키워드 원장</h1>
               <p>등록된 키워드와 분류 정보를 조회합니다. 원장 수정은 기존 관리자 화면에서 할 수 있습니다.</p></div>
-            <div className="preview-pill"><span /> 읽기 전용</div>
+            <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>
+                        <div className="preview-pill"><span /> 읽기 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel catalog-panel">
@@ -2542,20 +2668,22 @@ function App() {
           {message && <div className="error-message inline-error" role="alert">{message}</div>}
           {result && <section className="results-section" aria-live="polite">
             <div className="results-heading"><div><div className="eyebrow">RESULT / 03</div><h2>분석 결과</h2></div>
-              <div className="results-actions"><div className="result-count"><strong>{result.data.unique_keywords.length}</strong>개 키워드 · {result.data.matches.length}회 발견</div>
-                {result.data.matches.length > 0 && <button className="secondary-button" onClick={downloadCsv}>CSV 다운로드</button>}
-              </div></div>
-            <div className="panel preview-panel"><h3>문장 속 키워드</h3>
-              <p className="highlight-help">색상은 리스크 등급을 나타냅니다. 검출 문구를 누르면 연결된 번호가 보이고, 번호를 누르면 상세 정보를 확인합니다. Ctrl/Cmd+클릭으로 번호를 여러 개 선택해 복사할 수 있습니다.</p>
-              <HighlightedText text={result.text} matches={result.data.matches} /></div>
-            {result.data.matches.length > 0 ? <div className="panel table-panel"><div className="table-scroll"><table>
-              <thead><tr><th>키워드</th><th>상품 카테고리</th><th>리스크 등급</th><th>심의 기준</th><th>위치</th></tr></thead>
-              <tbody>{result.data.matches.map((match, index) => <tr key={`${match.start}-${match.end}-${index}`}>
-                <td><strong>{match.term}</strong></td><td>{match.category || '—'}</td>
-                <td>{match.risk || '—'}</td><td>{match.detail || '—'}</td>
-                <td>{match.start + 1}–{match.end}</td>
+              <div className="results-actions"><div className="result-count">총 <strong>{result.data.unique_keywords.length}</strong>건의 키워드가 발견되었습니다.</div></div></div>
+            {result.data.unique_keyword_rows.length > 0 && <div className="panel table-panel result-keyword-table"><div className="table-scroll"><table>
+              <thead><tr>{Object.keys(result.data.unique_keyword_rows[0]).map(column =>
+                <th key={column}>{streamlitColumnLabels[column] ?? column}</th>)}</tr></thead>
+              <tbody>{result.data.unique_keyword_rows.map(row => <tr key={row.kwd_no}>
+                {Object.entries(row).map(([column, value]) => <td key={column}>
+                  {datetimeColumns.has(column) ? formatStreamlitDate(value) : value}
+                </td>)}
               </tr>)}</tbody>
-            </table></div></div> : <p className="empty-result">일치하는 등록 키워드가 없습니다.</p>}
+            </table></div></div>}
+            {result.data.matches.length > 0 && <button className="secondary-button result-download" onClick={downloadCsv}>분석 결과 CSV 다운로드</button>}
+            {result.data.matches.length > 0 ? <div className="panel preview-panel result-highlight-panel"><h3>하이라이트 미리보기</h3>
+              <p className="highlight-help">검출 문구를 클릭하면 같은 검출 대상의 번호 표시를 전환합니다. 번호를 클릭하면 심의 기준과 키워드 정보를 표로 확인할 수 있습니다. Ctrl+클릭은 같은 검출 문구의 번호를 선택합니다.</p>
+              <HighlightedText text={result.text} matches={result.data.matches}
+                keywordRows={result.data.unique_keyword_rows} mode={mode} partialMinLen={partialMinLen} /></div>
+              : <p className="empty-result">매칭된 키워드가 없습니다.</p>}
             <p className="result-note">분석 기록과 미매칭 후보 수집이 완료되었습니다. 동일 요청 재시도에는 같은 분석 ID를 사용합니다.</p>
           </section>}
         </>}

@@ -18,7 +18,9 @@ class MemoryRepository:
         ]))])
         self.keywords.attrs['revision'] = 1
         self.saved = {}
-        self.writes = 0
+        self.history_writes = 0
+        self.collection_calls = 0
+        self.fail_collection = False
 
     def load_keywords(self):
         return self.keywords.copy()
@@ -32,11 +34,15 @@ class MemoryRepository:
             raise ValueError('Analysis ID conflict')
         return entry[2] if entry else None
 
-    def record_analysis_with_unmatched(self, analysis_id, fingerprint, actor,
-                                       revision, result, candidates):
-        self.writes += 1
+    def record_analysis(self, analysis_id, fingerprint, actor, revision, result):
+        self.history_writes += 1
         self.saved[analysis_id] = (actor, fingerprint, result)
         return result
+
+    def collect_unmatched_terms(self, analysis_id, candidates):
+        self.collection_calls += 1
+        if self.fail_collection:
+            raise RuntimeError('temporary storage failure')
 
 
 class CurrentAnalysisTests(unittest.TestCase):
@@ -62,8 +68,26 @@ class CurrentAnalysisTests(unittest.TestCase):
             second = analyze_current(self.repository, self.request, 'user-1')
         self.assertEqual(first, second)
         self.assertEqual(first['matches'], [])
-        self.assertEqual([match.kwd_no for match in covered], ['A001'])
-        self.assertEqual(self.repository.writes, 1)
+        self.assertFalse(first['recorded'])
+        self.assertFalse(first['unmatched_collection_pending'])
+        self.assertEqual([match.kwd_no for match in covered], ['A001', 'A001'])
+        self.assertEqual(self.repository.collection_calls, 2)
+        self.assertEqual(self.repository.history_writes, 0)
+
+    def test_candidate_collection_failure_does_not_hide_analysis_and_retries(self):
+        self.repository.fail_collection = True
+        first = analyze_current(self.repository, self.request, 'user-1')
+        self.assertEqual(first['unique_keywords'], ['A001'])
+        self.assertTrue(first['recorded'])
+        self.assertTrue(first['unmatched_collection_pending'])
+        self.assertEqual(self.repository.history_writes, 1)
+
+        self.repository.fail_collection = False
+        retried = analyze_current(self.repository, self.request, 'user-1')
+        self.assertFalse(retried['unmatched_collection_pending'])
+        self.assertEqual(retried['analysis_id'], self.request['analysis_id'])
+        self.assertEqual(self.repository.collection_calls, 2)
+        self.assertEqual(self.repository.history_writes, 1)
 
     def test_api_rejects_integration_token_for_recorded_analysis(self):
         api.app.dependency_overrides[api.current_actor] = lambda: 'integration'
@@ -72,7 +96,21 @@ class CurrentAnalysisTests(unittest.TestCase):
             with TestClient(api.app) as client:
                 response = client.post('/api/v2/analyses', json=self.request)
             self.assertEqual(response.status_code, 403)
-            self.assertEqual(self.repository.writes, 0)
+            self.assertEqual(self.repository.history_writes, 0)
+        finally:
+            api.app.dependency_overrides.clear()
+
+    def test_api_keeps_no_hit_analysis_out_of_history(self):
+        request = {**self.request, 'categories': ['nonexistent-category']}
+        api.app.dependency_overrides[api.current_actor] = lambda: 'user-1'
+        api.app.dependency_overrides[api.get_repository] = lambda: self.repository
+        try:
+            with TestClient(api.app) as client:
+                response = client.post('/api/v2/analyses', json=request)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertFalse(response.json()['recorded'])
+            self.assertFalse(response.json()['unmatched_collection_pending'])
+            self.assertEqual(self.repository.history_writes, 0)
         finally:
             api.app.dependency_overrides.clear()
 
