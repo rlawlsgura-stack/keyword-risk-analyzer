@@ -1689,58 +1689,28 @@ function App() {
 
   return <div className="app-shell">
     <aside className="sidebar">
-      <div className="brand-mark">K<span>·</span>R</div>
-      <div className="brand-name">Keyword Risk<br />Analyzer</div>
-      <div className="sidebar-divider" />
-      <div className="sidebar-label">WORKSPACE</div>
-      <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>
-        <span className="nav-icon">⌕</span> 텍스트 분석
-      </button>
-      <button className={`nav-item nav-button ${page === 'ocr' ? 'active' : ''}`} onClick={() => setPage('ocr')}>
-        <span className="nav-icon">▧</span> 이미지 OCR
-      </button>
-      <button className={`nav-item nav-button ${page === 'keywords' ? 'active' : ''}`} onClick={() => setPage('keywords')}>
-        <span className="nav-icon">▤</span> 키워드 원장
-      </button>
-      <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>
-        <span className="nav-icon">↗</span> 분석 리포트
-      </button>
-      <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>
-        <span className="nav-icon">§</span> 법령 근거 검색
-      </button>
-      <button className={`nav-item nav-button ${page === 'unmatched' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>
-        <span className="nav-icon">?</span> 미매칭 후보
-      </button>
-      <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>
-        <span className="nav-icon">✉</span> 키워드 문의
-      </button>
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>
-        <span className="nav-icon">♙</span> 사용자 관리
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'keyword-admin' ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>
-        <span className="nav-icon">✎</span> 키워드 관리
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('registration-admin')}>
-        <span className="nav-icon">✓</span> 등록 요청 검토
-      </button>}
-      {role === 'admin' && <button className={`nav-item nav-button ${page === 'normalization-admin' ? 'active' : ''}`} onClick={() => setPage('normalization-admin')}>
-        <span className="nav-icon">⌁</span> 정규화 설정
-      </button>}
-      <div className="sidebar-bottom">
-        <div className="version-chip">REACT PREVIEW</div>
-        <p>분석, OCR, 키워드 관리 기능을 React에서 확인할 수 있습니다.</p>
-      </div>
-    </aside>
-
-    <main className="main-content">
-      <header className="topbar">
-        <div className="breadcrumb">WORKSPACE <span>/</span> {page === 'analysis' ? '텍스트 분석' : page === 'ocr' ? '이미지 OCR' : page === 'keywords' ? '키워드 원장' : page === 'report' ? '분석 리포트' : page === 'regulation' ? '법령 근거 검색' : page === 'unmatched' ? '미매칭 후보' : page === 'requests' ? '키워드 문의' : page === 'users' ? '사용자 관리' : page === 'registration-admin' ? '등록 요청 검토' : page === 'normalization-admin' ? '정규화 설정' : '키워드 관리'}</div>
+      <div className="app-title-row">
+        <h1 className="app-title">🔎 광고심의 자동화 솔루션</h1>
         {allowed && <div className="account">
           <span className="account-name">{user?.email}</span>
           <span className="role-pill">{role === 'admin' ? '관리자' : '사용자'}</span>
           <button className="text-button" disabled={busy} onClick={signOut}>로그아웃</button>
         </div>}
-      </header>
+      </div>
+      {allowed && <nav className="main-tabs" aria-label="주요 기능">
+        <button className={`nav-item nav-button ${page === 'analysis' ? 'active' : ''}`} onClick={() => setPage('analysis')}>스크립트 분석</button>
+        <button className={`nav-item nav-button ${page === 'ocr' ? 'active' : ''}`} onClick={() => setPage('ocr')}>이미지 OCR분석</button>
+        <button className={`nav-item nav-button ${page === 'unmatched' || page === 'registration-admin' ? 'active' : ''}`} onClick={() => setPage('unmatched')}>미매칭 후보군</button>
+        <button className={`nav-item nav-button ${page === 'requests' ? 'active' : ''}`} onClick={() => setPage('requests')}>키워드 문의내역</button>
+        <button className={`nav-item nav-button ${page === 'regulation' ? 'active' : ''}`} onClick={() => setPage('regulation')}>심의 Chat-bot</button>
+        <button className={`nav-item nav-button ${page === 'report' ? 'active' : ''}`} onClick={() => setPage('report')}>분석리포트</button>
+        {role === 'admin' && <button className={`nav-item nav-button ${['keyword-admin', 'normalization-admin', 'keywords'].includes(page) ? 'active' : ''}`} onClick={() => setPage('keyword-admin')}>키워드 관리</button>}
+        {role === 'admin' && <button className={`nav-item nav-button ${page === 'users' ? 'active' : ''}`} onClick={() => setPage('users')}>사용자 관리</button>}
+      </nav>}
+    </aside>
+
+    <main className="main-content">
+
 
       {!configurationReady ? <section className="state-card">
         <h1>연결 설정이 필요합니다</h1>
@@ -1805,7 +1775,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 10</div><h1>정규화 설정</h1>
               <p>모든 사용자의 분석에 적용되는 기호 정규화와 한국어 조사·어미 허용 목록을 관리합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+            <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel settings-panel normalization-admin-panel">
@@ -1906,7 +1877,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 09</div><h1>등록 요청 검토</h1>
               <p>사용자가 제출한 미매칭 키워드 등록 요청을 확인하고 거절 처리합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+            <button className="secondary-button" onClick={() => setPage('unmatched')}>미매칭 후보군으로 돌아가기</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel admin-users-panel">
@@ -1964,7 +1936,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">ADMIN / 08</div><h1>키워드 관리</h1>
               <p>기존 키워드의 카테고리, 리스크, 대체 표현, 심의 기준과 증빙 유형을 수정합니다.</p></div>
-            <div className="preview-pill"><span /> 관리자 전용</div>
+<button className="secondary-button" onClick={() => setPage('keywords')}>키워드 원장 조회</button><button className="secondary-button" onClick={() => setPage('normalization-admin')}>정규화 설정</button>
+                        <div className="preview-pill"><span /> 관리자 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel admin-users-panel admin-keywords-panel">
@@ -2189,7 +2162,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">REVIEW / 05</div><h1>미매칭 후보</h1>
               <p>분석 중 등록 키워드와 일치하지 않은 표현의 누적 현황입니다.</p></div>
-            <div className="preview-pill"><span /> 공유 후보</div>
+            {role === 'admin' && <button className="secondary-button" onClick={() => setPage('registration-admin')}>등록 요청 검토</button>}
+                        <div className="preview-pill"><span /> 공유 후보</div>
           </div>
           <section className="catalog-section">
             <div className="panel catalog-panel">
@@ -2542,7 +2516,8 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">CATALOG / 02</div><h1>키워드 원장</h1>
               <p>등록된 키워드와 분류 정보를 조회합니다. 원장 수정은 기존 관리자 화면에서 할 수 있습니다.</p></div>
-            <div className="preview-pill"><span /> 읽기 전용</div>
+            <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>
+                        <div className="preview-pill"><span /> 읽기 전용</div>
           </div>
           <section className="catalog-section">
             <div className="panel catalog-panel">

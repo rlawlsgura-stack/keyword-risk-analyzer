@@ -19,10 +19,12 @@
 - [x] Updated the integration assertion to compare matching-engine fields while allowing the intentional detail metadata added to serialized matches (2026-11-03).
 - [x] Commit `50c6e694da52bfb3ae1144a0e6fbef9c5ef7d949` is live on the Render API service. Unauthenticated smoke checks for keyword catalog, report, unmatched candidates, and administrator users all returned HTTP 401 (2026-11-03).
 - [x] Compared the Streamlit FIXED327 and FIXED329 source files: they differ only in the module description and `APP_VERSION` label, so the FIXED329 screen shown during this review retains the FIXED327 implementation (2026-11-03).
+- [x] Reworked the React top-level navigation to use the FIXED327 title and horizontal tab order; React-only catalog, registration review, and normalization pages remain reachable from their corresponding catalog/management areas rather than adding top-level tabs (2026-11-03).
 
 ## Remaining before switching the production UI
 
 - [ ] Visually verify that the React report page displays the recorded terms and that its CSV download opens correctly.
+- [ ] Visually compare the updated React shell and each page against Streamlit; the browser control host is unavailable, so this layout change is build-checked but not visually accepted yet.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
