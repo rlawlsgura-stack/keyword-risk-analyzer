@@ -20,6 +20,10 @@ export type Match = {
   risk: string
   detail: string
   kwd_no: string | null
+  alternative?: string
+  evidence_type?: string
+  hit_count?: string
+  last_search_date?: string
 }
 
 export type AnalysisResult = {

@@ -31,6 +31,46 @@ def match_text(text, keywords, *, match_mode=None, exact_relaxed=None,
                             exact_relaxed=exact_relaxed, config=config, **options)
 
 
+def serialize_matches(matches, keywords):
+    """Include catalog metadata needed by the React hover detail table."""
+    catalog = {}
+    for row in keywords.to_dict('records'):
+        code = str(row.get('kwd_no', '')).strip()
+        if code:
+            catalog[code] = row
+
+    def value(row, column):
+        item = row.get(column, '') if row else ''
+        if item is None or item != item:
+            return ''
+        return str(item).strip()
+
+    serialized = []
+    for match in matches:
+        item = asdict(match) if hasattr(match, '__dataclass_fields__') else dict(match)
+        row = catalog.get(str(item.get('kwd_no') or ''))
+        item.update(
+            alternative=value(row, '대체키워드'),
+            evidence_type=value(row, '증빙자료유형'),
+            hit_count=value(row, '키워드 조회 수(누적카운트)'),
+            last_search_date=value(row, '마지막 출력일자'),
+        )
+        serialized.append(item)
+    return serialized
+
+
+def enrich_previous_analysis(previous, repository):
+    """Add current catalog metadata to analysis results saved before hover details existed."""
+    if previous is None:
+        return None
+    matches = previous.get('matches', [])
+    if all('alternative' in match for match in matches):
+        return previous
+    result = dict(previous)
+    result['matches'] = serialize_matches(matches, repository.load_keywords())
+    return result
+
+
 def analyze(repository, request, actor):
     payload = dict(request)
     # Preserve fingerprints of recorded legacy requests when new fields are omitted/null.
@@ -44,7 +84,7 @@ def analyze(repository, request, actor):
     if record:
         previous = repository.previous_analysis(analysis_id, actor, fingerprint)
         if previous is not None:
-            return previous
+            return enrich_previous_analysis(previous, repository)
     keywords = repository.load_keywords()
     config = load_matching_config(repository, MatchingConfig(
         mode=payload.get('mode', 'similar'),
@@ -55,7 +95,7 @@ def analyze(repository, request, actor):
         **{name: payload.get(name) for name in NORMALIZATION_OPTIONS}))
     matches = match_text(payload['text'], keywords, config=config,
                          categories=payload.get('categories', []), risks=payload.get('risks', []))
-    result = {'analysis_id': analysis_id, 'matches': [asdict(m) for m in matches],
+    result = {'analysis_id': analysis_id, 'matches': serialize_matches(matches, keywords),
               'unique_keywords': sorted({str(m.kwd_no) for m in matches if m.kwd_no}),
               'keyword_revision': keywords.attrs.get('revision'),
               'offset_unit': 'unicode_codepoint', 'end_exclusive': True,
@@ -77,7 +117,7 @@ def analyze_current(repository, request, actor):
                                  ensure_ascii=False).encode()).hexdigest()
     previous = repository.previous_analysis(analysis_id, actor, fingerprint)
     if previous is not None:
-        return previous
+        return enrich_previous_analysis(previous, repository)
 
     keywords = repository.load_keywords()
     config = load_matching_config(repository, MatchingConfig(
@@ -94,7 +134,7 @@ def analyze_current(repository, request, actor):
     coverage = (match_approved(text, keywords, config=config, approved_partials=approved)
                 if payload['categories'] or payload['risks'] else matches)
     candidates = extract_unmatched_term_surfaces(text, coverage, limit=None)
-    result = {'analysis_id': analysis_id, 'matches': [asdict(m) for m in matches],
+    result = {'analysis_id': analysis_id, 'matches': serialize_matches(matches, keywords),
               'unique_keywords': sorted({str(m.kwd_no) for m in matches if m.kwd_no}),
               'keyword_revision': keywords.attrs.get('revision'),
               'offset_unit': 'unicode_codepoint', 'end_exclusive': True,
