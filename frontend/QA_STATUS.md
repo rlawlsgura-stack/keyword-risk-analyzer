@@ -23,6 +23,7 @@
 - [x] Aligned React analysis persistence with FIXED327: unmatched-term collection runs independently and may be retried without hiding results; analysis history is written only when at least one keyword matched. The React UI keeps the same analysis ID and input for retry and blocks logout during analysis/save processing or while candidate saving remains pending (2026-11-03).
 - [x] Added service and API coverage for no-hit history behavior and candidate-save failure/retry; full Python suite passes with 103 passed, 9 skipped, and 187 subtests. React TypeScript/Vite production build and `git diff --check` pass (2026-11-03).
 - [x] Commit `8d828c3ab161e6f1da2208979ae4e8a732cae519` was pushed to `main` and deployed live to the Render API (`dep-dbkuct2jnfac73a030s0`) and React preview (`dep-dbkucu15efls73fn08ag`). Verified API `/healthz`, OpenAPI's `unmatched_collection_pending` response field, unauthenticated keyword API returning HTTP 401, and React preview HTTP 200 with the retry flow in its deployed bundle (2026-11-03).
+- [x] React logout protection commit `072f48bd993f6ccba897a146d02e7258ef97a3bb` deployed live to the preview (`dep-dbkuf1nb9u1s738fji90`); verified the active JavaScript bundle contains the pending-save retry flow and logout guard (2026-11-03).
 
 ## Remaining before switching the production UI
 
