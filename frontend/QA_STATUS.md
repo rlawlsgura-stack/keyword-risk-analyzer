@@ -15,11 +15,14 @@
 - [x] FIXED327 parity API commit `816311fad9ccad868f319b4870e2c6b2ec09dcef` deployed to the Render API service; deployment status is `live`, API OpenAPI reports version `1.1.0`, and the analysis/report endpoints reference `CurrentAnalysisResponse` and `TopKeywordsResponse` (2026-11-03).
 - [x] Rebuilt the React frontend after the FIXED327 parity changes with `npm run build`; TypeScript and Vite completed successfully (2026-11-03).
 - [x] `git diff --check` completed without whitespace errors (2026-11-03).
+- [x] Full local Python suite completed: 101 passed, 9 skipped, 187 subtests passed (2026-11-03). The run exposed and fixed a response-shape inconsistency where legacy v1 analysis retries gained the new v2 catalog-row fields; detailed keyword rows are now added only on the current v2 analysis path.
+- [x] Updated the integration assertion to compare matching-engine fields while allowing the intentional detail metadata added to serialized matches (2026-11-03).
 
 ## Remaining before switching the production UI
 
 - [ ] Visually verify that the React report page displays the recorded terms and that its CSV download opens correctly.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
+- [ ] Deploy and verify the v1/v2 replay-shape fix on the React preview API after the current changes are pushed.
 
-The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, even after the user offered to connect the current browser session, so interactive browser checks could not be performed. A local targeted pytest run was also unavailable because neither the system Python nor the repository `.venv` has pytest installed. Install the project test dependencies or restore the browser host, then resume the remaining checks; do not switch the production UI before they pass.
+The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, so interactive browser checks could not be performed. The local Python suite passes; restore browser access to resume the account-based screen checks. Do not switch the production UI before they pass.

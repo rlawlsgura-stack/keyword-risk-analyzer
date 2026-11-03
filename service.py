@@ -60,7 +60,7 @@ def serialize_matches(matches, keywords):
     return serialized
 
 
-def enrich_previous_analysis(previous, repository):
+def enrich_previous_analysis(previous, repository, *, include_keyword_rows=False):
     """Attach one current catalog snapshot for result tables and code details."""
     if previous is None:
         return None
@@ -71,20 +71,21 @@ def enrich_previous_analysis(previous, repository):
         result['matches'] = serialize_matches(matches, keywords)
     else:
         result['matches'] = matches
-    codes = {str(match.get('kwd_no') or '').strip() for match in result['matches']}
-    codes.discard('')
-    result['unique_keyword_rows'] = [
-        {str(key): str(value or '').strip() for key, value in row.items()}
-        for row in keywords.to_dict('records')
-        if str(row.get('kwd_no') or '').strip() in codes
-    ]
-    def display_order(row):
-        code = str(row.get('kwd_no') or '')
-        match = re.match(r'^([A-Za-z]+)(\d+)$', code)
-        return ((match.group(1), int(match.group(2)), str(row.get('키워드명') or ''))
-                if match else ('', 0, str(row.get('키워드명') or '')))
-    result['unique_keyword_rows'].sort(key=display_order)
-    result['catalog_revision'] = keywords.attrs.get('revision')
+    if include_keyword_rows:
+        codes = {str(match.get('kwd_no') or '').strip() for match in result['matches']}
+        codes.discard('')
+        result['unique_keyword_rows'] = [
+            {str(key): str(value or '').strip() for key, value in row.items()}
+            for row in keywords.to_dict('records')
+            if str(row.get('kwd_no') or '').strip() in codes
+        ]
+        def display_order(row):
+            code = str(row.get('kwd_no') or '')
+            match = re.match(r'^([A-Za-z]+)(\d+)$', code)
+            return ((match.group(1), int(match.group(2)), str(row.get('키워드명') or ''))
+                    if match else ('', 0, str(row.get('키워드명') or '')))
+        result['unique_keyword_rows'].sort(key=display_order)
+        result['catalog_revision'] = keywords.attrs.get('revision')
     return result
 
 
@@ -134,7 +135,7 @@ def analyze_current(repository, request, actor):
                                  ensure_ascii=False).encode()).hexdigest()
     previous = repository.previous_analysis(analysis_id, actor, fingerprint)
     if previous is not None:
-        return enrich_previous_analysis(previous, repository)
+        return enrich_previous_analysis(previous, repository, include_keyword_rows=True)
 
     keywords = repository.load_keywords()
     config = load_matching_config(repository, MatchingConfig(
@@ -158,4 +159,4 @@ def analyze_current(repository, request, actor):
               'recorded': True}
     recorded = repository.record_analysis_with_unmatched(
         analysis_id, fingerprint, actor, result['keyword_revision'], result, candidates)
-    return enrich_previous_analysis(recorded, repository)
+    return enrich_previous_analysis(recorded, repository, include_keyword_rows=True)

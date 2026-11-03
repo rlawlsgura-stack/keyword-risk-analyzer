@@ -70,7 +70,13 @@ class IntegrationTests(unittest.TestCase):
             expected = find_matches_nlp(request['text'], self.repository.df,
                                        match_mode=label, exact_relaxed=True,
                                        config=MatchingConfig())
-            self.assertEqual(result['matches'], [asdict(m) for m in expected])
+            expected_matches = [asdict(match) for match in expected]
+            self.assertEqual(len(result['matches']), len(expected_matches))
+            actual_matches = [
+                {key: match[key] for key in expected_match}
+                for match, expected_match in zip(result['matches'], expected_matches)
+            ]
+            self.assertEqual(actual_matches, expected_matches)
         result = analyze(self.repository, {**request, 'categories': ['식품']}, 'user-1')
         self.assertEqual(result['matches'], [])
 
