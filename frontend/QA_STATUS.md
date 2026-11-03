@@ -20,6 +20,8 @@
 - [x] Commit `50c6e694da52bfb3ae1144a0e6fbef9c5ef7d949` is live on the Render API service. Unauthenticated smoke checks for keyword catalog, report, unmatched candidates, and administrator users all returned HTTP 401 (2026-11-03).
 - [x] Compared the Streamlit FIXED327 and FIXED329 source files: they differ only in the module description and `APP_VERSION` label, so the FIXED329 screen shown during this review retains the FIXED327 implementation (2026-11-03).
 - [x] Reworked the React top-level navigation to use the FIXED327 title and horizontal tab order; React-only catalog, registration review, and normalization pages remain reachable from their corresponding catalog/management areas rather than adding top-level tabs (2026-11-03).
+- [x] Aligned React analysis persistence with FIXED327: unmatched-term collection runs independently and may be retried without hiding results; analysis history is written only when at least one keyword matched. The React UI keeps the same analysis ID and input for retry and blocks logout or a different analysis until candidate saving succeeds (2026-11-03).
+- [x] Added service and API coverage for no-hit history behavior and candidate-save failure/retry; full Python suite passes with 103 passed, 9 skipped, and 187 subtests. React TypeScript/Vite production build and `git diff --check` pass (2026-11-03).
 
 ## Remaining before switching the production UI
 

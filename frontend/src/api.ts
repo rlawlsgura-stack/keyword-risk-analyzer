@@ -35,6 +35,7 @@ export type AnalysisResult = {
   offset_unit: 'unicode_codepoint'
   end_exclusive: boolean
   recorded: boolean
+  unmatched_collection_pending: boolean
 }
 
 export type AnalysisMode = 'exact' | 'similar' | 'partial'

@@ -2,10 +2,13 @@
 from dataclasses import asdict, replace
 import hashlib
 import json
+import logging
 import re
 from uuid import uuid4
 
 from matching_engine import MATCH_MODES as MODES, NORMALIZATION_OPTIONS, MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
+
+logger = logging.getLogger(__name__)
 
 def load_matching_config(repository, config):
     """Add saved common rules to a frozen per-analysis configuration."""
@@ -125,7 +128,7 @@ def analyze(repository, request, actor):
 
 
 def analyze_current(repository, request, actor):
-    """Current Streamlit text rules with one idempotent recorded collection."""
+    """Current Streamlit text rules with independent history and candidate writes."""
     from approved_matching import SETTING_NAME, match_text as match_approved
     from auxiliary_analysis import extract_unmatched_term_surfaces
 
@@ -134,9 +137,6 @@ def analyze_current(repository, request, actor):
     fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True,
                                  ensure_ascii=False).encode()).hexdigest()
     previous = repository.previous_analysis(analysis_id, actor, fingerprint)
-    if previous is not None:
-        return enrich_previous_analysis(previous, repository, include_keyword_rows=True)
-
     keywords = repository.load_keywords()
     config = load_matching_config(repository, MatchingConfig(
         mode=payload['mode'], exact_relaxed=True,
@@ -152,11 +152,29 @@ def analyze_current(repository, request, actor):
     coverage = (match_approved(text, keywords, config=config, approved_partials=approved)
                 if payload['categories'] or payload['risks'] else matches)
     candidates = extract_unmatched_term_surfaces(text, coverage, limit=None)
+    collection_pending = False
+    try:
+        repository.collect_unmatched_terms(analysis_id, candidates)
+    except Exception:
+        # Streamlit keeps this collection pending but still displays the analysis.
+        # React retries the same request ID and recomputes the same candidates.
+        logger.exception('Could not persist unmatched candidates for analysis %s', analysis_id)
+        collection_pending = True
+
+    if previous is not None:
+        result = enrich_previous_analysis(previous, repository, include_keyword_rows=True)
+        result['unmatched_collection_pending'] = collection_pending
+        return result
+
     result = {'analysis_id': analysis_id, 'matches': serialize_matches(matches, keywords),
               'unique_keywords': sorted({str(m.kwd_no) for m in matches if m.kwd_no}),
               'keyword_revision': keywords.attrs.get('revision'),
               'offset_unit': 'unicode_codepoint', 'end_exclusive': True,
-              'recorded': True}
-    recorded = repository.record_analysis_with_unmatched(
-        analysis_id, fingerprint, actor, result['keyword_revision'], result, candidates)
-    return enrich_previous_analysis(recorded, repository, include_keyword_rows=True)
+              'recorded': False,
+              'unmatched_collection_pending': collection_pending}
+    if result['unique_keywords']:
+        result['recorded'] = True
+        result = repository.record_analysis(
+            analysis_id, fingerprint, actor, result['keyword_revision'], result)
+        result['unmatched_collection_pending'] = collection_pending
+    return enrich_previous_analysis(result, repository, include_keyword_rows=True)

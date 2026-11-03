@@ -132,6 +132,7 @@ class CurrentAnalysisResponse(BaseModel):
     unique_keyword_rows: list[dict[str, str]]
     keyword_revision: int | None = None
     catalog_revision: int | None = None
+    unmatched_collection_pending: bool = False
     offset_unit: Literal['unicode_codepoint']
     end_exclusive: bool
     recorded: bool

@@ -497,7 +497,7 @@ function App() {
   const [categories, setCategories] = useState<string[]>([])
   const [risks, setRisks] = useState<string[]>([])
   const [filterMessage, setFilterMessage] = useState('')
-  const pending = useRef<{ payload: string; id: string } | null>(null)
+  const pending = useRef<{ payload: string; id: string; input: AnalysisInput; text: string; unmatchedPending: boolean } | null>(null)
   const [result, setResult] = useState<{ text: string; data: AnalysisResult } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
@@ -940,6 +940,10 @@ function App() {
   }
 
   async function signOut() {
+    if (pending.current?.unmatchedPending) {
+      setMessage('미매칭 후보 저장이 끝날 때까지 로그아웃할 수 없습니다. 텍스트 분석에서 저장을 다시 시도해 주세요.')
+      return
+    }
     setBusy(true)
     setMessage('')
     const { error } = await supabase?.auth.signOut() ?? { error: null }
@@ -1065,23 +1069,51 @@ function App() {
       setMessage('분석할 텍스트를 입력해 주세요.')
       return
     }
+    const input: AnalysisInput = { text, mode, partial_min_len: partialMinLen,
+      ...options, categories, risks }
+    const payload = JSON.stringify(input)
+    if (pending.current?.unmatchedPending && pending.current.payload !== payload) {
+      setMessage('미매칭 후보 저장이 완료될 때까지 다른 분석을 시작할 수 없습니다. 먼저 저장을 재시도해 주세요.')
+      return
+    }
     setBusy(true)
     setMessage('')
     setResult(null)
     try {
-      const input: AnalysisInput = { text, mode, partial_min_len: partialMinLen,
-        ...options, categories, risks }
-      const payload = JSON.stringify(input)
       const id = pending.current?.payload === payload ? pending.current.id : crypto.randomUUID()
-      pending.current = { payload, id }
+      pending.current = { payload, id, input, text, unmatchedPending: Boolean(pending.current?.unmatchedPending) }
       const data = await analyzeText(input, id)
       if (data.offset_unit !== 'unicode_codepoint' || !data.end_exclusive) {
         throw new Error('지원하지 않는 분석 위치 형식입니다.')
       }
       setResult({ text, data })
-      pending.current = null
+      if (data.unmatched_collection_pending) {
+        pending.current = { payload, id, input, text, unmatchedPending: true }
+      } else {
+        pending.current = null
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '분석 중 오류가 발생했습니다.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function retryUnmatchedCollection() {
+    const retry = pending.current
+    if (!retry?.unmatchedPending || busy) return
+    setBusy(true)
+    setMessage('')
+    try {
+      const data = await analyzeText(retry.input, retry.id)
+      setResult({ text: retry.text, data })
+      if (data.unmatched_collection_pending) {
+        setMessage('미매칭 후보 저장이 아직 완료되지 않았습니다. 다시 시도해 주세요.')
+      } else {
+        pending.current = null
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '미매칭 후보 저장을 다시 시도하지 못했습니다.')
     } finally {
       setBusy(false)
     }
@@ -1710,6 +1742,12 @@ function App() {
     </aside>
 
     <main className="main-content">
+      {pending.current?.unmatchedPending && <div className="error-message inline-error" role="alert">
+        이전 분석의 미매칭 후보 저장이 완료되지 않았습니다.
+        <button className="secondary-button" disabled={busy} onClick={retryUnmatchedCollection}>
+          미매칭 후보 저장 재시도
+        </button>
+      </div>}
 
 
       {!configurationReady ? <section className="state-card">
