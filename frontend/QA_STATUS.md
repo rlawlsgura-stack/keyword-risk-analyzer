@@ -33,3 +33,5 @@
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
 The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, so interactive browser checks could not be performed. The local Python suite passes; restore browser access to resume the account-based screen checks. Do not switch the production UI before they pass.
+
+On 2026-11-04, browser access was retried and returned the same `browser access host is unavailable` error; the native computer-use pipe was also unavailable. All remaining pre-cutover items require authenticated visual or interaction checks in the connected browser, so they remain deferred until that environment is restored.
