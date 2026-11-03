@@ -25,7 +25,7 @@ from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 
 configure()
-app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
+app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.0',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
 app.add_middleware(
@@ -109,6 +109,45 @@ class CurrentAnalysisRequest(BaseModel):
     partial_min_len: int = Field(default=2, ge=2, le=20)
     categories: list[str] = Field(default_factory=list, max_length=100)
     risks: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AnalysisMatchResponse(BaseModel):
+    term: str
+    start: int
+    end: int
+    category: str = ''
+    risk: str = ''
+    detail: str = ''
+    kwd_no: str | None = None
+    alternative: str = ''
+    evidence_type: str = ''
+    hit_count: str = ''
+    last_search_date: str = ''
+
+
+class CurrentAnalysisResponse(BaseModel):
+    analysis_id: str
+    matches: list[AnalysisMatchResponse]
+    unique_keywords: list[str]
+    unique_keyword_rows: list[dict[str, str]]
+    keyword_revision: int | None = None
+    catalog_revision: int | None = None
+    offset_unit: Literal['unicode_codepoint']
+    end_exclusive: bool
+    recorded: bool
+
+
+class TopKeywordResponse(BaseModel):
+    kwd_no: str
+    hit_count: int
+    term: str | None = None
+    search_rank: int
+    keyword_data: dict[str, str]
+
+
+class TopKeywordsResponse(BaseModel):
+    items: list[TopKeywordResponse]
+    keyword_revision: int | None = None
 
 
 class UnmatchedRegistrationCandidate(BaseModel):
@@ -453,7 +492,7 @@ def analysis_filters(actor=Depends(current_actor), repository=Depends(get_reposi
     }
 
 
-@app.post('/api/v2/analyses')
+@app.post('/api/v2/analyses', response_model=CurrentAnalysisResponse)
 def create_current_analysis(body: CurrentAnalysisRequest, actor=Depends(current_actor),
                             repository=Depends(get_repository)):
     if actor == 'integration':
@@ -1232,7 +1271,8 @@ def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
             'items': df.iloc[offset:offset + limit].to_dict('records')}
 
 
-@app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)])
+@app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)],
+         response_model=TopKeywordsResponse)
 def top_keywords(days: int = Query(7, ge=1, le=366),
                  limit: int = Query(10, ge=1, le=100),
                  start_date: date | None = None, end_date: date | None = None,
@@ -1242,9 +1282,23 @@ def top_keywords(days: int = Query(7, ge=1, le=366),
     if start_date is not None and end_date is not None:
         if end_date < start_date:
             raise HTTPException(422, 'end_date must be on or after start_date.')
-        return {'items': repository.report_range(start_date.isoformat(),
-                                                 end_date.isoformat(), limit)}
-    return {'items': repository.report(days, limit)}
+        items = repository.report_range(start_date.isoformat(), end_date.isoformat(), limit)
+    else:
+        items = repository.report(days, limit)
+
+    # The Streamlit report joins each ranked hit count to the complete keyword
+    # row. Keep the summary fields for existing clients and add that row from
+    # one catalog snapshot so the React table and CSV use the same data.
+    snapshot = repository.load_keywords()
+    by_code = {str(row.get('kwd_no') or '').strip(): row
+               for row in snapshot.to_dict('records')}
+    enriched = []
+    for rank, item in enumerate(items, start=1):
+        row = by_code.get(str(item.get('kwd_no') or '').strip(), {})
+        enriched.append({**item, 'search_rank': rank,
+                         'keyword_data': {str(key): str(value or '').strip()
+                                          for key, value in row.items()}})
+    return {'items': enriched, 'keyword_revision': snapshot.attrs.get('revision')}
 
 
 @app.post('/api/v1/admin/reports/reset/{scope}')

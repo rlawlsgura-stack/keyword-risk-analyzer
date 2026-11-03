@@ -21,7 +21,7 @@
 
 `design_book.html`은 위 문서를 한 파일로 열람하고 인쇄할 수 있는 통합본입니다. 외부 스크립트나 폰트를 내려받지 않습니다. `assets`의 SVG는 구성도와 화면 배치도이며, 실제 브라우저 캡처가 아닙니다.
 
-`openapi.runtime.json`은 현재 FastAPI가 생성한 원본입니다. `openapi.json`은 여기에 문서용 응답 스키마와 오류 설명을 보충한 연동 명세입니다. 응답 모델이 실제 서버에서 강제 검증되는 것은 아닙니다.
+`openapi.runtime.json`은 현재 FastAPI가 생성한 원본입니다. `openapi.json`은 여기에 문서용 응답 스키마와 오류 설명을 보충한 연동 명세입니다. 분석 v2 및 기간 리포트 응답은 FastAPI response model로 검증하며, 전체 API의 강제 검증 여부는 각 라우트 구현을 따릅니다.
 
 `reference/regulation_openapi.proposed.json`은 아직 구현하지 않은 규정 검색 API 초안입니다.
 `reference/regulation_sources.json`은 공식 게시 정보만 확인한 출처 후보이며 본문 적재·법률 검수 완료 목록이 아닙니다.

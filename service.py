@@ -2,6 +2,7 @@
 from dataclasses import asdict, replace
 import hashlib
 import json
+import re
 from uuid import uuid4
 
 from matching_engine import MATCH_MODES as MODES, NORMALIZATION_OPTIONS, MatchingConfig, _KO_SUFFIX_WHITELIST, find_matches_nlp
@@ -60,14 +61,30 @@ def serialize_matches(matches, keywords):
 
 
 def enrich_previous_analysis(previous, repository):
-    """Add current catalog metadata to analysis results saved before hover details existed."""
+    """Attach one current catalog snapshot for result tables and code details."""
     if previous is None:
         return None
     matches = previous.get('matches', [])
-    if all('alternative' in match for match in matches):
-        return previous
+    keywords = repository.load_keywords()
     result = dict(previous)
-    result['matches'] = serialize_matches(matches, repository.load_keywords())
+    if not all('alternative' in match for match in matches):
+        result['matches'] = serialize_matches(matches, keywords)
+    else:
+        result['matches'] = matches
+    codes = {str(match.get('kwd_no') or '').strip() for match in result['matches']}
+    codes.discard('')
+    result['unique_keyword_rows'] = [
+        {str(key): str(value or '').strip() for key, value in row.items()}
+        for row in keywords.to_dict('records')
+        if str(row.get('kwd_no') or '').strip() in codes
+    ]
+    def display_order(row):
+        code = str(row.get('kwd_no') or '')
+        match = re.match(r'^([A-Za-z]+)(\d+)$', code)
+        return ((match.group(1), int(match.group(2)), str(row.get('키워드명') or ''))
+                if match else ('', 0, str(row.get('키워드명') or '')))
+    result['unique_keyword_rows'].sort(key=display_order)
+    result['catalog_revision'] = keywords.attrs.get('revision')
     return result
 
 
@@ -139,5 +156,6 @@ def analyze_current(repository, request, actor):
               'keyword_revision': keywords.attrs.get('revision'),
               'offset_unit': 'unicode_codepoint', 'end_exclusive': True,
               'recorded': True}
-    return repository.record_analysis_with_unmatched(
+    recorded = repository.record_analysis_with_unmatched(
         analysis_id, fingerprint, actor, result['keyword_revision'], result, candidates)
+    return enrich_previous_analysis(recorded, repository)

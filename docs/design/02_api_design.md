@@ -1,6 +1,31 @@
 # Keyword Risk Analyzer API 설계서
 
-문서 ID KRA API 001 · API 버전 1.0.0 · 기준일 2026년 10월 22일
+문서 ID KRA API 001 · API 버전 1.1.0 · 기준일 2026년 11월 3일
+
+> **구현 현황 주의:** 이 문서의 API 01–06 절은 최초 v1 연동 범위를 설명한다. 현재 전체 경로와 요청 필드는 `api.py` 및 `docs/design/openapi.runtime.json`을 기준으로 한다. React가 사용하는 v2 분석 응답과 전체 원장 행 추가 규약은 [FIXED327 기준 React 동등성 명세](08_fixed327_react_parity_baseline.md)의 현재 계약 부록을 따른다. 이후 라우트가 추가되었으므로 아래의 최초 경로 목록은 현재 API 전체 목록이 아니다.
+
+## FIXED327 React 현재 계약 (2026-11-03)
+
+아래 응답은 `POST /api/v2/analyses`와 `GET /api/v1/reports/top-keywords`의 확장 계약이다. 두 응답은 FastAPI의 `response_model`로 검증하고 런타임 OpenAPI에 노출한다. 기존 v1 소비자가 사용하는 필드는 유지한다.
+
+### 분석 응답 확장
+
+분석 응답은 기존 `analysis_id`, `matches`, `unique_keywords`, `keyword_revision`, `offset_unit`, `end_exclusive`, `recorded`에 다음 필드를 포함한다.
+
+| 필드 | 타입 | 의미 |
+|---|---|---|
+| unique_keyword_rows | object[] | 매칭된 고유 번호의 전체 원장 행. `kwd_no` 코드 순서이며 빈 값은 빈 문자열 |
+| catalog_revision | integer 또는 null | 응답의 원장 행을 읽은 Supabase revision |
+
+`matches`는 occurrence 단위이며 기존 `term`, `start`, `end`, `category`, `risk`, `detail`, `kwd_no`와 상세 표시용 대체키워드·증빙자료·누적 조회수·마지막 검색일자를 유지한다. `unique_keyword_rows`는 분석 결과 표 및 번호 상세 표의 원본이다. 전체 원장 필드를 각 occurrence에 반복 저장하지 않는다.
+
+### 기간 리포트 응답 확장
+
+`GET /api/v1/reports/top-keywords?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&limit=10` 응답은 기존 `items[].kwd_no`, `items[].hit_count`, `items[].term`을 유지하고 `search_rank`, 전체 `keyword_data`, top-level `keyword_revision`을 추가한다. `search_rank`는 1부터 시작하고, `keyword_data`는 해당 원장 revision의 전체 행이다. 같은 revision으로 화면 표와 `period_topN_report.csv`를 생성한다.
+
+날짜 범위는 시작일과 종료일을 모두 포함하며 한국 시간 자정을 기준으로 집계한다. 범위 API는 service-role 전용 DB 함수로 조회하고 사용자 JWT에서 원장 행을 직접 가져오지 않는다. 관리자 초기화는 별도 `/api/v1/admin/reports/reset/{scope}` 경로이며 admin 세션만 허용한다.
+
+분석과 미매칭 후보 수집의 원자 처리 방식은 이 응답 확장에서 변경하지 않는다. 현재 v2 구현은 단일 RPC에 묶여 있으며 FIXED327의 분석 기록 후 별도 후보 수집과 실패 경고·재시도 흐름으로 맞추는 작업은 별도 계약 항목이다.
 
 ## 인터페이스 원칙
 
