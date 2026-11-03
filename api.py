@@ -9,8 +9,6 @@ from typing import Literal
 from uuid import UUID
 
 import requests
-from datetime import date
-
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -25,7 +23,7 @@ from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 
 configure()
-app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.0',
+app = FastAPI(title='Keyword Risk Analyzer API', version='1.0.0',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
 app.add_middleware(
@@ -109,46 +107,6 @@ class CurrentAnalysisRequest(BaseModel):
     partial_min_len: int = Field(default=2, ge=2, le=20)
     categories: list[str] = Field(default_factory=list, max_length=100)
     risks: list[str] = Field(default_factory=list, max_length=20)
-
-
-class AnalysisMatchResponse(BaseModel):
-    term: str
-    start: int
-    end: int
-    category: str = ''
-    risk: str = ''
-    detail: str = ''
-    kwd_no: str | None = None
-    alternative: str = ''
-    evidence_type: str = ''
-    hit_count: str = ''
-    last_search_date: str = ''
-
-
-class CurrentAnalysisResponse(BaseModel):
-    analysis_id: str
-    matches: list[AnalysisMatchResponse]
-    unique_keywords: list[str]
-    unique_keyword_rows: list[dict[str, str]]
-    keyword_revision: int | None = None
-    catalog_revision: int | None = None
-    unmatched_collection_pending: bool = False
-    offset_unit: Literal['unicode_codepoint']
-    end_exclusive: bool
-    recorded: bool
-
-
-class TopKeywordResponse(BaseModel):
-    kwd_no: str
-    hit_count: int
-    term: str | None = None
-    search_rank: int
-    keyword_data: dict[str, str]
-
-
-class TopKeywordsResponse(BaseModel):
-    items: list[TopKeywordResponse]
-    keyword_revision: int | None = None
 
 
 class UnmatchedRegistrationCandidate(BaseModel):
@@ -363,14 +321,9 @@ def _process_ocr_images(images):
     os.environ['PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT'] = 'False'
     try:
         engine = load_korean_ocr()
-    except ImportError as exc:
-        logger.exception('PaddleOCR dependencies could not be imported')
+    except (ImportError, OSError, RuntimeError) as exc:
         raise HTTPException(503,
-            '\ud55c\uad6d\uc5b4 OCR \ud328\ud0a4\uc9c0\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. Render \ube4c\ub4dc \ub85c\uadf8\uc5d0\uc11c requirements-ocr.txt \uc124\uce58 \uc5ec\ubd80\ub97c \ud655\uc778\ud558\uc138\uc694.') from exc
-    except (OSError, RuntimeError) as exc:
-        logger.exception('PaddleOCR engine initialization failed')
-        raise HTTPException(503,
-            'PaddleOCR engine initialization failed. Check API service logs for details.') from exc
+            '한국어 OCR을 사용할 수 없습니다. Python 3.9–3.13 환경에 requirements-ocr.txt를 설치하세요.') from exc
     file_results, unique = [], {}
     for index, (name, image_bytes) in enumerate(images):
         try:
@@ -434,9 +387,8 @@ async def extract_ocr_candidates(
     except HTTPException:
         raise
     except ImportError as exc:
-        logger.exception('OCR dependency import failed while processing the request')
         raise HTTPException(503,
-            'OCR dependencies could not be imported. Check the API build logs for requirements-ocr.txt.') from exc
+            '한국어 OCR 의존성이 설치되지 않았습니다. Python 3.9–3.13 환경에 requirements-ocr.txt를 설치하세요.') from exc
 
 
 @app.post('/api/v1/ocr/keywords')
@@ -493,7 +445,7 @@ def analysis_filters(actor=Depends(current_actor), repository=Depends(get_reposi
     }
 
 
-@app.post('/api/v2/analyses', response_model=CurrentAnalysisResponse)
+@app.post('/api/v2/analyses')
 def create_current_analysis(body: CurrentAnalysisRequest, actor=Depends(current_actor),
                             repository=Depends(get_repository)):
     if actor == 'integration':
@@ -1272,34 +1224,10 @@ def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
             'items': df.iloc[offset:offset + limit].to_dict('records')}
 
 
-@app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)],
-         response_model=TopKeywordsResponse)
+@app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)])
 def top_keywords(days: int = Query(7, ge=1, le=366),
-                 limit: int = Query(10, ge=1, le=100),
-                 start_date: date | None = None, end_date: date | None = None,
-                 repository=Depends(get_repository)):
-    if (start_date is None) != (end_date is None):
-        raise HTTPException(422, 'Both start_date and end_date are required.')
-    if start_date is not None and end_date is not None:
-        if end_date < start_date:
-            raise HTTPException(422, 'end_date must be on or after start_date.')
-        items = repository.report_range(start_date.isoformat(), end_date.isoformat(), limit)
-    else:
-        items = repository.report(days, limit)
-
-    # The Streamlit report joins each ranked hit count to the complete keyword
-    # row. Keep the summary fields for existing clients and add that row from
-    # one catalog snapshot so the React table and CSV use the same data.
-    snapshot = repository.load_keywords()
-    by_code = {str(row.get('kwd_no') or '').strip(): row
-               for row in snapshot.to_dict('records')}
-    enriched = []
-    for rank, item in enumerate(items, start=1):
-        row = by_code.get(str(item.get('kwd_no') or '').strip(), {})
-        enriched.append({**item, 'search_rank': rank,
-                         'keyword_data': {str(key): str(value or '').strip()
-                                          for key, value in row.items()}})
-    return {'items': enriched, 'keyword_revision': snapshot.attrs.get('revision')}
+                 limit: int = Query(10, ge=1, le=100), repository=Depends(get_repository)):
+    return {'items': repository.report(days, limit)}
 
 
 @app.post('/api/v1/admin/reports/reset/{scope}')

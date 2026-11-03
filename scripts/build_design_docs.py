@@ -173,10 +173,8 @@ def contracts():
     runtime = app.openapi()
     (OUT / 'openapi.runtime.json').write_text(json.dumps(runtime, ensure_ascii=False, indent=2), encoding='utf-8')
     design = deepcopy(runtime)
-    design['info']['description'] = '현재 구현 기준 문서용 명세. 일부 응답은 FastAPI response_model로 검증하며, 나머지 보충 응답 스키마는 반환 코드에 근거합니다.'
-    design['x-response-model-validation'] = {
-        'enabled_for': ['POST /api/v2/analyses', 'GET /api/v1/reports/top-keywords']
-    }
+    design['info']['description'] = '현재 구현 기준 문서용 명세. 응답 스키마는 반환 코드에 근거해 보충했으며 서버 response_model 검증은 구현하지 않았습니다.'
+    design['x-response-model-validation'] = False
     schemas = design['components']['schemas']
     ref = lambda name: {'$ref': '#/components/schemas/' + name}
     schemas.update({
@@ -193,13 +191,13 @@ def contracts():
           'properties':{'total':{'type':'integer'},'revision':{'type':'integer'},'items':{'type':'array','items':ref('KeywordRecord')}}},
         'TopKeyword': {'type':'object','required':['kwd_no','hit_count','term'],
           'properties':{'kwd_no':{'type':'string'},'hit_count':{'type':'integer'},'term':{'anyOf':[{'type':'string'},{'type':'null'}]}}},
+        'TopKeywordsResponse': {'type':'object','required':['items'],'properties':{'items':{'type':'array','items':ref('TopKeyword')}}},
         'StatusResponse': {'type':'object','required':['status'],'properties':{'status':{'type':'string','enum':['ok','ready']}}},
         'ErrorResponse': {'type':'object','required':['detail'],'properties':{'detail':{'type':'string'}}}
     })
     names = {('/healthz','get'):'StatusResponse',('/readyz','get'):'StatusResponse',
              ('/api/v1/analyses','post'):'AnalysisResponse',('/api/v1/analyses/{analysis_id}','get'):'AnalysisResponse',
              ('/api/v1/keywords','get'):'KeywordPage',('/api/v1/reports/top-keywords','get'):'TopKeywordsResponse',
-             ('/api/v2/analyses','post'):'CurrentAnalysisResponse',
 }
     for (path, method), name in names.items():
         operation = design['paths'][path][method]
@@ -209,8 +207,6 @@ def contracts():
                 operation['responses'][status] = {'description':description,'content':{'application/json':{'schema':ref('ErrorResponse')}}}
         if path.startswith('/api/v1/analyses'):
             operation['responses']['409'] = {'description':'ID 입력 소유자 또는 revision 충돌','content':{'application/json':{'schema':ref('ErrorResponse')}}}
-        if path == '/api/v2/analyses':
-            operation['responses']['403'] = {'description':'로그인 사용자 세션 필요','content':{'application/json':{'schema':ref('ErrorResponse')}}}
         if '{analysis_id}' in path:
             operation['responses']['404'] = {'description':'저장된 분석 없음','content':{'application/json':{'schema':ref('ErrorResponse')}}}
     (OUT / 'openapi.json').write_text(json.dumps(design, ensure_ascii=False, indent=2), encoding='utf-8')

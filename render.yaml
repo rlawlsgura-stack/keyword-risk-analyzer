@@ -19,7 +19,7 @@ services:
     name: keyword-risk-api
     runtime: python
     plan: starter
-    buildCommand: pip install -r requirements.lock.txt -r requirements-ocr.txt
+    buildCommand: pip install -r requirements.lock.txt
     startCommand: python -m uvicorn api:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /healthz
     envVars:

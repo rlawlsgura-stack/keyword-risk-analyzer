@@ -20,22 +20,15 @@ export type Match = {
   risk: string
   detail: string
   kwd_no: string | null
-  alternative?: string
-  evidence_type?: string
-  hit_count?: string
-  last_search_date?: string
 }
 
 export type AnalysisResult = {
   analysis_id: string
   matches: Match[]
   unique_keywords: string[]
-  unique_keyword_rows: KeywordRow[]
-  keyword_revision: number | null
   offset_unit: 'unicode_codepoint'
   end_exclusive: boolean
   recorded: boolean
-  unmatched_collection_pending: boolean
 }
 
 export type AnalysisMode = 'exact' | 'similar' | 'partial'
@@ -53,7 +46,6 @@ export type AnalysisInput = {
 }
 
 export type KeywordRow = {
-  [field: string]: string
   kwd_no: string
   키워드명: string
   상품카테고리: string
@@ -65,13 +57,7 @@ export type KeywordRow = {
   '마지막 출력일자': string
 }
 
-export type TopKeyword = {
-  kwd_no: string
-  hit_count: number
-  term: string | null
-  search_rank: number
-  keyword_data: KeywordRow
-}
+export type TopKeyword = { kwd_no: string; hit_count: number; term: string | null }
 export type AnalysisFilters = { categories: string[]; risks: string[]; evidence_types?: string[] }
 export type RegulationQuestion = {
   direction: 'keyword_to_law' | 'law_to_keywords'
@@ -198,8 +184,8 @@ export async function loadAllKeywords(): Promise<KeywordRow[]> {
   return (await loadKeywordSnapshot()).items
 }
 
-export async function loadTopKeywords(startDate: string, endDate: string, limit: number): Promise<{ items: TopKeyword[] }> {
-  const params = new URLSearchParams({ start_date: startDate, end_date: endDate, limit: String(limit) })
+export async function loadTopKeywords(days: number, limit: number): Promise<{ items: TopKeyword[] }> {
+  const params = new URLSearchParams({ days: String(days), limit: String(limit) })
   return requestApi(`/api/v1/reports/top-keywords?${params}`)
 }
 
