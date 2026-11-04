@@ -50,3 +50,51 @@ The OCR dependency deployment is complete, but OCR inference has not yet been ex
 - The differing values are consistent with the documented counter-reset behavior and do not by themselves indicate duplicated report hits. The event log remains the source for period reports. The application does not persist a reset audit record, so it cannot prove the exact reset request or time from database state alone.
 
 OCR inference, member/admin page workflows beyond the report, spreadsheet-application display of the CSV, and full interaction parity remain required before switching the production UI.
+
+## QA continuation (2026-11-05)
+
+### Environment and safety
+
+- [x] Started from `main` at `030f7436fb7058d2c29bbca4a8c127914d2973da`, the recorded QA commit. The GitHub `main` ref also pointed at this commit; no pull or overwrite was performed. The local `origin/main` tracking ref is stale. Existing user changes in `frontend/.env.example` and the untracked `period_topN_report.csv` were preserved and excluded from this QA change.
+- [x] This checkout is `D:\back-up\encore\keyword-risk-analyzer`; the requested `C:\encore\keyword-risk-analyzer` path does not exist in this session.
+- [x] Inspected local target configuration without printing credentials: frontend Supabase auth and backend storage point at the production Supabase project; the frontend API base is local. Production writes were not used. OCR was exercised via TestClient with a local CSV backend and in-memory analysis repository. Automated tests ran with CSV storage and an unreachable local Supabase URL override.
+- [x] Browser-control inventory still has no browser session and reports that the browser access host is unavailable. The open Chrome window could not be bound through the browser tool. This is a tooling limitation, not an application failure.
+
+### OCR API (direct API, isolated; real inference)
+
+- [x] Actual PaddleOCR 3.7.0 / PaddlePaddle 3.3.1 inference on a synthetic, non-personal Korean image extracted the expected text `안티에이징` exactly. Passing that extracted text to analysis matched B245. No persistent repository writes occurred.
+- [x] Blank image returned an empty result without crashing. Unsupported PDF produced a per-file error while the request remained available. A simulated OCR initialization failure returned HTTP 503 with an explanation; a subsequent real inference retry succeeded.
+- [ ] React upload controls, extracted text display, keyword analysis interaction, and retry messaging remain visually unverified because the browser tool session is unavailable.
+- [ ] Candidate persistence was not tested: the configured project is production, and there is no isolated persistent test account/database available in this session. Do not save OCR candidates in production for QA.
+
+### Feature parity and access checks
+
+| Area | Evidence and result | Status |
+|---|---|---|
+| Script analysis and exact/partial/minimum-character matching | Existing service/API tests and matching implementation; automated suite passed | API/code verified; React/Streamlit screen comparison pending |
+| Zero matches, filters, retry | Existing current-analysis tests cover behavior; React keeps analysis ID/input for retry and handles pending candidate-save retry | API/code verified; visual interaction pending |
+| Automatic scrolling | No explicit `scrollIntoView`/scroll-to-result behavior found in either React or FIXED327/FIXED329 Streamlit source | No implementation difference identified; screen behavior pending |
+| Report and CSV | User verified admin login, 10/30–11/05 Top 10, download; prior parsing and event-count reconciliation passed | User UI/API data verified; Excel display check below |
+| OCR | Real isolated inference, blank input, unsupported file, initialization failure and retry tested | API verified; React UI pending |
+| Candidate management, inquiries, admin keyword/user management | Existing API/UI tests and role guards reviewed; full Python suite passed | Automated/code verification; signed-in page/API workflow pending |
+
+- [x] Admin-only API role checks are present for administrator endpoints; integration-token access is restricted to analysis/read paths. The automated test suite includes admin/member UI and API authorization tests. No production mutation, role change, delete, or reset was attempted.
+- [ ] Prepared member/admin test credentials were not available. The app menus and authenticated API role behavior therefore remain unverified in a live session; no production account was used for speculative writes.
+- [ ] React and Streamlit could not both be opened in the current browser-control session. Do not mark visual parity complete; keep Streamlit as production UI until remaining screen QA passes.
+
+### Spreadsheet display
+
+- [x] Microsoft Excel is installed and opened the supplied CSV. Excel rendered Korean headers and cell text correctly. In the current Excel import configuration, the entire CSV record appeared in one cell rather than 14 columns, so column/cell layout is not yet verified. The CSV itself still parses as 10 data rows × 14 fields and reconciles with the event counts.
+- [ ] Re-open/import through Excel's Text Import Wizard with comma as the delimiter, then verify all 14 columns and representative Korean cells. This result is an Excel import configuration/display check; it does not establish a malformed CSV or app defect.
+
+### Report count semantics
+
+- [x] Code and query definitions confirm `기간내_조회수` counts visible `kra_hits` event rows in the selected inclusive KST range. `누적카운트` reads the separate mutable `kra_keywords.hit_count` counter. A counter reset zeros that counter while preserving event rows; report-exclusion settings hide recent events from report queries without changing the counter. Thus 63 versus 22 is consistent with differing measurement windows/semantics. Database state has no reset audit record, so the exact reset time cannot be reconstructed. No counts or records were changed.
+
+### Checks executed
+
+- [x] `npm run build` — TypeScript and Vite production build passed.
+- [x] Full Python suite with isolated environment overrides — 103 passed, 9 skipped, 187 subtests passed; one warning. Live reset tests were not enabled.
+- [x] Real OCR API inference and error/retry checks — passed in isolated TestClient/in-memory setup as detailed above.
+
+Remaining production-switch gates: Excel comma-delimited visual confirmation; browser-connected React member/admin interaction checks; OCR React UI and isolated persistent candidate-save check; and direct React/Streamlit page comparison. Do not infer these from backend-only verification.
