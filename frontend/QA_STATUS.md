@@ -98,3 +98,29 @@ OCR inference, member/admin page workflows beyond the report, spreadsheet-applic
 - [x] Real OCR API inference and error/retry checks — passed in isolated TestClient/in-memory setup as detailed above.
 
 Remaining production-switch gates: Excel comma-delimited visual confirmation; browser-connected React member/admin interaction checks; OCR React UI and isolated persistent candidate-save check; and direct React/Streamlit page comparison. Do not infer these from backend-only verification.
+
+## QA preparation after b41ee63 (2026-11-05)
+
+This section supersedes the prior OCR/API-only status where newer evidence is listed. No screen checks are marked complete here.
+
+### OCR fixture and direct API verification
+
+- [x] Prepared `docs/qa/ocr_korean_sample.png`, a synthetic image with no personal information; expected text is `안티에이징`. Also prepared `docs/qa/ocr_blank_sample.png` for empty-result behavior. The rendered sample was visually inspected.
+- [x] Confirmed `requirements-ocr.txt` pins NumPy 2.3.5, PaddlePaddle 3.3.1, and PaddleOCR 3.7.0. The local `.venv-ocr313` has those versions installed and the Korean PP-OCRv5 models cached. The deployed Render API previously reported the same Paddle versions and OCR dependency installation. A clean machine still needs to install `requirements-ocr.txt` in its supported Python 3.9–3.13 environment; first model use may download model files.
+- [x] Ran actual `/api/v1/ocr/extract` via FastAPI TestClient with the prepared Korean image, blank image, and unsupported PDF. HTTP 200; the Korean recognized string matched the expected value exactly; blank count was 0; PDF returned a file-level error. Storage was overridden to local CSV, and this endpoint did not persist data.
+- [x] Exercised `/api/v1/ocr/keywords` with an in-memory repository: a member save created a test row/code and counter `0`; duplicate candidate returned HTTP 422; stale revision returned HTTP 409. No database or disk repository was written.
+- [x] Role smoke test through TestClient: unauthenticated admin-users GET returned 401, a member returned 403, and the integration token returned 403. Admin users API was not called with an admin bearer because that would require actual account data; admin list rendering remains unverified.
+- [ ] Authenticated React OCR UI, actual isolated Supabase candidate persistence, and follow-through analysis in the browser remain unverified.
+
+### Next manual session materials
+
+- [x] Added `docs/qa/SCREEN_QA_CHECKLIST.md` with the code-based React/Streamlit comparison, test-account and sandbox fixture requirements, and per-screen `화면 → 조작 → 기대 결과 → 확인할 증거` instructions. It includes a first OCR screen-review procedure and states which operations must remain read-only or run only in an isolated project.
+- [ ] The checklist is a prepared procedure, not evidence that a user completed those screen checks. Browser/role-based items remain open until evidence is returned.
+
+### Re-run checks
+
+- [x] React `npm run build` — TypeScript and Vite build passed.
+- [x] Full Python suite with CSV storage, unreachable local Supabase URL override, and live-reset flag removed — 103 passed, 9 skipped, 187 subtests passed, one Starlette/httpx deprecation warning.
+- [x] Existing user changes `frontend/.env.example` and `period_topN_report.csv` were preserved and excluded from the QA changes. Global `git diff --check` reports the pre-existing extra blank line at EOF in `.env.example`; QA artifact diff is clean when staged alone.
+
+Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Production switching remains blocked by the explicitly unverified React/Streamlit visual and account workflows; no unrun checks are marked complete.
