@@ -27,19 +27,26 @@
 
 ## Remaining before switching the production UI
 
-- [ ] Visually verify that the React report page displays the recorded terms and that its CSV download opens correctly.
-- [ ] Visually compare the updated React shell and each page against Streamlit; the browser control host is unavailable, so this layout change is build-checked but not visually accepted yet.
+- [x] User verified admin login, the 2026-10-30–2026-11-05 Top 10 report, and CSV download. The downloaded CSV parses as 10 rows, and its period counts match the live event log (2026-11-05).
+- [ ] Open the downloaded CSV in a spreadsheet application and visually check the displayed columns and values.
+- [ ] Visually compare the updated React shell and each page against Streamlit; the user's report review did not cover the other pages.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
-The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, so interactive browser checks could not be performed. The local Python suite passes; restore browser access to resume the account-based screen checks. Do not switch the production UI before they pass.
+The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The user has now verified the report screen and downloaded its CSV. Remaining screens have not been marked complete from backend data alone. The local Python suite passes. Keep Streamlit as the production UI until the remaining signed-in checks pass.
 
 ## Browser access recovery check (2026-11-05)
 
 - The local React production build succeeds (`npm run build`).
 - The deployed React preview HTML, API `/healthz`, and API `/openapi.json` all return HTTP 200. The live OpenAPI document reports version `1.1.0` and includes the OCR and period-report routes.
 - Unauthenticated requests to the keyword catalog and period-report endpoints return HTTP 401.
-- The browser-control inventory currently reports `Browsers: Error: The browser access host is unavailable` with no browser sessions. Creating a fresh in-app browser tab fails with the same host error. This isolates the current blocker to the browser-control service; the public preview and API are reachable from the repository host.
-- To resume visual/account QA, restore the browser-control host/session, confirm `cua.getState()` lists a browser session, open the deployed preview in a fresh tab, then continue with the signed-in report/CSV check. If the host remains unavailable, use a separately approved browser automation environment with the project test account; do not mark account-based checks complete based on HTTP availability alone.
+- The agent's browser-control inventory still reports `Browsers: Error: The browser access host is unavailable` with no browser sessions, including after the user reported that their browser connection had recovered. Creating a fresh in-app tab fails with the same host error. The user completed the report review in their browser, but agent-controlled visual QA for other pages remains blocked.
+- To resume agent-controlled visual/account QA, restore the browser-control host/session and confirm `cua.getState()` lists a browser session, then open the deployed preview and continue with signed-in OCR and member/admin workflows. Do not mark account-based checks complete based on HTTP availability alone.
 
-The report screen/CSV, OCR inference, member/admin page workflows, and full interaction parity remain unverified and are still required before switching the production UI.
+## Report count reconciliation (2026-11-05)
+
+- A read-only comparison confirmed that the CSV's period counts agree with visible event rows in the inclusive Korea Standard Time date range. The report period calculation and CSV agree with the live event log.
+- `기간내_조회수` is counted from visible `kra_hits` in the selected date range. `키워드 조회 수(누적카운트)` is the separate `kra_keywords.hit_count` counter. The admin's **누적 조회수 초기화** sets that counter to zero while preserving event rows; **최근 7일 기록 리포트에서 제외** hides recent event rows from report queries without changing the counter.
+- The differing values are consistent with the documented counter-reset behavior and do not by themselves indicate duplicated report hits. The event log remains the source for period reports. The application does not persist a reset audit record, so it cannot prove the exact reset request or time from database state alone.
+
+OCR inference, member/admin page workflows beyond the report, spreadsheet-application display of the CSV, and full interaction parity remain required before switching the production UI.
