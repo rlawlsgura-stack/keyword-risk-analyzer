@@ -1,3 +1,8 @@
+## React preview 0.1.1
+
+- Bump the React preview package version and keep the lockfile in sync.
+- Add reproducible Korean OCR QA images and a manual React/Streamlit review checklist.
+
 ## React preview - Restore administrator unmatched-candidate cleanup
 
 - Add page refresh and an administrator-only permanent-delete flow for selected shared candidates, with a separate confirmation step.
