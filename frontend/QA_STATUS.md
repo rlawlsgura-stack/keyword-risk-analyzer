@@ -33,3 +33,13 @@
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
 The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The report range API and database function are deployed; the report UI interaction and CSV still need signed-in visual verification. Remaining screens have not been marked complete from backend data alone. During the latest review, the computer-use tool returned `browser access host is unavailable`, so interactive browser checks could not be performed. The local Python suite passes; restore browser access to resume the account-based screen checks. Do not switch the production UI before they pass.
+
+## Browser access recovery check (2026-11-05)
+
+- The local React production build succeeds (`npm run build`).
+- The deployed React preview HTML, API `/healthz`, and API `/openapi.json` all return HTTP 200. The live OpenAPI document reports version `1.1.0` and includes the OCR and period-report routes.
+- Unauthenticated requests to the keyword catalog and period-report endpoints return HTTP 401.
+- The browser-control inventory currently reports `Browsers: Error: The browser access host is unavailable` with no browser sessions. Creating a fresh in-app browser tab fails with the same host error. This isolates the current blocker to the browser-control service; the public preview and API are reachable from the repository host.
+- To resume visual/account QA, restore the browser-control host/session, confirm `cua.getState()` lists a browser session, open the deployed preview in a fresh tab, then continue with the signed-in report/CSV check. If the host remains unavailable, use a separately approved browser automation environment with the project test account; do not mark account-based checks complete based on HTTP availability alone.
+
+The report screen/CSV, OCR inference, member/admin page workflows, and full interaction parity remain unverified and are still required before switching the production UI.
