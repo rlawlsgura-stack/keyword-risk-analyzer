@@ -181,12 +181,12 @@ export async function loadKeywords(offset: number, query: string,
   return requestApi(`/api/v1/keywords?${params}`)
 }
 
-export async function loadKeywordSnapshot(): Promise<{ items: KeywordRow[]; revision: number }> {
+export async function loadKeywordSnapshot(query = '',
+  filters = { category: '', risk: '', evidenceType: '' }): Promise<{ items: KeywordRow[]; revision: number }> {
   const all: KeywordRow[] = []
-  const noFilters = { category: '', risk: '', evidenceType: '' }
   let revision: number | null = null
   while (true) {
-    const page = await loadKeywords(all.length, '', noFilters, 500)
+    const page = await loadKeywords(all.length, query, filters, 500)
     if (revision === null) revision = page.revision
     else if (page.revision !== revision) throw new Error('키워드 원장이 불러오는 중 변경되었습니다. 다시 불러와 주세요.')
     all.push(...page.items)
@@ -223,6 +223,28 @@ export async function loadUnmatchedTerms(offset: number, search: string,
 export async function exportUnmatchedTerms(): Promise<UnmatchedTerm[]> {
   const result = await requestApi('/api/v1/unmatched-terms/export')
   return result.items
+}
+
+export async function loadAllSelectableUnmatchedTerms(search: string,
+  sort: 'occurrences' | 'registered'): Promise<UnmatchedTerm[]> {
+  const selected: UnmatchedTerm[] = []
+  const seen = new Set<string>()
+  let offset = 0
+  let total: number | null = null
+  while (true) {
+    const page = await loadUnmatchedTerms(offset, search, sort)
+    if (total === null) total = page.total
+    if (page.total !== total || (!page.rows.length && offset < total)) {
+      throw new Error('후보 목록이 변경되었습니다. 새로고침 후 다시 선택하세요.')
+    }
+    for (const row of page.rows) {
+      if (seen.has(row.term_norm)) throw new Error('후보 목록 순서가 변경되었습니다. 다시 선택하세요.')
+      seen.add(row.term_norm)
+      if (row.review_status === 'pending') selected.push(row)
+    }
+    offset += page.rows.length
+    if (offset >= total) return selected
+  }
 }
 
 export async function deleteAdminUnmatchedTerms(terms: string[]): Promise<{ deleted: number }> {
@@ -273,7 +295,11 @@ export async function saveOCRKeywords(revision: number, candidates: Pick<OCRCand
   added: string[]; revision: number
 }> {
   return requestApi('/api/v1/ocr/keywords', {
-    method: 'POST', body: JSON.stringify({ revision, candidates }),
+    method: 'POST', body: JSON.stringify({
+      revision,
+      candidates: candidates.map(({ term, category, risk, detail, evidence, alternative }) =>
+        ({ term, category, risk, detail, evidence, alternative })),
+    }),
   })
 }
 

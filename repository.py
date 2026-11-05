@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pandas as pd
 import requests
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from matching_engine import DB_COLS
 
@@ -34,7 +34,11 @@ class SupabaseRepository:
     def __init__(self):
         self.url = os.getenv('SUPABASE_URL', '').rstrip('/')
         self.key = os.getenv('SUPABASE_SECRET_KEY', '')
-        if not self.url.startswith('https://') or not self.key:
+        parsed_url = urlsplit(self.url)
+        local_http = (os.getenv('SUPABASE_ALLOW_LOCAL_HTTP') == '1' and
+                      parsed_url.scheme == 'http' and
+                      parsed_url.hostname in {'localhost', '127.0.0.1', '::1'})
+        if (parsed_url.scheme != 'https' and not local_http) or not self.key:
             raise StorageError('SUPABASE_URL and SUPABASE_SECRET_KEY are required')
 
     def request(self, method, path, payload=None, token=None, prefer=None):

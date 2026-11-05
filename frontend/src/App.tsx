@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
+import { insertRecommendation } from './recommendationRows'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
-  type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms,
+  type RegulationResult, type TopKeyword, type UnmatchedTerm, exportUnmatchedTerms, loadUnmatchedTerms, loadAllSelectableUnmatchedTerms,
   submitUnmatchedRegistrationRequests, deleteAdminUnmatchedTerms, findKeywords, loadKeywordRequests,
   submitKeywordRequest, loadKeywordRequestMessages, addKeywordRequestMessage,
   editKeywordRequestMessage, deleteKeywordRequestMessage, deleteKeywordRequest,
@@ -505,6 +506,7 @@ function App() {
   const [keywordSearch, setKeywordSearch] = useState('')
   const [keywordQuery, setKeywordQuery] = useState('')
   const [keywordOffset, setKeywordOffset] = useState(0)
+  const [keywordRefresh, setKeywordRefresh] = useState(0)
   const [keywordFilter, setKeywordFilter] = useState({ category: '', risk: '', evidenceType: '' })
   const [keywordPage, setKeywordPage] = useState<{ total: number; revision: number | null; items: KeywordRow[] } | null>(null)
   const [keywordBusy, setKeywordBusy] = useState(false)
@@ -536,6 +538,8 @@ function App() {
   const [unmatchedExportBusy, setUnmatchedExportBusy] = useState(false)
   const [unmatchedError, setUnmatchedError] = useState('')
   const [unmatchedRefresh, setUnmatchedRefresh] = useState(0)
+  const [unmatchedSelectAllBusy, setUnmatchedSelectAllBusy] = useState(false)
+  const unmatchedSelectionGeneration = useRef(0)
   const [selectedUnmatched, setSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
   const [deleteSelectedUnmatched, setDeleteSelectedUnmatched] = useState<Record<string, UnmatchedTerm>>({})
   const [unmatchedDeleteConfirm, setUnmatchedDeleteConfirm] = useState(false)
@@ -695,7 +699,7 @@ function App() {
   useEffect(() => { setResult(null) }, [text, mode, partialMinLen, options, categories, risks])
 
   useEffect(() => {
-    if (page !== 'keywords' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
+    if (!['analysis', 'keywords'].includes(page) || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
     let active = true
     setKeywordBusy(true)
     setKeywordError('')
@@ -705,7 +709,7 @@ function App() {
       if (active) setKeywordError(error instanceof Error ? error.message : '키워드 목록을 불러오지 못했습니다.')
     }).finally(() => { if (active) setKeywordBusy(false) })
     return () => { active = false }
-  }, [page, user?.id, keywordOffset, keywordQuery, keywordFilter])
+  }, [page, user?.id, keywordOffset, keywordQuery, keywordFilter, keywordRefresh])
 
   useEffect(() => {
     if (page !== 'report' || !user || !['member', 'admin'].includes(user.app_metadata?.role)) return
@@ -732,6 +736,11 @@ function App() {
     }).finally(() => { if (active) setUnmatchedBusy(false) })
     return () => { active = false }
   }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort, unmatchedRefresh])
+
+  useEffect(() => {
+    unmatchedSelectionGeneration.current += 1
+    setUnmatchedSelectAllBusy(false)
+  }, [page, user?.id, unmatchedOffset, unmatchedSearch, unmatchedSort])
 
   useEffect(() => {
     setDeleteSelectedUnmatched({})
@@ -1271,11 +1280,13 @@ function App() {
     }
   }
 
-  async function exportKeywordCatalog() {
+  async function exportKeywordCatalog(filtered = false) {
     setKeywordExportBusy(true)
     setKeywordError('')
     try {
-      const rows = await loadAllKeywords()
+      const rows = filtered
+        ? (await loadKeywordSnapshot(keywordQuery, keywordFilter)).items
+        : await loadAllKeywords()
       const headers = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드',
         '리스크 등급별 세부 심의기준', '증빙자료유형', '키워드 조회 수(누적카운트)', '마지막 출력일자']
       const csvRows = [headers, ...rows.map(row => [row.kwd_no, row.키워드명, row.상품카테고리,
@@ -1286,7 +1297,7 @@ function App() {
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
       const link = document.createElement('a')
       link.href = url
-      link.download = 'keyword_catalog.csv'
+      link.download = filtered ? 'keyword_filtered.csv' : 'keyword_catalog.csv'
       document.body.append(link)
       link.click()
       link.remove()
@@ -1334,6 +1345,26 @@ function App() {
       else delete next[row.term_norm]
       return next
     })
+  }
+
+  async function selectAllMatchingUnmatched() {
+    const generation = ++unmatchedSelectionGeneration.current
+    setUnmatchedSelectAllBusy(true)
+    setUnmatchedError('')
+    try {
+      const rows = await loadAllSelectableUnmatchedTerms(unmatchedSearch, unmatchedSort)
+      if (generation !== unmatchedSelectionGeneration.current) return
+      setSelectedUnmatched(previous => ({ ...previous,
+        ...Object.fromEntries(rows.map(row => [row.term_norm, row])),
+      }))
+      setUnmatchedActionMessage(`현재 검색결과에서 요청 가능한 ${rows.length}개 후보를 선택했습니다. 다른 검색의 기존 선택도 유지됩니다.`)
+    } catch (error) {
+      if (generation === unmatchedSelectionGeneration.current) {
+        setUnmatchedError(error instanceof Error ? error.message : '전체 후보를 선택하지 못했습니다.')
+      }
+    } finally {
+      if (generation === unmatchedSelectionGeneration.current) setUnmatchedSelectAllBusy(false)
+    }
   }
 
   function toggleUnmatchedPage(checked: boolean) {
@@ -1413,6 +1444,7 @@ function App() {
   async function createUnmatchedRecommendations() {
     const rows = Object.values(selectedUnmatched)
     if (!rows.length || rows.length > 1000) return
+    if (recommendations.length && !window.confirm('현재 작업본을 새 추천으로 바꿀까요? 저장하지 않은 수정은 사라집니다.')) return
     setRecommendationBusy(true)
     setRecommendationDraftError('')
     setRecommendationDraftMessage('')
@@ -1436,6 +1468,28 @@ function App() {
 
   function updateRecommendation(id: string, field: keyof NormalizationRecommendation, value: string) {
     setRecommendations(previous => previous.map(row => row.recommendation_id === id ? { ...row, [field]: value } : row))
+  }
+
+  function addRecommendationRow(position: 'end' | 'before' | 'after') {
+    const row: NormalizationRecommendation = {
+      recommendation_id: `manual:${crypto.randomUUID()}`, term: '', source_terms: '', occurrences: 0,
+      category: '', risk: '', criteria: '', evidence_type: '', alternative: '-',
+    }
+    try {
+      const rows = insertRecommendation(recommendations, row, selectedRecommendationIds, position)
+      setRecommendations(rows)
+      setRecommendationDraftError('')
+      setRecommendationDraftMessage('빈 행을 추가했습니다. 작업본 저장을 눌러 보관하세요.')
+    } catch (error) {
+      setRecommendationDraftError(error instanceof Error ? error.message : '행을 추가하지 못했습니다.')
+    }
+  }
+
+  function removeRecommendationRows() {
+    setRecommendations(previous => previous.filter(row => !selectedRecommendationIds.includes(row.recommendation_id)))
+    setSelectedRecommendationIds([])
+    setRecommendationDraftError('')
+    setRecommendationDraftMessage('선택한 행을 작업본에서 제거했습니다. 작업본 저장을 눌러 반영하세요.')
   }
 
   async function saveRecommendationDraft() {
@@ -1722,6 +1776,69 @@ function App() {
     setNewKeywordForm({ term: '', category, risk: '', alternative: '-', criteria: '', evidenceType: '' })
     setNewKeywordOpen(false)
   }
+
+  const keywordCatalog = (
+          <section className="catalog-section" aria-label="리스트 필터">
+            <h2>🧰 리스트 필터</h2>
+            <div className="panel catalog-panel">
+              <form className="catalog-search" onSubmit={event => {
+                event.preventDefault()
+                setKeywordOffset(0)
+                setKeywordQuery(keywordSearch.trim())
+                setKeywordRefresh(value => value + 1)
+              }}>
+                <label className="sr-only" htmlFor="keyword-search">번호, 키워드명 또는 대체 키워드 검색</label>
+                <input id="keyword-search" value={keywordSearch} maxLength={200}
+                  placeholder="번호·키워드명·대체 키워드 검색" onChange={event => setKeywordSearch(event.target.value)} />
+                <select aria-label="카테고리 필터" value={keywordFilter.category}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, category: event.target.value }) }}>
+                  <option value="">전체 카테고리</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
+                </select>
+                <select aria-label="리스크 필터" value={keywordFilter.risk}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, risk: event.target.value }) }}>
+                  <option value="">전체 리스크</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
+                </select>
+                <select aria-label="증빙 자료 필터" value={keywordFilter.evidenceType}
+                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, evidenceType: event.target.value }) }}>
+                  <option value="">전체 증빙 유형</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
+                </select>
+                <button className="primary-button" type="submit" disabled={keywordBusy}>필터 적용</button>
+                <button className="secondary-button" type="button" disabled={keywordBusy} onClick={() => {
+                  setKeywordSearch('')
+                  setKeywordQuery('')
+                  setKeywordFilter({ category: '', risk: '', evidenceType: '' })
+                  setKeywordOffset(0)
+                  setKeywordRefresh(value => value + 1)
+                }}>필터 초기화</button>
+              </form>
+              <div className="catalog-meta">
+                <span>{keywordBusy ? '목록을 불러오는 중…' : `${keywordPage?.total ?? 0}개 키워드`}</span>
+                {keywordPage?.revision != null && <span>원장 버전 {keywordPage.revision}</span>}
+                <button className="secondary-button" disabled={keywordBusy || keywordExportBusy || Boolean(keywordError)}
+                  onClick={() => exportKeywordCatalog(true)}>필터 결과 CSV 다운로드</button>
+                <button className="secondary-button" disabled={keywordBusy || keywordExportBusy}
+                  onClick={() => exportKeywordCatalog()}>{keywordExportBusy ? 'CSV 준비 중…' : '전체 원장 CSV'}</button>
+              </div>
+              {keywordError && <p className="error-message" role="alert">{keywordError}</p>}
+              {!keywordBusy && !keywordError && keywordPage?.total === 0 && <p className="empty-result">조건에 맞는 키워드가 없습니다.</p>}
+              {!keywordError && <div className="table-scroll"><table>
+                <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 자료</th></tr></thead>
+                <tbody>{keywordPage?.items.map(row => <tr key={row.kwd_no}>
+                  <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td><td>{row.상품카테고리 || '—'}</td>
+                  <td>{row['리스크 등급'] || '—'}</td><td>{row.대체키워드 || '—'}</td>
+                  <td>{row['리스크 등급별 세부 심의기준'] || '—'}</td><td>{row.증빙자료유형 || '—'}</td>
+                </tr>)}</tbody>
+              </table></div>}
+              {keywordPage && <div className="catalog-pagination">
+                <button className="secondary-button" disabled={keywordBusy || keywordOffset === 0}
+                  onClick={() => setKeywordOffset(Math.max(0, keywordOffset - 100))}>이전</button>
+                <span>{keywordPage.total ? `${keywordOffset + 1}–${Math.min(keywordOffset + 100, keywordPage.total)} / ${keywordPage.total}` : '0개'}</span>
+                <button className="secondary-button" disabled={keywordBusy || keywordOffset + 100 >= keywordPage.total}
+                  onClick={() => setKeywordOffset(keywordOffset + 100)}>다음</button>
+              </div>}
+            </div>
+          </section>
+  )
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -2183,14 +2300,14 @@ function App() {
             </div>
             <div className="panel request-history">
               {role === 'admin' && <div className="request-email-settings">
-                <div><strong>?? ?? ??? ??</strong><small>{requestEmailSettings?.configured
-                  ? '?? ???? ???? ????.'
-                  : '?? ??? ?????. API ????? ?? ??? ???? ???? ???? ????.'}</small></div>
+                <div><strong>새 문의 관리자 이메일 알림</strong><small>{requestEmailSettings?.configured
+                  ? '새 문의 등록 시 관리자에게 이메일을 보냅니다.'
+                  : '이메일 발송 설정이 필요합니다. API 서버의 발송 설정을 완료한 뒤 알림을 켜 주세요.'}</small></div>
                 <label><input type="checkbox" checked={requestEmailSettings?.enabled ?? false}
                   disabled={!requestEmailSettings || requestEmailBusy || (!requestEmailSettings.configured && !requestEmailSettings.enabled)}
-                  onChange={event => setRequestEmailSettings(settings => settings ? { ...settings, enabled: event.target.checked } : settings)} /> ??</label>
+                  onChange={event => setRequestEmailSettings(settings => settings ? { ...settings, enabled: event.target.checked } : settings)} /> 알림 사용</label>
                 <button className="secondary-button" disabled={!requestEmailSettings || requestEmailBusy}
-                  onClick={saveRequestEmailSetting}>{requestEmailBusy ? '?? ??' : '?? ?? ??'}</button>
+                  onClick={saveRequestEmailSetting}>{requestEmailBusy ? '저장 중…' : '알림 설정 저장'}</button>
               </div>}
               {requestEmailError && <p className="error-message" role="alert">{requestEmailError}</p>}
               <div className="request-history-heading"><h2>문의 내역</h2><span>{requestBusy ? '불러오는 중…' : `${requestRecords.length}건`}</span></div>
@@ -2235,20 +2352,27 @@ function App() {
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedExportBusy || !unmatchedPage?.total}
                   onClick={exportUnmatchedCsv}>{unmatchedExportBusy ? 'CSV 준비 중…' : '전체 누적 CSV'}</button>
               </div>
+              <div className="admin-keyword-toolbar">
+                <button className="secondary-button" disabled={unmatchedBusy || unmatchedSelectAllBusy || unmatchedSubmitBusy || recommendationBusy || !unmatchedPage?.total}
+                  onClick={selectAllMatchingUnmatched}>{unmatchedSelectAllBusy ? '전체 후보 확인 중…' : '검색결과 전체 선택'}</button>
+                <button className="secondary-button" disabled={unmatchedSelectAllBusy || unmatchedSubmitBusy || recommendationBusy || !selectedUnmatchedCount}
+                  onClick={() => { setSelectedUnmatched({}); setUnmatchedActionMessage('후보 선택을 모두 해제했습니다.') }}>후보 선택 모두 해제</button>
+              </div>
+              <p className="unmatched-note">페이지가 바뀌어도 선택은 유지됩니다. 전체 선택은 현재 적용된 검색결과의 요청 가능 후보에 적용됩니다. 영구 삭제 선택은 별도로 관리됩니다.</p>
               <p className="unmatched-note">후보 목록에는 표현과 집계 횟수만 표시됩니다. 계정이나 원문 문서는 포함하지 않습니다.</p>
               {unmatchedError && <p className="error-message" role="alert">{unmatchedError}</p>}
               {!unmatchedError && (unmatchedPage?.rows.length ? <div className="table-scroll"><table>
                 <thead><tr><th><input type="checkbox" aria-label="현재 페이지의 요청 가능 후보 선택"
                   checked={Boolean(unmatchedPage?.rows.some(row => row.review_status === 'pending')) &&
                     (unmatchedPage?.rows.filter(row => row.review_status === 'pending').every(row => selectedUnmatched[row.term_norm]) ?? false)}
-                  onChange={event => toggleUnmatchedPage(event.target.checked)} /></th>
+                  disabled={unmatchedSelectAllBusy} onChange={event => toggleUnmatchedPage(event.target.checked)} /></th>
                   {role === 'admin' && <th><input type="checkbox" aria-label="현재 페이지 누적 후보 전체 삭제 선택"
                     checked={Boolean(unmatchedPage?.rows.length) && unmatchedPage!.rows.every(row => deleteSelectedUnmatched[row.term_norm])}
                     onChange={event => toggleUnmatchedDeletePage(event.target.checked)} /></th>}
                   <th>미매칭 표현</th><th>누적 횟수</th><th>분석 횟수</th><th>상태</th><th>최초 수집</th><th>최근 수집</th></tr></thead>
                 <tbody>{unmatchedPage.rows.map(row => <tr key={row.term_norm}>
                   <td><input type="checkbox" aria-label={`${row.display_term} 선택`}
-                    checked={Boolean(selectedUnmatched[row.term_norm])} disabled={row.review_status !== 'pending'}
+                    checked={Boolean(selectedUnmatched[row.term_norm])} disabled={row.review_status !== 'pending' || unmatchedSelectAllBusy}
                     onChange={event => toggleUnmatchedRow(row, event.target.checked)} /></td>
                   {role === 'admin' && <td><input type="checkbox" aria-label={`${row.display_term} 영구 삭제 선택`}
                     checked={Boolean(deleteSelectedUnmatched[row.term_norm])} disabled={unmatchedDeleteBusy}
@@ -2272,58 +2396,73 @@ function App() {
               {selectedUnmatchedCount > 0 && <div className="unmatched-actions">
                 <span>{selectedUnmatchedCount}개 후보 선택됨 · 요청 후 관리자 검토 대기열로 이동합니다.
                   {selectedUnmatchedCount > 1000 && ' 한 번에 최대 1,000개까지 요청할 수 있습니다.'}</span>
-                <button className="secondary-button" disabled={recommendationBusy || unmatchedBusy || selectedUnmatchedCount > 1000}
+                <button className="secondary-button" disabled={recommendationBusy || unmatchedBusy || unmatchedSelectAllBusy || selectedUnmatchedCount > 1000}
                   onClick={createUnmatchedRecommendations}>{recommendationBusy ? '추천 생성 중…' : '선택 후보 정규화 추천'}</button>
-                <button className="primary-button" disabled={unmatchedSubmitBusy || unmatchedBusy || selectedUnmatchedCount > 1000}
+                <button className="primary-button" disabled={unmatchedSubmitBusy || unmatchedBusy || unmatchedSelectAllBusy || selectedUnmatchedCount > 1000}
                   onClick={submitUnmatchedRequests}>{unmatchedSubmitBusy ? '요청 접수 중…' : '선택 후보 등록 요청'}</button>
               </div>}
               {unmatchedActionMessage && <p className="success-message" role="status">{unmatchedActionMessage}</p>}
               {recommendationDraftError && <p className="error-message" role="alert">{recommendationDraftError}</p>}
               {recommendationDraftMessage && <p className="success-message" role="status">{recommendationDraftMessage}</p>}
-              {recommendations.length > 0 && <section className="normalization-recommendations">
+              <section className="normalization-recommendations">
                 <div className="request-history-heading"><div><h2>정규화 추천 작업본</h2>
-                  <p>Kiwi 형태소 분석이 제안한 표현입니다. 등록 전에 분류 정보를 검토하세요.</p></div>
+                  <p>Kiwi 추천을 수정하거나 빈 행을 추가할 수 있습니다. 변경한 내용은 작업본 저장을 눌러 보관하세요.</p></div>
                   <span>{recommendations.length}건 · {selectedRecommendationIds.length}건 선택</span></div>
                 <div className="admin-keyword-toolbar">
-                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy}
-                    onClick={() => setRecommendationDraftRefresh(value => value + 1)}>저장된 작업본 불러오기</button>
-                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy}
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy}
+                    onClick={() => {
+                      if (!recommendations.length || window.confirm('현재 화면의 작업본을 저장된 작업본으로 바꿀까요?')) {
+                        setRecommendationDraftRefresh(value => value + 1)
+                      }
+                    }}>저장된 작업본 불러오기</button>
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy}
                     onClick={saveRecommendationDraft}>{recommendationDraftBusy ? '저장 중…' : '작업본 저장'}</button>
-                  <button className="primary-button" disabled={!selectedRecommendationIds.length || unmatchedSubmitBusy || recommendationDraftBusy}
+                  <button className="primary-button" disabled={!selectedRecommendationIds.length || selectedRecommendationIds.length > 1000 || unmatchedSubmitBusy || recommendationDraftBusy || recommendationBusy}
                     onClick={submitSelectedRecommendations}>{unmatchedSubmitBusy ? '요청 접수 중…' : `선택 추천 요청 (${selectedRecommendationIds.length})`}</button>
                 </div>
+                <div className="admin-keyword-toolbar">
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy}
+                    onClick={() => addRecommendationRow('end')}>빈 행 추가</button>
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy || selectedRecommendationIds.length !== 1}
+                    onClick={() => addRecommendationRow('before')}>선택 행 위에 빈 행 추가</button>
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy || selectedRecommendationIds.length !== 1}
+                    onClick={() => addRecommendationRow('after')}>선택 행 아래에 빈 행 추가</button>
+                  <button className="secondary-button" disabled={recommendationDraftBusy || recommendationBusy || unmatchedSubmitBusy || !selectedRecommendationIds.length}
+                    onClick={removeRecommendationRows}>선택 항목 삭제</button>
+                </div>
+                <p className="unmatched-note">위·아래 삽입은 기준 행을 하나만 선택하세요. 행 삭제는 원장이나 누적 후보를 삭제하지 않습니다.</p>
                 <div className="table-scroll admin-keyword-table"><table>
                   <thead><tr><th><input type="checkbox" aria-label="추천 전체 선택"
                     checked={recommendations.length > 0 && selectedRecommendationIds.length === recommendations.length}
                     onChange={event => setSelectedRecommendationIds(event.target.checked ? recommendations.map(row => row.recommendation_id) : [])} /></th>
                     <th>추천 키워드</th><th>원문 표현</th><th>카테고리</th><th>리스크</th><th>심의 기준</th><th>증빙 유형</th><th>대체 키워드</th><th>횟수</th></tr></thead>
-                  <tbody>{recommendations.map(row => <tr key={row.recommendation_id}>
-                    <td><input type="checkbox" aria-label={`${row.term} 추천 선택`} checked={selectedRecommendationIds.includes(row.recommendation_id)}
+                  <tbody>{recommendations.map((row, index) => <tr key={row.recommendation_id}>
+                    <td><input type="checkbox" aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 선택`} checked={selectedRecommendationIds.includes(row.recommendation_id)}
                       onChange={event => setSelectedRecommendationIds(previous => event.target.checked
                         ? [...previous, row.recommendation_id] : previous.filter(id => id !== row.recommendation_id))} /></td>
-                    <td><input aria-label={`${row.term} 추천 키워드`} value={row.term}
+                    <td><input aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 키워드`} value={row.term}
                       onChange={event => updateRecommendation(row.recommendation_id, 'term', event.target.value)} /></td>
-                    <td>{row.source_terms}</td>
-                    <td><select aria-label={`${row.term} 추천 카테고리`} value={row.category}
+                    <td>{row.source_terms || (row.recommendation_id.startsWith('manual:') ? '직접 입력' : '—')}</td>
+                    <td><select aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 카테고리`} value={row.category}
                       onChange={event => updateRecommendation(row.recommendation_id, 'category', event.target.value)}>
                       <option value="">선택</option>{editorCategories.map(value => <option key={value}>{value}</option>)}
                     </select></td>
-                    <td><select aria-label={`${row.term} 추천 리스크`} value={row.risk}
+                    <td><select aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 리스크`} value={row.risk}
                       onChange={event => updateRecommendation(row.recommendation_id, 'risk', event.target.value)}>
                       <option value="">선택</option>{editorRisks.map(value => <option key={value}>{value}</option>)}
                     </select></td>
-                    <td><textarea aria-label={`${row.term} 추천 심의 기준`} value={row.criteria}
+                    <td><textarea aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 심의 기준`} value={row.criteria}
                       onChange={event => updateRecommendation(row.recommendation_id, 'criteria', event.target.value)} /></td>
-                    <td><select aria-label={`${row.term} 추천 증빙 유형`} value={row.evidence_type}
+                    <td><select aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 증빙 유형`} value={row.evidence_type}
                       onChange={event => updateRecommendation(row.recommendation_id, 'evidence_type', event.target.value)}>
                       <option value="">선택</option>{editorEvidenceTypes.map(value => <option key={value}>{value}</option>)}
                     </select></td>
-                    <td><input aria-label={`${row.term} 추천 대체 키워드`} value={row.alternative}
+                    <td><input aria-label={`${row.term || '빈 행'} ${index + 1}행 추천 대체 키워드`} value={row.alternative}
                       onChange={event => updateRecommendation(row.recommendation_id, 'alternative', event.target.value)} /></td>
                     <td>{row.occurrences.toLocaleString()}</td>
                   </tr>)}</tbody>
                 </table></div>
-              </section>}
+              </section>
               {unmatchedPage && <div className="catalog-pagination">
                 <button className="secondary-button" disabled={unmatchedBusy || unmatchedOffset === 0}
                   onClick={() => setUnmatchedOffset(Math.max(0, unmatchedOffset - 100))}>이전</button>
@@ -2558,57 +2697,10 @@ function App() {
           <div className="page-heading">
             <div><div className="eyebrow">CATALOG / 02</div><h1>키워드 원장</h1>
               <p>등록된 키워드와 분류 정보를 조회합니다. 원장 수정은 기존 관리자 화면에서 할 수 있습니다.</p></div>
-            <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>
-                        <div className="preview-pill"><span /> 읽기 전용</div>
+            {role === 'admin' && <button className="secondary-button" onClick={() => setPage('keyword-admin')}>키워드 관리로 돌아가기</button>}
+            <div className="preview-pill"><span /> 읽기 전용</div>
           </div>
-          <section className="catalog-section">
-            <div className="panel catalog-panel">
-              <form className="catalog-search" onSubmit={event => {
-                event.preventDefault()
-                setKeywordOffset(0)
-                setKeywordQuery(keywordSearch.trim())
-              }}>
-                <label className="sr-only" htmlFor="keyword-search">번호, 키워드명 또는 대체 키워드 검색</label>
-                <input id="keyword-search" value={keywordSearch} maxLength={200}
-                  placeholder="번호·키워드명·대체 키워드 검색" onChange={event => setKeywordSearch(event.target.value)} />
-                <select aria-label="카테고리 필터" value={keywordFilter.category}
-                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, category: event.target.value }) }}>
-                  <option value="">전체 카테고리</option>{filters.categories.map(value => <option key={value}>{value}</option>)}
-                </select>
-                <select aria-label="리스크 필터" value={keywordFilter.risk}
-                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, risk: event.target.value }) }}>
-                  <option value="">전체 리스크</option>{filters.risks.map(value => <option key={value}>{value}</option>)}
-                </select>
-                <select aria-label="증빙 자료 필터" value={keywordFilter.evidenceType}
-                  onChange={event => { setKeywordOffset(0); setKeywordFilter({ ...keywordFilter, evidenceType: event.target.value }) }}>
-                  <option value="">전체 증빙 유형</option>{(filters.evidence_types ?? []).map(value => <option key={value}>{value}</option>)}
-                </select>
-                <button className="primary-button" type="submit" disabled={keywordBusy}>검색</button>
-              </form>
-              <div className="catalog-meta">
-                <span>{keywordBusy ? '목록을 불러오는 중…' : `${keywordPage?.total ?? 0}개 키워드`}</span>
-                {keywordPage?.revision && <span>원장 버전 {keywordPage.revision}</span>}
-                <button className="secondary-button" disabled={keywordBusy || keywordExportBusy}
-                  onClick={exportKeywordCatalog}>{keywordExportBusy ? 'CSV 준비 중…' : '전체 원장 CSV'}</button>
-              </div>
-              {keywordError && <p className="error-message" role="alert">{keywordError}</p>}
-              {!keywordError && <div className="table-scroll"><table>
-                <thead><tr><th>번호</th><th>키워드명</th><th>카테고리</th><th>리스크</th><th>대체 키워드</th><th>심의 기준</th><th>증빙 자료</th></tr></thead>
-                <tbody>{keywordPage?.items.map(row => <tr key={row.kwd_no}>
-                  <td>{row.kwd_no}</td><td><strong>{row.키워드명}</strong></td><td>{row.상품카테고리 || '—'}</td>
-                  <td>{row['리스크 등급'] || '—'}</td><td>{row.대체키워드 || '—'}</td>
-                  <td>{row['리스크 등급별 세부 심의기준'] || '—'}</td><td>{row.증빙자료유형 || '—'}</td>
-                </tr>)}</tbody>
-              </table></div>}
-              {keywordPage && <div className="catalog-pagination">
-                <button className="secondary-button" disabled={keywordBusy || keywordOffset === 0}
-                  onClick={() => setKeywordOffset(Math.max(0, keywordOffset - 100))}>이전</button>
-                <span>{keywordPage.total ? `${keywordOffset + 1}–${Math.min(keywordOffset + 100, keywordPage.total)} / ${keywordPage.total}` : '0개'}</span>
-                <button className="secondary-button" disabled={keywordBusy || keywordOffset + 100 >= keywordPage.total}
-                  onClick={() => setKeywordOffset(keywordOffset + 100)}>다음</button>
-              </div>}
-            </div>
-          </section>
+          {keywordCatalog}
         </> : <>
           <div className="page-heading">
             <div><div className="eyebrow">ANALYSIS / 01</div><h1>텍스트 분석</h1>
@@ -2686,6 +2778,7 @@ function App() {
               : <p className="empty-result">매칭된 키워드가 없습니다.</p>}
             <p className="result-note">분석 기록과 미매칭 후보 수집이 완료되었습니다. 동일 요청 재시도에는 같은 분석 ID를 사용합니다.</p>
           </section>}
+          {keywordCatalog}
         </>}
     </main>
   </div>

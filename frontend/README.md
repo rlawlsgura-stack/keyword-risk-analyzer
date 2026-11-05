@@ -8,6 +8,26 @@ Live preview: <https://keyword-risk-react-preview.onrender.com/>. The API is ser
 
 See [`QA_STATUS.md`](./QA_STATUS.md) for completed checks and remaining cutover work.
 
+The script-analysis screen also exposes the read-only keyword list, keyword/category/risk/evidence
+filters, filter reset, and separate filtered/full-catalog CSV downloads. These list filters do not
+change the analysis pre-filters. Filtered CSV exports include every matching page and reject
+catalog revision changes while loading.
+
+Run `npm test` with Node.js 22.13 or newer for the API pagination/export regression checks.
+The tests use Node's built-in runner and mocked authentication/network calls; they do not access
+a Supabase project. Run `npm run build` for the TypeScript and production-build checks.
+
+Unmatched review supports selecting every requestable candidate in the applied search, across
+pages; it preserves existing selections from other searches. A separate button clears candidate
+selections. Permanent-delete selections remain separate. Requests and normalization still have
+the existing 1,000-candidate limit. If paged results change in count/order while loading, selection
+stops instead of accepting a partial list; this API does not provide a transactional snapshot.
+
+The normalization workspace is available even without generated recommendations. Add a blank
+row at the end, insert before/after one selected row, or remove selected rows from the workspace.
+These edits do not delete stored candidates or catalog rows. Use **작업본 저장** to persist them;
+generating recommendations or loading a saved workspace asks before replacing existing rows.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_PUBLISHABLE_KEY` to the project's **publishable** key. Set `VITE_API_BASE_URL` to the FastAPI origin. Never put `SUPABASE_SECRET_KEY` in a `VITE_` variable.

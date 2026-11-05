@@ -989,7 +989,7 @@ def admin_normalization_settings(
     user = repository.user(credentials.credentials)
     if (user.get('app_metadata') or {}).get('role') != 'admin':
         raise HTTPException(403, 'Administrator role required')
-    symbols = repository.load_setting('ignored_special_symbols', None)
+    symbols = repository.load_setting('ignored_special_symbols', None) or {}
     suffixes = repository.load_setting('ko_suffix_whitelist', {'extra_suffixes': []})
     return {
         'ignored_symbols': symbols.get('symbols') or list(MatchingConfig().ignored_symbols),
@@ -1259,7 +1259,7 @@ def keywords(offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)
              risk: str = Query('', max_length=100), evidence_type: str = Query('', max_length=100),
              repository=Depends(get_repository)):
     df = repository.load_keywords().sort_values('kwd_no', kind='stable')
-    if q:
+    if q and not df.empty:
         searchable = df[['kwd_no', '키워드명', '대체키워드']].fillna('').astype(str).agg('\n'.join, axis=1)
         df = df[searchable.str.contains(q, regex=False, case=False)]
     if category:

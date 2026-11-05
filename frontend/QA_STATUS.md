@@ -1,5 +1,49 @@
 # React transition QA status
 
+## 2026-11-05: follow-up unmatched-review parity patch
+
+- Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the
+  user's Windows working tree or its running browser.
+- Added search-wide selection of requestable candidates using all server-filtered result pages,
+  plus candidate-selection reset. Existing selections in other searches and cross-page selections
+  are preserved; permanent-delete selections remain separate. Count changes, duplicate rows, and
+  incomplete pagination reject the new selection rather than applying a partial result. Search,
+  sort, account, or page changes invalidate an in-flight selection. The API has no transactional
+  candidate snapshot, so unchanged-count concurrent mutations cannot all be detected.
+- Added a blank first/last recommendation row, insertion above/below exactly one selected row,
+  and removal of selected workspace rows. The empty workspace remains available so users can
+  save removal of the final row. These controls never delete persisted candidates or catalog rows.
+  Existing draft-save and registration-request APIs are reused; saved row order/IDs are preserved.
+- Added replacement confirmation for generating new recommendations or loading saved rows over
+  an existing workspace. Empty manual rows have distinct accessible field labels.
+- Automated checks: frontend tests total nine (six API tests, three row-editing tests), plus
+  TypeScript/Vite production build and `git diff --check`. No dependencies were added.
+- Still unverified: this patch's browser interactions and live draft save/reload, registration
+  submission, and general-member behavior. No database writes or role changes were performed.
+  Drag-fill, recommendation-table column tools/CSV/fullscreen, and the remaining tab-parity gaps
+  are not completed by this patch.
+
+## 2026-11-05: local empty-database regressions and list-filter restoration
+
+- Reviewed GitHub `main` at `0186543b866302e87d1af1ddd7c74843c5fd08a6` in a separate checkout.
+  This checkout is not the Windows directory serving the connected local browser.
+- Fixed `/api/v1/keywords` raising an exception when a nonempty search query was used
+  against an empty catalog. The same endpoint serves inquiry-keyword searches.
+- Fixed administrator normalization settings raising an exception when no saved symbol
+  settings existed; it now returns the matching engine's default symbols without saving them.
+- Restored the keyword list and its three classification filters directly on the analysis
+  page for both members and administrators. The existing catalog page shares the same UI.
+  Added filter reset, repeat-query refresh, an explicit empty state, and filtered CSV export
+  across all result pages while retaining the separate full-catalog CSV export.
+- Checks: five read-only FastAPI tests pass (empty search/filters, nonempty literal search,
+  normalization defaults, stored settings, member-role rejection); three frontend API tests
+  pass (filtered pagination, unfiltered empty catalog, revision conflict). TypeScript/Vite
+  production build and whitespace checks pass. Tests use stubs and no live database.
+- Not verified: updated UI in the user's Windows browser, live DB-backed inquiry/settings
+  reads, filter reset interaction, downloaded CSV contents in Excel, or the remaining
+  tab-parity gaps. No database values, user roles, production deployment, or Windows files
+  were changed by this checkout. These fixes do not complete the 58-item parity review.
+
 ## Completed
 
 - [x] React production build (`npm run build`) succeeds.
@@ -28,12 +72,14 @@
 ## Remaining before switching the production UI
 
 - [x] User verified admin login, the 2026-10-30–2026-11-05 Top 10 report, and CSV download. The downloaded CSV parses as 10 rows, and its period counts match the live event log (2026-11-05).
-- [ ] Open the downloaded CSV in a spreadsheet application and visually check the displayed columns and values.
-- [ ] Visually compare the updated React shell and each page against Streamlit; the user's report review did not cover the other pages.
+- [x] `unmatched_candidates.csv` has a UTF-8 BOM, 6 columns, 5 data rows, and Hangul content; the user confirmed its date and count values are normal.
+- [ ] Excel is not installed in this environment; visual rendering of the downloaded report CSV and its 14-column layout remain unverified.
+- [x] The user reports progress comparing major React and Streamlit screens.
+- [x] User-reported React/Streamlit comparison matched on seven same-data cases (2026-11-05); this is sample coverage only. Continue remaining page-by-page visual and interaction checks.
 - [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
-The OCR dependency deployment is complete, but OCR inference has not yet been exercised with an authenticated user session. The user has now verified the report screen and downloaded its CSV. Remaining screens have not been marked complete from backend data alone. The local Python suite passes. Keep Streamlit as the production UI until the remaining signed-in checks pass.
+The OCR dependency deployment is complete. Authenticated local OCR API inference and candidate persistence have since been exercised; Render OCR behavior and React UI flow remain unverified. The user has verified the report screen and downloaded its CSV. Keep Streamlit as the production UI until the remaining signed-in checks pass.
 
 ## Browser access recovery check (2026-11-05)
 
@@ -49,7 +95,7 @@ The OCR dependency deployment is complete, but OCR inference has not yet been ex
 - `기간내_조회수` is counted from visible `kra_hits` in the selected date range. `키워드 조회 수(누적카운트)` is the separate `kra_keywords.hit_count` counter. The admin's **누적 조회수 초기화** sets that counter to zero while preserving event rows; **최근 7일 기록 리포트에서 제외** hides recent event rows from report queries without changing the counter.
 - The differing values are consistent with the documented counter-reset behavior and do not by themselves indicate duplicated report hits. The event log remains the source for period reports. The application does not persist a reset audit record, so it cannot prove the exact reset request or time from database state alone.
 
-OCR inference, member/admin page workflows beyond the report, spreadsheet-application display of the CSV, and full interaction parity remain required before switching the production UI.
+Render OCR behavior, member/admin page workflows beyond the report, Excel display of the CSV, exhaustive analysis-result parity, and full interaction parity remain required before switching the production UI. Seven same-data comparison cases have since matched; see the latest parity section.
 
 ## QA continuation (2026-11-05)
 
@@ -65,7 +111,8 @@ OCR inference, member/admin page workflows beyond the report, spreadsheet-applic
 - [x] Actual PaddleOCR 3.7.0 / PaddlePaddle 3.3.1 inference on a synthetic, non-personal Korean image extracted the expected text `안티에이징` exactly. Passing that extracted text to analysis matched B245. No persistent repository writes occurred.
 - [x] Blank image returned an empty result without crashing. Unsupported PDF produced a per-file error while the request remained available. A simulated OCR initialization failure returned HTTP 503 with an explanation; a subsequent real inference retry succeeded.
 - [ ] React upload controls, extracted text display, keyword analysis interaction, and retry messaging remain visually unverified because the browser tool session is unavailable.
-- [ ] Candidate persistence was not tested: the configured project is production, and there is no isolated persistent test account/database available in this session. Do not save OCR candidates in production for QA.
+- [x] Authenticated candidate persistence was verified through the local OCR save API using a synthetic candidate; the row was removed afterward. The local catalog is empty again; its revision is now 4 after successive local save/cleanup checks. Do not save OCR candidates in production for QA.
+- [ ] React candidate review and save UI remain visually unverified because the browser tool session is unavailable.
 
 ### Feature parity and access checks
 
@@ -84,8 +131,9 @@ OCR inference, member/admin page workflows beyond the report, spreadsheet-applic
 
 ### Spreadsheet display
 
-- [x] Microsoft Excel is installed and opened the supplied CSV. Excel rendered Korean headers and cell text correctly. In the current Excel import configuration, the entire CSV record appeared in one cell rather than 14 columns, so column/cell layout is not yet verified. The CSV itself still parses as 10 data rows × 14 fields and reconciles with the event counts.
-- [ ] Re-open/import through Excel's Text Import Wizard with comma as the delimiter, then verify all 14 columns and representative Korean cells. This result is an Excel import configuration/display check; it does not establish a malformed CSV or app defect.
+- [x] The report CSV parses as 10 data rows × 14 fields and reconciles with the event counts.
+- [ ] Excel is not installed in the current environment, so its visual rendering and 14-column layout remain unverified.
+- [ ] If Excel becomes available, import the report CSV with comma as the delimiter and verify all 14 columns and representative Korean cells.
 
 ### Report count semantics
 
@@ -97,7 +145,7 @@ OCR inference, member/admin page workflows beyond the report, spreadsheet-applic
 - [x] Full Python suite with isolated environment overrides — 103 passed, 9 skipped, 187 subtests passed; one warning. Live reset tests were not enabled.
 - [x] Real OCR API inference and error/retry checks — passed in isolated TestClient/in-memory setup as detailed above.
 
-Remaining production-switch gates: Excel comma-delimited visual confirmation; browser-connected React member/admin interaction checks; OCR React UI and isolated persistent candidate-save check; and direct React/Streamlit page comparison. Do not infer these from backend-only verification.
+Remaining production-switch gates: Excel comma-delimited visual confirmation; browser-connected React member/admin interaction checks; OCR React UI; and direct React/Streamlit page comparison. Local server-side candidate persistence has been verified, but do not infer UI completion from that backend check.
 
 ## QA preparation after b41ee63 (2026-11-05)
 
@@ -110,7 +158,8 @@ This section supersedes the prior OCR/API-only status where newer evidence is li
 - [x] Ran actual `/api/v1/ocr/extract` via FastAPI TestClient with the prepared Korean image, blank image, and unsupported PDF. HTTP 200; the Korean recognized string matched the expected value exactly; blank count was 0; PDF returned a file-level error. Storage was overridden to local CSV, and this endpoint did not persist data.
 - [x] Exercised `/api/v1/ocr/keywords` with an in-memory repository: a member save created a test row/code and counter `0`; duplicate candidate returned HTTP 422; stale revision returned HTTP 409. No database or disk repository was written.
 - [x] Role smoke test through TestClient: unauthenticated admin-users GET returned 401, a member returned 403, and the integration token returned 403. Admin users API was not called with an admin bearer because that would require actual account data; admin list rendering remains unverified.
-- [ ] Authenticated React OCR UI, actual isolated Supabase candidate persistence, and follow-through analysis in the browser remain unverified.
+- [x] Authenticated local OCR API upload and candidate persistence succeeded; a synthetic candidate became visible in the filter API and was then removed. The temporary member session was globally signed out and the account deleted.
+- [ ] Authenticated React OCR UI and follow-through analysis in the browser remain unverified.
 
 ### Next manual session materials
 
@@ -124,3 +173,108 @@ This section supersedes the prior OCR/API-only status where newer evidence is li
 - [x] Existing user changes `frontend/.env.example` and `period_topN_report.csv` were preserved and excluded from the QA changes. Global `git diff --check` reports the pre-existing extra blank line at EOF in `.env.example`; QA artifact diff is clean when staged alone.
 
 Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Production switching remains blocked by the explicitly unverified React/Streamlit visual and account workflows; no unrun checks are marked complete.
+
+## Continued QA verification (2026-11-05)
+
+- [x] Rechecked the connected browser control. Its Node runtime failed to start because a required path was unavailable; no app page, authenticated flow, or browser console was inspected in this run.
+- [x] Current `main` React production build passes (`npm run build`). This branch's `frontend/package.json` has no `test` script, so `npm run test` is unavailable here.
+- [x] Focused Python analysis and Streamlit approved-matching UI tests passed: 10 tests. Ran with `PYTHONPATH=tests` and a repository-local temporary directory to avoid the Windows temp cleanup permission failure.
+- [x] The approved-matching UI test previously attempted unmatched-candidate persistence against its placeholder `example.supabase.co` URL. The test now mocks `SupabaseRepository.collect_unmatched_terms`; rerun passed without a network request.
+- [ ] Browser-based React member/admin page checks, OCR upload/result/candidate flow, Excel 14-column display, and direct React/Streamlit visual comparison remain open. No production write was used.
+
+## Local API recovery (2026-11-05)
+
+- [x] Restored the isolated API launcher at `scripts/start_local_test_api.ps1` and created an ignored `.env.test.local` using only the running local Supabase configuration. The file is excluded through `.git/info/exclude`; its key was not printed or passed as a process argument.
+- [x] Updated `app_config.py` so an explicitly selected `KRA_ENV_FILE` overrides inherited blank environment values. Updated `repository.py` to allow HTTP only for loopback when `SUPABASE_ALLOW_LOCAL_HTTP=1`.
+- [x] Started the API from the isolated launcher. `/healthz` returned HTTP 200. React-origin CORS preflight returned HTTP 200. The unauthenticated filter request returned HTTP 401 with the expected CORS origin; a separate invalid-token request returned HTTP 401.
+- [x] An authenticated, read-only local Supabase snapshot request succeeded; the local keyword catalog currently contains 0 rows.
+- [x] A temporary local member account logged in and received HTTP 200 from `/api/v2/analysis-filters`; its session was globally signed out and the account deleted.
+- [ ] Browser UI refresh, OCR interactions, and visual parity remain unverified because the browser access host is unavailable. Local Supabase contains zero keyword rows; do not copy production catalog data for this check.
+## Local OCR inference (2026-11-05)
+
+- [x] Ran PaddleOCR with cached `PP-OCRv5_mobile_det` and `korean_PP-OCRv5_mobile_rec` on `docs/qa/ocr_korean_sample.png`; it recognized the expected Korean sample label at confidence 0.9998558.
+- [x] The same pipeline returned no text for `docs/qa/ocr_blank_sample.png`.
+- [x] Authenticated OCR API upload and candidate-save persistence were verified against local Supabase; temporary test data was removed.
+- [ ] React upload, OCR result rendering, candidate review UI, and browser follow-through remain unverified because the browser access host is unavailable. These local checks do not establish Render OCR behavior.
+## Local integration follow-up (2026-11-05)
+
+- [x] Both Vite listeners on `localhost:5173` and `127.0.0.1:5173` serve the local API base `http://127.0.0.1:8000`; this includes the `--mode test` process.
+- [x] Focused Python API/authentication test modules passed: 47 tests, 8 skipped. Test-process Supabase configuration pointed to a closed loopback port so no test could contact production.
+- [x] React production build passed (`npm run build`). `git diff --check` passed.
+- [ ] A real signed-in browser request, filter rendering, and React/Streamlit visual parity remain unverified while the browser access host is unavailable. Local Supabase currently has zero keyword rows.
+
+## Local role API smoke (2026-11-05)
+
+- [x] A temporary local member received HTTP 403 from `/api/v1/admin/users`; a temporary local admin received HTTP 200. The returned user list was not printed.
+- [x] Both temporary sessions were globally signed out and both local auth users were deleted.
+- [ ] Member/admin React navigation, page-level access controls, and visual rendering remain unverified without the browser access host.
+## OCR UI fix verification (2026-11-05)
+
+- [x] `saveOCRKeywords` serializes only `term`, `category`, `risk`, `detail`, `evidence`, and `alternative`; `node frontend/scripts/check-ocr-save-payload.mjs` passed.
+- [x] Local authenticated save accepted the whitelisted candidate and reflected it in the keyword ledger. A follow-up request with OCR-only fields returned 422, preserving server-side extra-field rejection. The synthetic row and temporary member were removed after global logout.
+- [x] Replaced the administrator email-notification `??` literals with Korean UI copy.
+- [x] Frontend build passed; focused OCR/API unit tests passed: 21 run, 6 skipped.
+- [ ] Browser retest of OCR save and all three matching modes remains pending. A later same-data React/Streamlit comparison covered seven cases; see the latest parity section.
+## Browser QA follow-up (2026-11-05)
+
+- [x] User reports the admin inquiry email notification title, description, checkbox, and save button render in Korean.
+- [x] User reports OCR recognized 15 text items and showed 13 deduplicated candidates from the supplied screenshot. Clearing all candidates disabled save; missing required classification blocked save with guidance; preview copied the selected text into analysis input.
+- [x] After the OCR payload fix, one synthetic candidate (`피부`, code B001) saved successfully; the prior HTTP 422 did not recur. Its test classification was explicitly synthetic and not used for real advertising review.
+- [x] User verified the saved test classification and review basis in keyword management. For input `피부`, exact and partial match each returned B001 once. Character-count matching for `피부관리` with minimum 2 characters returned `피부` once; minimum 3 returned zero. Highlighting and B001 detail expand/collapse worked. These are sample cases, not exhaustive combination coverage.
+- [x] Report showed B001 period hits 3 and cumulative hits 3. The downloaded CSV had UTF-8 BOM, 6 columns, 5 data rows, preserved Korean/date strings, and count 1 per row at download time. The CSV snapshot need not equal current cumulative statistics.
+- [x] User reports no browser console warnings or errors on the checked screens.
+- [x] QA-only local data was removed: B001 keyword row, 3 hit rows, 3 analysis records and their linked candidate/observation records. Existing accounts and unrelated unmatched/analysis data were retained; no account roles changed. Final local DB check: keyword ledger 0 rows, B001 hits 0, target analysis records 0; catalog revision 6. React reload showed an empty ledger.
+- [ ] At that point, same-data React/Streamlit result equivalence had not been verified. The later seven-case comparison below supersedes that status. Excel rendering and the 14-column spreadsheet layout remain unverified because Excel is unavailable. Earlier test/build results in this file were reported by VS Code Codex and were not rerun as part of the browser QA session.
+## Patch applied to this Windows working copy (2026-11-05)
+
+- [x] Applied `react_parity_fixes.patch` after `git apply --check` succeeded. Existing unrelated working-tree edits were preserved; no commit, push, or deployment was made.
+- [x] Re-ran the five read-only empty-catalog API tests: all 5 passed.
+- [x] Re-ran the three frontend catalog API tests: all 3 passed. `npm run build` passed.
+- [x] `git diff --check` passed. The local Vite server on port 5173 returned the patched `src/App.tsx` module (HTTP 200), including the catalog UI and filtered export code.
+- [ ] Visual/browser interaction validation is still pending: the connected browser tool reported that its browser access host is unavailable. The server/source response is not a visual UI check.
+- [ ] At the time of this entry, no comparison data had been entered. A later same-data comparison is documented in the latest parity section; remaining tabs and interactions are follow-up work.
+- [x] Restarted the local API from `scripts/start_local_test_api.ps1` after the `api.py` change. React, API, Streamlit, local Auth, and the read-only local ledger request returned HTTP 200; the ledger was then empty.
+## Unmatched parity follow-up applied locally (2026-11-05)
+
+- [x] Applied `react_unmatched_parity_followup.patch` to the current Windows working copy after its applicability check passed. Prior uncommitted changes and unrelated user files were preserved.
+- [x] Added search-wide requestable-candidate selection across result pages, separate clear-selection action, manual normalization-workspace row insertion/removal, and replacement confirmation before generating or loading over an existing workspace.
+- [x] In-flight select-all is invalidated on page, account, search, sort, or result-page changes. It rejects count changes, duplicate rows, and incomplete result pages; the paged endpoint does not offer a transactional snapshot, so same-count concurrent reorderings cannot be fully excluded.
+- [x] Frontend tests: 9 passed; production build passed; `git diff --check` passed. These tests use mocks and do not write to Supabase.
+- [x] User reports live React browser verification of the unmatched UI: selected all 144 requestable candidates, moved to page 2 with selection retained, cleared selection, added a blank row, inserted rows above/below while preserving existing input, confirmed insert controls disable with multiple rows selected, and removed all workspace rows to return to 0.
+- [x] The browser exercise used only unsaved UI state. The user reports no draft save, registration request, approval/rejection, permanent candidate deletion, or catalog write. The temporary UI rows were removed.
+- [x] Read-only local `kra_snapshot()` after the exercise returned HTTP 200, revision 8, and 0 catalog rows.
+- [ ] Saved draft save/reload, replacement confirmation, general-member behavior, search/sort and mixed processed-candidate cases, concurrent candidate changes, and more than 1,000 candidates remain unverified.
+- [ ] Drag-fill, recommendation table column tools/CSV/fullscreen, and the remaining tab-parity review are still open.
+## Same-data React/Streamlit comparison (2026-11-05)
+
+- [x] User reports both local apps were signed in to the local admin account and used the same local Supabase catalog. The test catalog began empty at revision 6; two synthetic keywords were added for comparison. The test basis was explicitly synthetic and not for real advertising review.
+- [x] Seven reported cases matched between React and Streamlit:
+  - Exact match, `올인원 안티에이징`: 2 matches (`올인원` → B002, `안티에이징` → B001), with matching highlights and linked codes.
+  - Partial match, `안티`: 0 matches in both; both showed the empty-result state.
+  - Partial match, `올인원 안티에이징`: 2 matches in both, with matching detected terms, highlights, and linked codes.
+  - Character-count match, `인원안티`, minimum 2: 2 matches (`인원` → B002, `안티` → B001), with matching highlights.
+  - Character-count match, `인원안티`, minimum 3: 0 matches in both; both showed the empty-result state.
+  - Exact match, `안티 에이징`, whitespace matching enabled: 1 match (`안티 에이징` → B001), with matching highlight.
+  - Exact match, `안티 에이징`, whitespace matching disabled: 0 matches in both; both showed the empty-result state.
+- [x] User reports matching result fields for both keywords: code, keyword, category, synthetic risk grade, alternative, and review criteria. B001 details also showed matching registered expressions, input text, classification, and review criteria.
+- [x] Test cleanup was reported complete: B001/B002 rows, 10 analysis records, 18 hit records, 16 collection events, and 8 unmatched observations were removed; other accounts and existing records were preserved, with no role changes. The local `kra_snapshot()` was independently checked read-only after cleanup: HTTP 200, revision 8, 0 rows.
+- [ ] Coverage is limited to these seven examples and does not establish parity across all inputs, filters, normalization settings, nested-match combinations, or screens. One React option-change run showed no result area before the user checked state and retried; the retry showed the expected zero-result state, but the timing cause is unknown.
+- [ ] Excel visual rendering and the 14-column layout remain unverified. Other tab interactions and recommendation-table drag-fill, column tools, CSV, and fullscreen parity remain open.
+## Recommendation draft round-trip precheck (2026-11-05)
+
+- [x] Historical read-only precheck before the draft round-trip test found 0 saved workspaces. The later test saved one intentionally empty workspace; see the latest round-trip section below.
+- [ ] At the time of this precheck, browser round-trip verification had not yet run. The subsequent user-reported screen test is documented below; overwrite confirmation with unsaved edits remains unverified.
+## Recommendation draft persistence browser QA (2026-11-05)
+
+- [x] User reports saving a temporary two-row draft and verifying page re-entry restored both rows, including exact content, embedded newline, order A→B, and selected state A=false/B=true. The saved test values were `QA_DRAFT_A_20261105` and `QA_DRAFT_B_20261105`; no unrelated workspace rows were present.
+- [x] User reports loading the saved draft from an empty workspace and confirming the same two rows, multiline text, ordering, and selection state were restored.
+- [x] User removed only the two QA rows from the unsaved workspace and saved the empty workspace. After refresh and re-entry, the UI showed 0 rows and 0 selected. This is an empty saved payload, not deletion of the draft record.
+- [x] User reports the 144 accumulated unmatched candidates were preserved; no candidate deletion, registration request, catalog write, role change, or approval/rejection was performed.
+- [x] Independent read-only local DB checks: snapshot HTTP 200, revision 8, 0 keywords; unmatched candidate page HTTP 200, total 144; draft table HTTP 200, 1 record with empty recommendations and empty selection.
+- [ ] Confirming the overwrite dialog while the current workspace contains unsaved edits remains unverified. Do not infer it from loading the saved draft over an empty screen. Excel display and unrelated parity gaps remain open.
+## Remaining parity checks review (2026-11-05)
+
+- [ ] The overwrite-confirmation path was not exercised: the browser access host remains unavailable. No dialog was accepted and no saved work was changed in this check.
+- [ ] Windows inspection found no Excel command, Excel App Paths entry, Microsoft Office/365 or spreadsheet application in the uninstall registry, and no LibreOffice command. Excel's actual CSV rendering and 14-column layout remain unverified; no application was installed.
+- [x] Code-level option mapping reviewed: React sends mode, partial minimum length, four normalization flags, and category/risk prefilters; Streamlit builds the corresponding `MatchingConfig` and category/risk filters, with both paths calling the shared matching implementation.
+- [ ] This source review does not verify additional screen, filter, or option combinations. Existing same-data browser evidence remains limited to the seven cases above; no new test data or DB writes were made.
