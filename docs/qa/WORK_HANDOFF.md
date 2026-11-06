@@ -51,6 +51,11 @@ The 2026-11-06 OCR follow-up passed the 8-test Python OCR suite and the React OC
 contract check. The suite uses mocked OCR for extraction/Streamlit tests and headless Chrome for
 overlay geometry; the React OCR UI and live model inference were not exercised.
 
+The 2026-11-06 member/admin API follow-up passed 41 tests across analysis, empty-catalog access,
+keyword inquiries, and unmatched persistence. These checks use mocks/local test clients, with
+external Supabase credentials removed; they do not replace signed-in React screen or DB-persistence
+verification.
+
 ## Environment notes
 
 - Known local addresses: React `http://127.0.0.1:5173/`, API `http://127.0.0.1:8000/`, Streamlit

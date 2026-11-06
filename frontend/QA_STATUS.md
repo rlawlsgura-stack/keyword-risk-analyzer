@@ -333,3 +333,10 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] `node scripts/check-ocr-save-payload.mjs` — PASS; only the six server-accepted candidate fields are serialized.
 - [x] No database writes, live API requests, or OCR model inference were performed in this follow-up. Test-generated temporary files were removed.
 - [ ] React OCR upload/result interaction, blank-image and recovery states, and signed-in candidate persistence remain UI checks. The browser access host is unavailable.
+
+### Member/admin API regression follow-up (2026-11-06)
+
+- [x] Focused isolated tests passed: `test_current_analysis`, `test_empty_catalog_api`, `test_keyword_requests`, and `test_unmatched_persistence` — 41 tests passed.
+- [x] These mocked/local tests cover member/admin authorization boundaries, request ownership and reply relationships, registration-request role enforcement, normalization-setting access, and analysis read/write guards. External Supabase credentials were removed from the test process, `STORAGE_BACKEND=csv`, and `KRA_TEST_LIVE_RESET=0`.
+- [x] No live DB, production API, role change, inquiry mutation, approval, or candidate deletion was used. The logged temporary storage failure is an expected mocked retry-path test.
+- [ ] This does not verify signed-in React member/admin screens, pagination, real persistence, or complete Streamlit parity. Browser-host and isolated-DB UI checks remain open.
