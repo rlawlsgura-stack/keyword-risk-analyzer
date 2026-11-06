@@ -76,6 +76,23 @@
   API, download a browser file, or access Supabase. UI export and Excel inspection of a fresh React
   download remain open because browser control is unavailable.
 
+## 2026-11-06: requested three-track QA continuation
+
+- Rechecked local services: React `127.0.0.1:5173/` and API health `127.0.0.1:8000/healthz`
+  returned 200. Local Supabase `127.0.0.1:54321/rest/v1/` and Streamlit `127.0.0.1:8501/` were
+  unavailable. No separate-PC test environment was connected to this session.
+- Windows Computer Use again failed to determine the active React Chrome URL. No report download,
+  sign-in interaction, production text analysis, OCR upload, or candidate save was performed.
+- Safe isolated regression checks passed: 41 analysis/member/API persistence tests, 8 OCR tests,
+  and 19 Streamlit approved-matching/shared-unmatched AppTests. `STORAGE_BACKEND=csv`,
+  `KRA_TEST_LIVE_RESET=0`, and the Supabase URL, secret, and publishable-key variables were unset
+  for these test processes. The first AppTest invocation used a module path that could not import
+  `test_integration`; rerunning with `unittest discover` passed all 19 tests.
+- The current `.venv` has neither `paddleocr` nor `paddle` installed, so live Korean model inference
+  was not available locally. No package or model was downloaded.
+- These checks do not complete the requested live React/production or separate-PC test-environment
+  QA. No production or test database was queried or changed, and no data was deleted.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the

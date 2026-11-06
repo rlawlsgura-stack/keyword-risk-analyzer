@@ -52,6 +52,11 @@ full activity transcript. Record dated verification details and evidence in
 - The report CSV row builder is now covered in isolation: 17 frontend tests pass and the production
   build passes, including 14-column order, Korean text, dates, counts, CSV escaping, and formula
   safety. This still does not verify a live browser download or Excel rendering of that download.
+- The latest three-track attempt rechecked React/API as healthy but found local Supabase and
+  Streamlit unavailable and had no attached second-PC test environment. Mock/local suites passed:
+  41 analysis/member API tests, 8 OCR tests, and 19 Streamlit AppTests. PaddleOCR is not installed in
+  this `.venv`; no live model inference or database request/write occurred. See the latest
+  `frontend/QA_STATUS.md` entry for exact scope. The three live/UI QA items remain open.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.
