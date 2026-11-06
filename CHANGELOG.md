@@ -1,3 +1,8 @@
+## React preview 0.1.3
+
+- Add an isolated local Supabase stack with synthetic test data and local-only test account setup.
+- Provide separate React and API launch scripts that enforce the local test endpoints.
+
 ## React preview 0.1.2
 
 - Record the user-verified unsaved-draft overwrite confirmation path and add a cross-PC QA handoff.
