@@ -1,5 +1,28 @@
 # React transition QA status
 
+## 2026-11-06: environment split and cross-PC handoff
+
+- This PC's local React page returned at `http://127.0.0.1:5173/`; local FastAPI health returned
+  200 at `http://127.0.0.1:8000/healthz`. The API environment reported
+  `STORAGE_BACKEND=supabase`, and the Supabase dashboard identified the connected project branch
+  as `main / PRODUCTION`. Record any QA against this target as production-backed, not local/test.
+- The user authorized text-analysis runs, OCR, and candidate saves against the production-backed
+  environment, while prohibiting deletion of the full dataset. For this QA, do not delete records
+  or perform unrelated admin changes. This is user authorization, not evidence that those flows
+  have already been exercised.
+- The agent did not execute a new analysis, upload OCR files, save candidates, or perform any DB
+  write in this session: computer control stopped before the first UI action because it could not
+  determine Chrome's current URL. The shared screenshot showed analysis results, but this log does
+  not attribute a new request or database write to that display.
+- The next PC may point to a distinct isolated test Supabase. Track its evidence separately under a
+  `TEST` or `LOCAL` label; production and test DB rows, counters, and screenshots are not shared.
+- Cross-PC session record: before testing, note date, PC/environment label, frontend and API
+  origins, `STORAGE_BACKEND`, and DB classification. Never record or sync secret values. Commit and
+  push intended QA/code changes; on the other PC pull `main`, check its worktree, and read the latest
+  handoff and QA status. Reconfirm the effective DB target after changing machines or terminals.
+- Status: environment attribution documented; authorized live analysis/OCR/candidate-save UI QA
+  remains pending. Do not mark it complete until a result and its database effect are observed.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the

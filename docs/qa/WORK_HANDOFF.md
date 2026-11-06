@@ -26,22 +26,49 @@ full activity transcript. Record dated verification details and evidence in
   and report date-range client/API behavior now has mock-backed tests; actual spreadsheet rendering
   and the 14-column layout remain unverified.
 
+## Environment-specific QA and cross-PC continuity (2026-11-06)
+
+- The React page was opened locally at `http://127.0.0.1:5173/` and the API health endpoint at
+  `http://127.0.0.1:8000/healthz` returned 200. The API process reported
+  `STORAGE_BACKEND=supabase`; its Supabase host was confirmed in the dashboard, whose branch badge
+  read `main / PRODUCTION`. Treat this PC's current API target as production, not a test database.
+- The user authorized production-backed text analysis, OCR, and candidate saves, and explicitly
+  prohibited deleting the full dataset. This authorization does not include unrelated admin
+  changes. Do not delete data during this QA, including cleanup of individual test records, unless
+  the user separately asks for that cleanup.
+- No new analysis, OCR upload, candidate save, or other database write was performed by the agent
+  in this handoff session. The browser automation host could not determine the active Chrome URL
+  and stopped before any UI action. An analysis result was visible in the user's screenshot, but
+  its execution time and whether it wrote to the database were not established here.
+- A second PC may use a separate isolated test Supabase. Record it as a separate environment and
+  never imply its data or results are shared with this production project. Do not copy `.env`,
+  credentials, or database contents between PCs.
+- At the start of each PC session, record the date, PC/environment label, frontend/API origins,
+  `STORAGE_BACKEND`, and database classification (`PRODUCTION`, `TEST`, or `LOCAL`) without
+  recording keys. Keep QA results and any observed database effects under that environment label.
+  Recheck the target after changing terminals, environment files, or machines.
+- To hand work off, commit and push only the intended tracked code/docs, then on the receiving PC
+  pull `main`, inspect `git status --short --branch`, and read this handoff plus the latest dated
+  `frontend/QA_STATUS.md` entry. Local credentials and DB state remain machine-specific.
+
 ## Next work, in order
 
 1. The user will verify CSV rendering in an Excel-equipped environment, including all 14 report
    columns, Korean text, dates, and counts. Keep this open until that visual result is reported.
-2. Verify the React OCR screen in a signed-in local test session: Korean sample, blank image,
-   per-file errors/retry, candidate selection/required fields, analysis handoff, and persistence only
-   after confirming the API points at an isolated database. The OCR regression suite passed 8/8 and
-   the save-payload contract passed, but neither proves React screen behavior or model inference.
-3. Continue the checklist's remaining member/admin UI checks in a confirmed local test environment:
+2. Complete the explicitly authorized React live QA on this PC: run text analysis; check OCR with a
+   non-sensitive test image; and save only the intended test candidate. Before acting, reconfirm the
+   API target and record it as production. Do not delete records or use unrelated admin actions.
+   The OCR regression suite passed 8/8 and the save-payload contract passed, but neither proves
+   React screen behavior or live model inference.
+3. Continue the checklist's remaining member/admin UI checks in a confirmed isolated test environment:
    OCR upload/results and error recovery; keyword inquiries; user and keyword management; unmatched
    candidate search/sort; registration request review; normalization settings.
 4. Compare the remaining React and Streamlit screen interactions using the same isolated catalog
    and record each observed case. Existing parity evidence covers seven examples only.
-5. Keep operational writes isolated. Do not test by changing production Supabase/Render data or
-   settings. Before any local DB mutation, identify the local Supabase URL and test rows; remove only
-   QA data created in that test.
+5. Before any further live QA action, verify and record the active environment on that PC. On the
+   current production target, limit work to the user's authorized text-analysis, OCR, and candidate
+   save flows. Do not delete data or change unrelated catalog, user, role, Supabase, or Render
+   settings. On another PC, use its isolated test database and keep its evidence separate.
 
 The 2026-11-06 report date-range follow-up added isolated tests: backend 9/9 and frontend 15/15.
 These checks cover API parameter and response behavior only; no live database, report screen, or
