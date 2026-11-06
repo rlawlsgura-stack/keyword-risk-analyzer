@@ -46,6 +46,9 @@ full activity transcript. Record dated verification details and evidence in
   still could not establish the current Chrome URL, so no React report request/download or live QA
   action was made. Frontend tests passed 15/15 and the production build passed; these are mocked
   client-contract/build checks, not live Supabase or browser evidence.
+- A further report-export retry again found the local services healthy but no attachable browser
+  session. The report API requires the signed-in bearer token, so no unauthenticated API workaround
+  was attempted. The next step needs browser control restored or a CSV downloaded by the user.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.

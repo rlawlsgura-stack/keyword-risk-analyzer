@@ -55,6 +55,17 @@
   of all 14 fields, Korean text, dates, and counts. Continue to avoid all data deletion and unrelated
   admin changes.
 
+## 2026-11-06: report export retry
+
+- React and API health remained available, but the Windows browser-control host reported no
+  attachable browser session. Binding the visible React Chrome window stopped because the tool
+  could not determine its current URL. No UI action was sent.
+- The report API requires the signed-in user's bearer token. No direct API call was made without
+  that session, and no credential was extracted from the browser or environment.
+- No CSV was downloaded and no database request/write occurred. Continue from an authenticated
+  React browser session when browser control is available; alternatively, the user can download
+  the report CSV and provide that file for Excel inspection. No data was deleted.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the
