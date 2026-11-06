@@ -9,8 +9,8 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Current state
 
-- Branch: `main`. The previously synced baseline was `ed49f51`; this session adds isolated
-  report-date tests and QA notes. Before switching PCs, pull the latest `main` and check its status.
+- Branch: `main`. The previously synced baseline was `fdab4b1`; this session adds OCR regression
+  results and QA notes. Before switching PCs, pull the latest `main` and check its status.
 - React preview package version was advanced from `0.1.1` to `0.1.2` for this QA/documentation
   update. The Streamlit baseline remains FIXED329; this is not a Streamlit code release.
 - The React transition remains in QA. Streamlit remains the production UI until the remaining
@@ -28,21 +28,28 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Next work, in order
 
-1. Verify CSV rendering in Excel or LibreOffice, including all 14 report columns, Korean text,
-   dates, and counts. If neither application is available, leave this explicitly blocked rather
-   than treating CSV parsing as visual verification.
-2. Continue the checklist's remaining member/admin UI checks in a confirmed local test environment:
+1. The user will verify CSV rendering in an Excel-equipped environment, including all 14 report
+   columns, Korean text, dates, and counts. Keep this open until that visual result is reported.
+2. Verify the React OCR screen in a signed-in local test session: Korean sample, blank image,
+   per-file errors/retry, candidate selection/required fields, analysis handoff, and persistence only
+   after confirming the API points at an isolated database. The OCR regression suite passed 8/8 and
+   the save-payload contract passed, but neither proves React screen behavior or model inference.
+3. Continue the checklist's remaining member/admin UI checks in a confirmed local test environment:
    OCR upload/results and error recovery; keyword inquiries; user and keyword management; unmatched
    candidate search/sort; registration request review; normalization settings.
-3. Compare the remaining React and Streamlit screen interactions using the same isolated catalog
+4. Compare the remaining React and Streamlit screen interactions using the same isolated catalog
    and record each observed case. Existing parity evidence covers seven examples only.
-4. Keep operational writes isolated. Do not test by changing production Supabase/Render data or
+5. Keep operational writes isolated. Do not test by changing production Supabase/Render data or
    settings. Before any local DB mutation, identify the local Supabase URL and test rows; remove only
    QA data created in that test.
 
 The 2026-11-06 report date-range follow-up added isolated tests: backend 9/9 and frontend 15/15.
 These checks cover API parameter and response behavior only; no live database, report screen, or
 spreadsheet application was used.
+
+The 2026-11-06 OCR follow-up passed the 8-test Python OCR suite and the React OCR save-payload
+contract check. The suite uses mocked OCR for extraction/Streamlit tests and headless Chrome for
+overlay geometry; the React OCR UI and live model inference were not exercised.
 
 ## Environment notes
 

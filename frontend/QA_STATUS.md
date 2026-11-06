@@ -325,3 +325,11 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Static SQL review confirms range endpoints are inclusive in Korea Standard Time: timestamps are filtered from the start date through, but not including, midnight after the selected end date.
 - [x] Verification: `tests/test_empty_catalog_api.py` — 9 passed; frontend `npm test` — 15 passed. No UI or live DB report request was made.
 - [ ] Excel/LibreOffice display, date-range screen interaction, downloaded report CSV visual layout, and remaining member/admin and cross-page parity checks remain open. Browser access host is unavailable.
+
+### OCR regression follow-up (2026-11-06)
+
+- [x] Reviewed React OCR upload limits and result states, per-file error rendering, selected-candidate required fields, analysis handoff, and explicit save-payload field mapping. No new production-code defect was identified in this review.
+- [x] Existing isolated OCR suite passed: `python -m unittest discover -s tests -p "test_ocr_*.py"` — 8 passed. This covers mocked OCR/Streamlit preview behavior, text-box geometry in headless Chrome, and existing OCR collection/import behavior; it is not a new PaddleOCR inference or authenticated React browser run.
+- [x] `node scripts/check-ocr-save-payload.mjs` — PASS; only the six server-accepted candidate fields are serialized.
+- [x] No database writes, live API requests, or OCR model inference were performed in this follow-up. Test-generated temporary files were removed.
+- [ ] React OCR upload/result interaction, blank-image and recovery states, and signed-in candidate persistence remain UI checks. The browser access host is unavailable.
