@@ -75,20 +75,20 @@ full activity transcript. Record dated verification details and evidence in
 1. In the React report screen, export a fresh CSV and inspect it in Excel. Confirm all 14 fields,
    Korean text, dates, and counts. The existing workspace CSV was readable after selecting UTF-8
    and comma in Excel's import wizard, but that does not verify the React download path.
-2. Complete the explicitly authorized React live QA on this PC: run text analysis; check OCR with a
-   non-sensitive test image; and save only the intended test candidate. Before acting, reconfirm the
-   API target and record it as production. Do not delete records or use unrelated admin actions.
-   The OCR regression suite passed 8/8 and the save-payload contract passed, but neither proves
-   React screen behavior or live model inference.
+2. Complete the explicitly authorized React live QA on this PC against the local test stack: run
+   text analysis; check OCR with a non-sensitive test image; and save only the intended test
+   candidate. Before acting, reconfirm the API target and record it as LOCAL. Do not delete records
+   or use unrelated admin actions. The OCR regression suite passed 8/8 and the save-payload
+   contract passed, but neither proves React screen behavior or live model inference.
 3. Continue the checklist's remaining member/admin UI checks in a confirmed isolated test environment:
    OCR upload/results and error recovery; keyword inquiries; user and keyword management; unmatched
    candidate search/sort; registration request review; normalization settings.
 4. Compare the remaining React and Streamlit screen interactions using the same isolated catalog
    and record each observed case. Existing parity evidence covers seven examples only.
 5. Before any further live QA action, verify and record the active environment on that PC. On the
-   current production target, limit work to the user's authorized text-analysis, OCR, and candidate
-   save flows. Do not delete data or change unrelated catalog, user, role, Supabase, or Render
-   settings. On another PC, use its isolated test database and keep its evidence separate.
+   current runtime, use the local Supabase test project for test analysis, OCR, candidate saves, and
+   member/admin screens. Do not delete data or change unrelated catalog, user, role, Supabase, or
+   Render settings. Keep the earlier production QA authorization separate from this local test data.
 
 The 2026-11-06 report date-range follow-up added isolated tests: backend 9/9 and frontend 15/15.
 These checks cover API parameter and response behavior only; no live database, report screen, or
@@ -118,6 +118,29 @@ This is not evidence for the corresponding React screens or all current Streamli
   the intended diff. Preserve untracked files; do not blanket-stage the workspace.
 - To continue on another PC, sync the intended tracked documentation/code changes through the
   repository. A local uncommitted handoff does not appear on another checkout automatically.
+
+## Local Supabase test environment (2026-11-06)
+
+- This PC now runs the React preview and API against the same local Supabase stack. The frontend
+  module reports Supabase Auth at `http://127.0.0.1:54321` and API at `http://127.0.0.1:8000`;
+  the running API process has `STORAGE_BACKEND=supabase` and `SUPABASE_URL` on loopback port 54321.
+  `/healthz`, local Auth health, local test-admin login, and authenticated `/readyz` returned 200.
+- The local DB was initialized from the tracked `supabase/schema.sql` migration and contains only
+  two synthetic `LOCAL` keyword rows. Local Auth contains one generated admin account
+  (`kra-admin@example.test`). No production users, auth records, or database rows were copied.
+  Its generated password is stored only in the ignored `.local-test-credentials.txt` file.
+- To recreate on another Windows PC: install/start Docker Desktop, run `npm ci` in `frontend`, then
+  run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start_local_test_supabase.ps1`.
+  In separate terminals, run `scripts/start_local_test_api.ps1` and
+  `scripts/start_local_test_frontend.ps1` with the same PowerShell options. The Supabase CLI is
+  pinned as a frontend dev dependency; the stack and test account are local to each PC.
+- The local stack uses Supabase ports 54321–54324, API port 8000, and React port 5173. The setup
+  script requires Windows Firewall enabled with inbound traffic blocked on all profiles. Docker
+  publishes Supabase ports through wildcard bindings, so do not add inbound allow rules; use only
+  the loopback URLs. No firewall settings were changed during setup.
+- `.env.test.local`, `frontend/.env.test.local`, local credentials, and Supabase `.temp` state are
+  ignored. The normal `.env` files still contain this PC's prior settings; always launch through
+  the test scripts so local values override them. No remote Supabase project was linked or written.
 
 ## Working-copy caution at this update
 

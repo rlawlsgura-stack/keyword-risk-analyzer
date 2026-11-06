@@ -442,3 +442,11 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Repository and API calls are mocked; the UI fixture explicitly fails if a network request occurs. No local or production DB was changed.
 - [ ] The shared-unmatched UI tests target older numbered FIXED app snapshots; the AppTest is not React browser evidence. React role-gated screens, admin page reads/writes, and full Streamlit/React parity remain open.
 - [ ] The first run's assertions passed but Python reported a Windows Temp cleanup permission error after completion. The repeat used a project-local temporary path and removed it; no test artifacts remain in the workspace.
+
+### Isolated local Supabase setup (2026-11-06)
+
+- [x] Added a pinned local Supabase CLI dependency, local config/migration/seed, and separate React/API launch scripts. The local seed contains two synthetic catalog rows; local Auth contains one generated admin account. Production users, credentials, and data were not copied.
+- [x] Runtime inspection confirmed React uses Supabase Auth at `http://127.0.0.1:54321` and API at `http://127.0.0.1:8000`. The running API process uses `STORAGE_BACKEND=supabase` and a loopback `SUPABASE_URL` on port 54321.
+- [x] Local Auth health, test-admin sign-in, API `/healthz`, and authenticated `/readyz` returned 200. Local DB read-only counts showed two keyword rows and one test admin; no production DB operation was made.
+- [x] Windows Firewall is enabled with inbound blocked on all active profiles. Supabase container ports publish through Docker wildcard bindings, so keep using loopback URLs and do not add inbound allow rules.
+- [ ] This establishes local service wiring and authenticated DB readiness; React screen workflows, OCR model inference, candidate persistence, member/admin screen QA, and React–Streamlit comparison remain open.

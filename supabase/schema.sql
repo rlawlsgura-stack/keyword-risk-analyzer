@@ -1,5 +1,9 @@
 -- Server-only schema. Apply once in the selected Supabase project's SQL Editor.
 -- Legacy public.keywords is outside this app schema; see secure_legacy_keywords.sql.
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
 create table public.kra_state (
     id boolean primary key default true check (id),
     revision bigint not null default 0,
@@ -405,7 +409,10 @@ create policy kra_keyword_request_messages_insert_owner_or_admin
                   or (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
               )
         )
-    );\n\n\n-- Bind each administrator reply to exactly one user inquiry message.
+    );
+
+
+-- Bind each administrator reply to exactly one user inquiry message.
 -- Safe to run repeatedly on a project with the message-history table installed.
 
 alter table public.kra_keyword_request_messages
@@ -497,6 +504,54 @@ begin
     end loop;
 end $$;
 
+create or replace function private.kra_can_reply_to_keyword_inquiry(
+    p_request_id uuid,
+    p_inquiry_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+    select case
+        when (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' then
+            exists (
+                select 1
+                from public.kra_keyword_request_messages parent
+                where parent.id = p_inquiry_id
+                  and parent.request_id = p_request_id
+                  and parent.author_role = 'user'
+                  and not exists (
+                      select 1
+                      from public.kra_keyword_request_messages response
+                      where response.reply_to_id = parent.id
+                  )
+            )
+        else
+            exists (
+                select 1
+                from public.kra_keyword_requests r
+                join public.kra_keyword_request_messages parent
+                  on parent.request_id = r.id
+                where r.id = p_request_id
+                  and r.requester_id = (select auth.uid())
+                  and parent.id = p_inquiry_id
+                  and parent.author_role = 'admin'
+                  and not exists (
+                      select 1
+                      from public.kra_keyword_request_messages response
+                      where response.reply_to_id = parent.id
+                  )
+            )
+    end;
+$function$;
+
+revoke all on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
+    from public, anon, authenticated;
+grant execute on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
+    to authenticated;
+
 drop policy if exists kra_keyword_request_messages_insert_owner_or_admin
     on public.kra_keyword_request_messages;
 create policy kra_keyword_request_messages_insert_owner_or_admin
@@ -559,58 +614,6 @@ where nullif(btrim(r.admin_reply), '') is not null
       from public.kra_keyword_request_messages response
       where response.reply_to_id = initial.id
   );
-
-create schema if not exists private;
-revoke all on schema private from public, anon;
-grant usage on schema private to authenticated;
-
-create or replace function private.kra_can_reply_to_keyword_inquiry(
-    p_request_id uuid,
-    p_inquiry_id uuid
-)
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $function$
-    select case
-        when (select auth.jwt() -> 'app_metadata' ->> 'role') = 'admin' then
-            exists (
-                select 1
-                from public.kra_keyword_request_messages parent
-                where parent.id = p_inquiry_id
-                  and parent.request_id = p_request_id
-                  and parent.author_role = 'user'
-                  and not exists (
-                      select 1
-                      from public.kra_keyword_request_messages response
-                      where response.reply_to_id = parent.id
-                  )
-            )
-        else
-            exists (
-                select 1
-                from public.kra_keyword_requests r
-                join public.kra_keyword_request_messages parent
-                  on parent.request_id = r.id
-                where r.id = p_request_id
-                  and r.requester_id = (select auth.uid())
-                  and parent.id = p_inquiry_id
-                  and parent.author_role = 'admin'
-                  and not exists (
-                      select 1
-                      from public.kra_keyword_request_messages response
-                      where response.reply_to_id = parent.id
-                  )
-            )
-    end;
-$function$;
-
-revoke all on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
-    from public, anon, authenticated;
-grant execute on function private.kra_can_reply_to_keyword_inquiry(uuid, uuid)
-    to authenticated;
 
 drop policy if exists kra_keyword_request_messages_insert_owner_or_admin
     on public.kra_keyword_request_messages;
