@@ -285,7 +285,7 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Reconciled the current progress against dated browser evidence and the design baseline in `docs/qa/SCREEN_QA_CHECKLIST.md`.
 - [x] The current manual screen checklist has 15 workflow groups: 3 have no browser evidence, 12 are partial/sample-only, and none completes every criterion in its group. This count is a scope tracker, not a readiness percentage.
 - [x] Clarified that the historical “58-item parity review” reference has no canonical 58-row checklist in this repository; it is not used as a progress metric.
-- [ ] Highest-priority blockers remain the unsaved-edit overwrite confirmation and Excel’s real 14-column rendering. Broader member/admin and screen parity remains substantial follow-up work.
+- [x] The unsaved-edit overwrite confirmation was later verified by the user in the browser; see the 2026-11-06 follow-up below. Excel’s real 14-column rendering remains a high-priority blocker, with broader member/admin and screen parity still open.
 
 ### Local verification (2026-11-06)
 
@@ -302,7 +302,14 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Source review: loading a saved recommendation draft prompts whenever the visible workspace has at least one row. On confirmation it reloads the saved payload and replaces the visible rows and selected IDs. It does not track whether rows are dirty, so the warning also appears for an unchanged non-empty workspace.
 - [x] Fixed silent replacement on SPA page re-entry: an account's saved draft is now auto-load attempted once; returning to the page preserves the current workspace. A different account clears the previous account's in-memory rows before loading its own draft. Explicit saved-draft reload remains available through the confirmation button.
 - [x] Added state tests for first load, same-account page revisit, explicit refresh, account change, and signed-out state.
-- [ ] The browser access host was still unavailable on recheck. The confirmation was not clicked, no draft was written or replaced, and the browser path remains unverified.
+- [x] At that initial recheck, the browser access host was unavailable; the confirmation had not been clicked, and no draft was written or replaced. The later user-reported browser result is recorded below.
+
+### User-reported draft overwrite confirmation (2026-11-06)
+
+- [x] After adding an unsaved blank row, the user clicked “저장된 작업본 불러오기”, accepted the overwrite confirmation, and returned to a workspace showing 0 rows and 0 selected. This verifies the confirmation-and-replacement path for the saved empty draft.
+- [x] The user-provided screenshots show the transient 1-row/0-selected state and the final 0-row/0-selected state. The user reports accepting the confirmation between them.
+- [x] This used the previously saved empty draft and changed only unsaved UI state; no save, registration request, approval/rejection, candidate deletion, or catalog write was reported.
+- [ ] The agent could not independently control the browser because its access host remained unavailable. Excel’s actual 14-column rendering and broader interaction parity remain open.
 
 ### Streamlit source baseline check (2026-11-06)
 

@@ -107,7 +107,7 @@ workflow or role/edge-case coverage has not. No row implies production readiness
 | 7 | OCR candidate review and analysis handoff | Partial — candidate selection/validation and copying selected text to analysis input were observed. | Full follow-through across representative cases and error recovery. |
 | 8 | OCR candidate persistence | Sample verified — one synthetic candidate saved successfully and was removed afterward. | Broader classification/error cases; Render behavior remains separate and unverified. |
 | 9 | Unmatched candidate selection | Partial — selected all 144, retained selection on page 2, then cleared it (`unmatched_followup_browser_qa_20261105.txt`). | Search/sort changes, processed-status mixtures, concurrent changes, and over 1,000 rows. |
-| 10 | Normalization workspace and draft persistence | Partial — two-row save/re-entry/load restored contents, newline, order and selection; empty draft persisted after refresh (`draft_persistence_qa_20261105.txt`). Source and unit checks confirm the initial saved-draft load is attempted once per account, revisiting the page does not reload it, and explicit load asks before replacing any non-empty workspace. | Browser confirmation with unsaved edits remains unverified. The current prompt is based on row count, not a dirty-state check, so it also appears when rows have not changed. |
+| 10 | Normalization workspace and draft persistence | Partial — two-row save/re-entry/load restored contents, newline, order and selection; empty draft persisted after refresh (`draft_persistence_qa_20261105.txt`). The user also added an unsaved blank row, accepted the load-overwrite confirmation, and reported returning to 0 rows/0 selected. | Broader row-content/selection overwrite cases remain open. The prompt is based on row count, not a dirty-state check, so it also appears when rows have not changed. |
 | 11 | Registration requests and review | Open — no registration request, approval, or rejection was submitted. | Member submission and admin review in a safe local fixture. |
 | 12 | Keyword inquiries | Partial — Korean notification text and keyword search were checked. | Member create/edit/delete and admin reply/follow-up conversation. |
 | 13 | Regulation chat | Open — no signed-in browser result was recorded. | Query, sources, error display, and independence from analysis state. |
@@ -118,5 +118,6 @@ The prior “58-item parity review” phrase in `frontend/QA_STATUS.md` is histo
 not backed by a canonical 58-row checklist in this repository. Use the 15 workflows above
 as the current count until a finer-grained, evidence-linked matrix is approved. The overall
 effort is therefore substantial: 3 workflows have no browser evidence yet, 12 have partial
-or sample-only evidence, and none closes every criterion in its group. The overwrite dialog
-and Excel display are separately identifiable blockers.
+or sample-only evidence, and none closes every criterion in its group. Excel display remains
+a blocker. The overwrite confirmation is now covered for the unsaved-blank-row to saved-empty-draft
+case; broader replacement cases remain open.

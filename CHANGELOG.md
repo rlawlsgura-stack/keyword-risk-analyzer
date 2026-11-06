@@ -1,3 +1,7 @@
+## React preview 0.1.2
+
+- Record the user-verified unsaved-draft overwrite confirmation path and add a cross-PC QA handoff.
+
 ## React preview 0.1.1
 
 - Bump the React preview package version and keep the lockfile in sync.
