@@ -15,18 +15,18 @@ export function buildTopKeywordCsv(
 ) {
   const keywordColumns = reportItems[0]?.keyword_data
     ? Object.keys(reportItems[0].keyword_data) : []
-  const alternativeColumn = '대체키워드'
-  const evidenceColumn = '증빙자료유형'
-  const periodCountColumn = '기간내_조회수'
-  const lastSearchColumn = '마지막 출력일자'
+  const alternativeColumn = '\uB300\uCCB4\uD0A4\uC6CC\uB4DC'
+  const evidenceColumn = '\uC99D\uBE59\uC790\uB8CC\uC720\uD615'
+  const periodCountColumn = '\uAE30\uAC04\uB0B4_\uC870\uD68C\uC218'
+  const lastSearchColumn = '\uB9C8\uC9C0\uB9C9 \uCD9C\uB825\uC77C\uC790'
   const countColumn = keywordColumns.includes(alternativeColumn)
     ? alternativeColumn : keywordColumns.includes(evidenceColumn) ? evidenceColumn : ''
   const insertAt = countColumn ? keywordColumns.indexOf(countColumn) + 1 : keywordColumns.length
   const columns = [...keywordColumns.slice(0, insertAt), periodCountColumn,
     ...keywordColumns.slice(insertAt)]
   const rows = [
-    ['검색순위', ...columns.map(column => column === lastSearchColumn
-      ? '마지막 검색일자' : column)],
+    ['\uAC80\uC0C9\uC21C\uC704', ...columns.map(column => column === lastSearchColumn
+      ? '\uB9C8\uC9C0\uB9C9 \uAC80\uC0C9\uC77C\uC790' : column)],
     ...reportItems.map(item => {
       const values = columns.map(column => column === periodCountColumn
         ? String(item.hit_count) : item.keyword_data?.[column] ?? '')

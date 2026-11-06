@@ -450,3 +450,13 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Local Auth health, test-admin sign-in, API `/healthz`, and authenticated `/readyz` returned 200. Local DB read-only counts showed two keyword rows and one test admin; no production DB operation was made.
 - [x] Windows Firewall is enabled with inbound blocked on all active profiles. Supabase container ports publish through Docker wildcard bindings, so keep using loopback URLs and do not add inbound allow rules.
 - [ ] This establishes local service wiring and authenticated DB readiness; React screen workflows, OCR model inference, candidate persistence, member/admin screen QA, and React–Streamlit comparison remain open.
+
+
+### Local Supabase UI-QA continuation (2026-11-07)
+
+- [x] Reconfirmed this run's target as LOCAL: React `127.0.0.1:5173`, API `127.0.0.1:8000`, and local Supabase `127.0.0.1:54321`. React and API health returned 200; local Supabase Auth health returned 200. No production project was contacted for QA writes.
+- [x] Authenticated local API QA succeeded with the generated test administrator: text analysis matched synthetic `LOCAL001` and was recorded; Korean OCR extracted `안티에이징` from `docs/qa/ocr_korean_sample.png` (confidence 0.9998558); the intended OCR candidate was saved as `LOCAL003`. The local catalog now has three synthetic `LOCAL%` rows. No rows were deleted.
+- [x] Expanded the tracked local seed catalog to all 12 report fields. Read-only DB verification found 12 configured columns and all three local keyword rows contain the added optional fields. No production users, credentials, or rows were copied.
+- [x] While checking report CSV generation, found that `reportCsv.ts` contained corrupted Korean string literals. Replaced them with Unicode escapes matching the report table's actual field names and headers. `npm test` passed 17/17 and `npm run build` passed. The existing serializer test confirms 14 columns, Korean text, date/count fields, BOM, escaping, and formula safety.
+- [ ] Fresh CSV download through the React screen and Excel visual inspection remain unverified. Windows Computer Use reported that both the native-app pipe and browser access host are unavailable, so no UI interaction or workbook inspection was possible. Serializer tests are code-level evidence only.
+- [ ] Member/admin screens and React?Streamlit interaction comparison remain open. API checks above do not verify those screens. Do not delete QA rows as cleanup; retain the user's no-delete constraint.

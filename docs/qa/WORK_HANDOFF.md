@@ -1,6 +1,6 @@
 # React migration QA handoff
 
-Updated: 2026-11-06
+Updated: 2026-11-07
 
 Use this short status note when moving the work between PCs. It is a continuation aid, not a
 full activity transcript. Record dated verification details and evidence in
@@ -149,3 +149,11 @@ untouched: `keyword_filtered.csv`, `unmatched_candidates.csv`, `ocr_ui_qa_fixes.
 `react_parity_fixes.patch`, `react_unmatched_parity_followup.patch`, and `supabase/.temp/`.
 Inspect each independently before deciding whether it belongs in version control; never add the
 temporary Supabase directory or secret material.
+
+## Local QA continuation (2026-11-07)
+
+- Current local QA environment: React `127.0.0.1:5173`, API `127.0.0.1:8000`, local Supabase `127.0.0.1:54321`. Keep this distinct from the previously documented production-backed PC session.
+- Authenticated API-level local QA completed: recorded analysis matched synthetic `LOCAL001`; test-image OCR extracted `안티에이징`; one intended OCR candidate was saved as `LOCAL003`. The local DB has three synthetic `LOCAL%` keywords. No records were deleted, and no production DB was used for these operations.
+- Local seed now defines 12 report fields. React report CSV serialization had corrupted Korean literals; those were repaired and the frontend suite passes 17/17 with the production build passing.
+- Windows UI automation host is unavailable, so no fresh React report download, Excel inspection, member/admin browser QA, or React-Streamlit interaction comparison was possible. Keep these tasks open; see the dated `frontend/QA_STATUS.md` entry.
+- Preserve the local test records; do not clean them up by deletion. The local credential file and environment files remain machine-specific and must not be committed.
