@@ -23,6 +23,21 @@
 - Status: environment attribution documented; authorized live analysis/OCR/candidate-save UI QA
   remains pending. Do not mark it complete until a result and its database effect are observed.
 
+## 2026-11-06: Excel review of existing Top N CSV
+
+- Opened the existing workspace file `period_topN_report.csv` in Excel. This was not freshly
+  downloaded from the React report screen.
+- The Text Import Wizard showed UTF-8 and initially selected fixed-width parsing. Selecting
+  comma-delimited parsing produced the expected 14 populated columns (A:N), with Korean headers
+  and values readable. The report included rank, keyword/catalog fields, period counts, evidence,
+  cumulative counts, last-search time, registrant, notes, and registration date.
+- Excel initially displayed the last-search timestamps as `####` because column K was too narrow.
+  Expanding that column made dates readable. Other wide Korean text columns also need suitable
+  width or wrapping for comfortable review; no formatting was saved to the CSV.
+- This partially verifies Excel's UTF-8/comma import and the existing file's shape. A fresh CSV
+  export from the React report screen, its selected date range/counts, and end-to-end downloaded
+  layout remain unverified.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the

@@ -22,9 +22,9 @@ full activity transcript. Record dated verification details and evidence in
   the catalog. This confirms only that overwrite scenario.
 - The agent's connected browser host was unavailable at the latest check. Screenshots and the
   user's report supplied the evidence; the agent did not independently control the browser.
-- Excel and LibreOffice were not found in the latest environment inspection. CSV parsing passed,
-  and report date-range client/API behavior now has mock-backed tests; actual spreadsheet rendering
-  and the 14-column layout remain unverified.
+- Excel was available for the 2026-11-06 follow-up below. Opening the existing workspace CSV
+  confirmed UTF-8 Korean text and 14 fields; the report-screen download path and full visual layout
+  still need confirmation from a fresh React export.
 
 ## Environment-specific QA and cross-PC continuity (2026-11-06)
 
@@ -40,6 +40,8 @@ full activity transcript. Record dated verification details and evidence in
   in this handoff session. The browser automation host could not determine the active Chrome URL
   and stopped before any UI action. An analysis result was visible in the user's screenshot, but
   its execution time and whether it wrote to the database were not established here.
+- Excel review of the existing `period_topN_report.csv` is recorded in `frontend/QA_STATUS.md`.
+  It is a local file inspection, not evidence that the React report download was exercised.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.
@@ -53,8 +55,9 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Next work, in order
 
-1. The user will verify CSV rendering in an Excel-equipped environment, including all 14 report
-   columns, Korean text, dates, and counts. Keep this open until that visual result is reported.
+1. In the React report screen, export a fresh CSV and inspect it in Excel. Confirm all 14 fields,
+   Korean text, dates, and counts. The existing workspace CSV was readable after selecting UTF-8
+   and comma in Excel's import wizard, but that does not verify the React download path.
 2. Complete the explicitly authorized React live QA on this PC: run text analysis; check OCR with a
    non-sensitive test image; and save only the intended test candidate. Before acting, reconfirm the
    API target and record it as production. Do not delete records or use unrelated admin actions.
