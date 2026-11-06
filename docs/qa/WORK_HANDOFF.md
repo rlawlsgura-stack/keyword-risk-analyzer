@@ -9,7 +9,7 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Current state
 
-- Latest pushed baseline at this handoff edit: `2b256ef` on `main` (verify with `git pull --ff-only` on the receiving PC).
+- Latest pushed handoff commit: `0ca7011`; React preview version is now `0.1.4` (follow with the newest `main` using `git pull --ff-only` on the receiving PC).
 - Local QA on 2026-11-07 used React `127.0.0.1:5173`, API `127.0.0.1:8000`, and local Supabase `127.0.0.1:54321`. API-level analysis, OCR, and one intended candidate save completed locally. Synthetic rows `LOCAL001`, `LOCAL002`, and `LOCAL003` are present; retain them and do not delete data.
 - React serializer Korean labels were repaired; frontend tests passed 17/17 and the production build passed. The local seed describes 12 report columns.
 - Still open: fresh React report-screen CSV download and Excel review; browser-based React member/admin workflow QA; React-Streamlit screen comparison. The UI automation host was unavailable, so API/test results do not count as browser QA.

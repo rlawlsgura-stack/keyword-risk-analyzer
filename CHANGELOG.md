@@ -1,3 +1,8 @@
+## React preview 0.1.4
+
+- Fix Korean report CSV field detection and headers.
+- Complete local-only API QA and document the remaining browser checks for cross-PC handoff.
+
 ## React preview 0.1.3
 
 - Add an isolated local Supabase stack with synthetic test data and local-only test account setup.
