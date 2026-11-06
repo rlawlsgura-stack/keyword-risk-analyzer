@@ -298,6 +298,8 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 ### Draft overwrite follow-up (2026-11-06)
 
 - [x] Source review: loading a saved recommendation draft prompts whenever the visible workspace has at least one row. On confirmation it reloads the saved payload and replaces the visible rows and selected IDs. It does not track whether rows are dirty, so the warning also appears for an unchanged non-empty workspace.
+- [x] Fixed silent replacement on SPA page re-entry: an account's saved draft is now auto-load attempted once; returning to the page preserves the current workspace. A different account clears the previous account's in-memory rows before loading its own draft. Explicit saved-draft reload remains available through the confirmation button.
+- [x] Added state tests for first load, same-account page revisit, explicit refresh, account change, and signed-out state.
 - [ ] The browser access host was still unavailable on recheck. The confirmation was not clicked, no draft was written or replaced, and the browser path remains unverified.
 
 ### Streamlit source baseline check (2026-11-06)

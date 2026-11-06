@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode, type SyntheticEvent } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { insertRecommendation } from './recommendationRows'
+import { shouldLoadRecommendationDraft } from './recommendationDraft'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
@@ -634,6 +635,8 @@ function App() {
   const [recommendationDraftError, setRecommendationDraftError] = useState('')
   const [recommendationDraftMessage, setRecommendationDraftMessage] = useState('')
   const [recommendationDraftRefresh, setRecommendationDraftRefresh] = useState(0)
+  const recommendationDraftLoadedUserId = useRef<string | null>(null)
+  const recommendationDraftHandledRefresh = useRef(0)
   const [ocrSelectedFiles, setOcrSelectedFiles] = useState<File[]>([])
   const [ocrFileResults, setOcrFileResults] = useState<OCRFileResult[]>([])
   const [ocrCandidates, setOcrCandidates] = useState<OCRCandidate[]>([])
@@ -878,6 +881,15 @@ function App() {
 
   useEffect(() => {
     if (page !== 'unmatched' || !user?.id) return
+    if (!shouldLoadRecommendationDraft(user.id, recommendationDraftLoadedUserId.current,
+      recommendationDraftRefresh, recommendationDraftHandledRefresh.current)) return
+
+    const userChanged = recommendationDraftLoadedUserId.current !== user.id
+    if (userChanged) {
+      setRecommendations([])
+      setSelectedRecommendationIds([])
+    }
+    recommendationDraftHandledRefresh.current = recommendationDraftRefresh
     let active = true
     setRecommendationDraftBusy(true)
     setRecommendationDraftError('')
@@ -905,7 +917,12 @@ function App() {
         ? payload.selected_ids.map(String).filter((id: string) => loaded.some(row => row.recommendation_id === id)) : [])
     }).catch(error => {
       if (active) setRecommendationDraftError(error instanceof Error ? error.message : '정규화 작업본을 불러오지 못했습니다.')
-    }).finally(() => { if (active) setRecommendationDraftBusy(false) })
+    }).finally(() => {
+      if (active) {
+        recommendationDraftLoadedUserId.current = user.id
+        setRecommendationDraftBusy(false)
+      }
+    })
     return () => { active = false }
   }, [page, user?.id, recommendationDraftRefresh])
 
