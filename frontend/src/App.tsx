@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode, 
 import type { Session, User } from '@supabase/supabase-js'
 import { insertRecommendation } from './recommendationRows'
 import { shouldLoadRecommendationDraft } from './recommendationDraft'
+import { buildTopKeywordCsv } from './reportCsv'
 import { analyzeText, configurationReady, loadAnalysisFilters, supabase,
   askRegulation, loadAllKeywords, loadKeywords, loadTopKeywords, resetAdminReportData, type AnalysisInput, type AnalysisMode,
   type AnalysisResult, type AnalysisFilters, type KeywordRow, type Match, type RegulationQuestion,
@@ -1248,23 +1249,7 @@ function App() {
   }
 
   function downloadReportCsv() {
-    const keywordColumns = reportItems[0]?.keyword_data ? Object.keys(reportItems[0].keyword_data) : []
-    const countColumn = keywordColumns.includes('대체키워드')
-      ? '대체키워드' : keywordColumns.includes('증빙자료유형') ? '증빙자료유형' : ''
-    const insertAt = countColumn ? keywordColumns.indexOf(countColumn) + 1 : keywordColumns.length
-    const columns = [...keywordColumns.slice(0, insertAt), '기간내_조회수', ...keywordColumns.slice(insertAt)]
-    const rows = [
-      ['검색순위', ...columns.map(column => column === '마지막 출력일자' ? '마지막 검색일자' : column)],
-      ...reportItems.map(item => {
-        const values = columns.map(column => column === '기간내_조회수'
-          ? String(item.hit_count)
-          : item.keyword_data?.[column] ?? '')
-        const dateIndex = columns.indexOf('마지막 출력일자')
-        if (dateIndex >= 0) values[dateIndex] = formatStreamlitDate(values[dateIndex])
-        return [String(item.search_rank), ...values]
-      }),
-    ]
-    const csv = makeCsv(rows)
+    const csv = buildTopKeywordCsv(reportItems, formatStreamlitDate)
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
     const link = document.createElement('a')
     link.href = url

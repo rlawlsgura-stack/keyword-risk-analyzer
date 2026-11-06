@@ -66,6 +66,16 @@
   React browser session when browser control is available; alternatively, the user can download
   the report CSV and provide that file for Excel inspection. No data was deleted.
 
+## 2026-11-06: report CSV serialization coverage
+
+- Extracted the report-row serialization into `src/reportCsv.ts`; the report download handler uses
+  this pure function before creating the browser download.
+- Added isolated tests for the 14-column order, Korean fields, period count, formatted date, UTF-8
+  BOM, comma/quote escaping, and formula-prefix protection.
+- Verification: frontend `npm test` passed 17/17; `npm run build` passed. The tests do not call the
+  API, download a browser file, or access Supabase. UI export and Excel inspection of a fresh React
+  download remain open because browser control is unavailable.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the

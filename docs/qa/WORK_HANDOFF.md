@@ -49,6 +49,9 @@ full activity transcript. Record dated verification details and evidence in
 - A further report-export retry again found the local services healthy but no attachable browser
   session. The report API requires the signed-in bearer token, so no unauthenticated API workaround
   was attempted. The next step needs browser control restored or a CSV downloaded by the user.
+- The report CSV row builder is now covered in isolation: 17 frontend tests pass and the production
+  build passes, including 14-column order, Korean text, dates, counts, CSV escaping, and formula
+  safety. This still does not verify a live browser download or Excel rendering of that download.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.
