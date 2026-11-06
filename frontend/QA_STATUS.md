@@ -38,6 +38,23 @@
   export from the React report screen, its selected date range/counts, and end-to-end downloaded
   layout remain unverified.
 
+## 2026-11-06: React report continuation attempt
+
+- Local React (`127.0.0.1:5173/`) and API health (`127.0.0.1:8000/healthz`) returned 200. The API
+  target remains the Supabase project labeled `main / PRODUCTION`; no live report request was made.
+- Source review confirmed the report page requests the selected date range and Top N through
+  `/api/v1/reports/top-keywords`, then creates `period_topN_report.csv` in the browser. The page also
+  exposes administrator report-reset controls; those controls were not used.
+- Verification: frontend `npm test` passed 15/15; `npm run build` passed. The report client test
+  verifies date parameters and limit with mocked networking. Neither check exercises the live API,
+  browser download, or database.
+- Browser UI verification remains blocked: Windows Computer Use could not determine the current
+  Chrome URL and stopped before interaction. No analysis, OCR upload, candidate save, report
+  download, or database write was performed in this continuation attempt.
+- Next action remains a fresh React report export in the authenticated browser, then Excel review
+  of all 14 fields, Korean text, dates, and counts. Continue to avoid all data deletion and unrelated
+  admin changes.
+
 ## 2026-11-05: follow-up unmatched-review parity patch
 
 - Follow-up to `react_parity_fixes.patch`; prepared in the separate checkout, not applied to the

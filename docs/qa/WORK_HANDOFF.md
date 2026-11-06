@@ -42,6 +42,10 @@ full activity transcript. Record dated verification details and evidence in
   its execution time and whether it wrote to the database were not established here.
 - Excel review of the existing `period_topN_report.csv` is recorded in `frontend/QA_STATUS.md`.
   It is a local file inspection, not evidence that the React report download was exercised.
+- In the next continuation attempt, local React and API health returned 200. Windows Computer Use
+  still could not establish the current Chrome URL, so no React report request/download or live QA
+  action was made. Frontend tests passed 15/15 and the production build passed; these are mocked
+  client-contract/build checks, not live Supabase or browser evidence.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.
