@@ -39,10 +39,10 @@
   normalization defaults, stored settings, member-role rejection); three frontend API tests
   pass (filtered pagination, unfiltered empty catalog, revision conflict). TypeScript/Vite
   production build and whitespace checks pass. Tests use stubs and no live database.
-- Not verified: updated UI in the user's Windows browser, live DB-backed inquiry/settings
-  reads, filter reset interaction, downloaded CSV contents in Excel, or the remaining
-  tab-parity gaps. No database values, user roles, production deployment, or Windows files
-  were changed by this checkout. These fixes do not complete the full parity review; use
+- Not verified: further UI interactions/screens, live DB-backed inquiry/settings reads,
+  filter reset interaction, downloaded CSV contents in Excel, or the remaining tab-parity
+  gaps. No database values, user roles, production deployment, or Windows files were changed
+  by this checkout. These fixes do not complete the full parity review; use
   `docs/qa/SCREEN_QA_CHECKLIST.md` for the current itemized progress snapshot.
 
 ## Completed
@@ -291,7 +291,9 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 
 - [x] Read-only HTTP checks returned 200 for React (`127.0.0.1:5173/`), API health (`127.0.0.1:8000/healthz`), Streamlit (`127.0.0.1:8501/`), and the local Supabase REST root (`127.0.0.1:54321/rest/v1/`). These checks establish service reachability only; no authenticated DB query or write was made.
 - [x] Frontend automated tests passed: 9/9; OCR save payload contract check passed; `npm run build` passed.
-- [ ] Computer Use reported that the browser access host is unavailable, so no new visual/UI or signed-in flow was verified.
+- [x] User-provided screenshot shows the local React page at `127.0.0.1:5173` on the analysis screen with Korean labels and match options; the user reports test-account login completed.
+- [ ] The screenshot does not show account identity/role or session persistence, and does not verify further page interactions or saved-draft replacement.
+- [ ] Computer Use still reports the browser access host unavailable, so no browser-controlled interaction was performed.
 - [x] Backend tests passed in the project `.venv` (Python 3.12.14): 117 tests run, 9 skipped, 0 failures. `KRA_TEST_LIVE_RESET=0`; Supabase environment variables were removed for the test process. The explicitly live reset and legacy UI assertions were not verified.
 - [ ] SQL integration scripts and authenticated local DB behavior were not run in this test pass.
 

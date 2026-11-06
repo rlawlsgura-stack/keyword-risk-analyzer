@@ -98,7 +98,7 @@ workflow or role/edge-case coverage has not. No row implies production readiness
 
 | # | Workflow | Status and evidence | Remaining |
 |---:|---|---|---|
-| 1 | Login, session, and roles | Partial — local admin login was used for browser QA; local member/admin API role smoke returned the expected 403/200. | Member navigation hiding, session refresh/expiry and role-specific screen checks. |
+| 1 | Login, session, and roles | Partial — local admin login was used for browser QA; local member/admin API role smoke returned the expected 403/200. User-provided screenshot now shows the local React analysis page after the user reports test-account login. | Account/role identity is not visible in the screenshot. Member navigation hiding, session refresh/expiry and role-specific screen checks remain open. |
 | 2 | Exact, partial, and character-count matching | Partial — seven same-catalog React/Streamlit cases matched, including highlights and keyword details (`react_streamlit_parity_20261105.txt`). | Broader inputs, nested matches, and boundary combinations. |
 | 3 | Search, filters, and empty states | Partial — empty catalog search, reset and empty messaging were observed (`browser_patch_verification_20261105.txt`). | Populated category/risk/evidence filter combinations and filtered CSV contents. |
 | 4 | Analysis retry and result focus/scroll | Open — one option-change run lacked a result area until retry; timing cause is unknown. | Reproduce failure/retry and inspect focus/scroll behavior. |
