@@ -9,8 +9,8 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Current state
 
-- Branch: `main`. The previously synced baseline was `fdab4b1`; this session adds OCR regression
-  results and QA notes. Before switching PCs, pull the latest `main` and check its status.
+- Branch: `main`. The previously synced baseline was `cab245a`; this session adds Streamlit
+  AppTest evidence and QA notes. Before switching PCs, pull the latest `main` and check its status.
 - React preview package version was advanced from `0.1.1` to `0.1.2` for this QA/documentation
   update. The Streamlit baseline remains FIXED329; this is not a Streamlit code release.
 - The React transition remains in QA. Streamlit remains the production UI until the remaining
@@ -55,6 +55,10 @@ The 2026-11-06 member/admin API follow-up passed 41 tests across analysis, empty
 keyword inquiries, and unmatched persistence. These checks use mocks/local test clients, with
 external Supabase credentials removed; they do not replace signed-in React screen or DB-persistence
 verification.
+
+The 2026-11-06 Streamlit role/unmatched AppTest follow-up passed 19 tests. One approved-matching UI
+test uses FIXED329; shared-unmatched tests use older numbered snapshots and mocked repository calls.
+This is not evidence for the corresponding React screens or all current Streamlit workflows.
 
 ## Environment notes
 

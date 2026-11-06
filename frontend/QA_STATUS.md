@@ -340,3 +340,10 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] These mocked/local tests cover member/admin authorization boundaries, request ownership and reply relationships, registration-request role enforcement, normalization-setting access, and analysis read/write guards. External Supabase credentials were removed from the test process, `STORAGE_BACKEND=csv`, and `KRA_TEST_LIVE_RESET=0`.
 - [x] No live DB, production API, role change, inquiry mutation, approval, or candidate deletion was used. The logged temporary storage failure is an expected mocked retry-path test.
 - [ ] This does not verify signed-in React member/admin screens, pagination, real persistence, or complete Streamlit parity. Browser-host and isolated-DB UI checks remain open.
+
+### Streamlit role and unmatched AppTest follow-up (2026-11-06)
+
+- [x] `test_approved_matching` and `test_shared_unmatched_ui` — 19 tests passed. Streamlit `AppTest` exercises administrator-only approval controls, member registration-request actions, role-dependent rejection controls, candidate selection/removal, role/session behavior, and the FIXED329 approved-matching flow.
+- [x] Repository and API calls are mocked; the UI fixture explicitly fails if a network request occurs. No local or production DB was changed.
+- [ ] The shared-unmatched UI tests target older numbered FIXED app snapshots; the AppTest is not React browser evidence. React role-gated screens, admin page reads/writes, and full Streamlit/React parity remain open.
+- [ ] The first run's assertions passed but Python reported a Windows Temp cleanup permission error after completion. The repeat used a project-local temporary path and removed it; no test artifacts remain in the workspace.
