@@ -9,6 +9,12 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Current state
 
+- Latest pushed baseline at this handoff edit: `2b256ef` on `main` (verify with `git pull --ff-only` on the receiving PC).
+- Local QA on 2026-11-07 used React `127.0.0.1:5173`, API `127.0.0.1:8000`, and local Supabase `127.0.0.1:54321`. API-level analysis, OCR, and one intended candidate save completed locally. Synthetic rows `LOCAL001`, `LOCAL002`, and `LOCAL003` are present; retain them and do not delete data.
+- React serializer Korean labels were repaired; frontend tests passed 17/17 and the production build passed. The local seed describes 12 report columns.
+- Still open: fresh React report-screen CSV download and Excel review; browser-based React member/admin workflow QA; React-Streamlit screen comparison. The UI automation host was unavailable, so API/test results do not count as browser QA.
+- Cross-PC startup: update with `git pull --ff-only`, inspect `git status --short --branch`, read this file and the newest dated entry in `frontend/QA_STATUS.md`, then independently verify the receiving PC's active frontend/API/Supabase targets. Do not copy `.env`, credentials, local DB state, or test users between PCs. Record each PC's evidence under its own `LOCAL`/`TEST`/`PRODUCTION` label. Never delete the dataset or local QA rows as cleanup.
+
 - Branch: `main`. The previously synced baseline was `cab245a`; this session adds Streamlit
   AppTest evidence and QA notes. Before switching PCs, pull the latest `main` and check its status.
 - React preview package version was advanced from `0.1.1` to `0.1.2` for this QA/documentation
@@ -75,20 +81,13 @@ full activity transcript. Record dated verification details and evidence in
 1. In the React report screen, export a fresh CSV and inspect it in Excel. Confirm all 14 fields,
    Korean text, dates, and counts. The existing workspace CSV was readable after selecting UTF-8
    and comma in Excel's import wizard, but that does not verify the React download path.
-2. Complete the explicitly authorized React live QA on this PC against the local test stack: run
-   text analysis; check OCR with a non-sensitive test image; and save only the intended test
-   candidate. Before acting, reconfirm the API target and record it as LOCAL. Do not delete records
-   or use unrelated admin actions. The OCR regression suite passed 8/8 and the save-payload
-   contract passed, but neither proves React screen behavior or live model inference.
+2. Browser-verify the React text-analysis and OCR upload/result/error-recovery flows on the receiving PC against its confirmed isolated test stack. API-level analysis/OCR and the intended candidate save are already recorded for this PC; they do not prove React interaction behavior.
 3. Continue the checklist's remaining member/admin UI checks in a confirmed isolated test environment:
    OCR upload/results and error recovery; keyword inquiries; user and keyword management; unmatched
    candidate search/sort; registration request review; normalization settings.
 4. Compare the remaining React and Streamlit screen interactions using the same isolated catalog
    and record each observed case. Existing parity evidence covers seven examples only.
-5. Before any further live QA action, verify and record the active environment on that PC. On the
-   current runtime, use the local Supabase test project for test analysis, OCR, candidate saves, and
-   member/admin screens. Do not delete data or change unrelated catalog, user, role, Supabase, or
-   Render settings. Keep the earlier production QA authorization separate from this local test data.
+5. Before any live QA action on another PC, verify and record that PC's active environment. Use only its isolated test Supabase for QA writes. Do not delete records or change unrelated catalog, user, role, Supabase, or Render settings. Keep all previous production QA evidence separate from local/test results.
 
 The 2026-11-06 report date-range follow-up added isolated tests: backend 9/9 and frontend 15/15.
 These checks cover API parameter and response behavior only; no live database, report screen, or
