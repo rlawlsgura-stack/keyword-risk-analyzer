@@ -42,7 +42,8 @@
 - Not verified: updated UI in the user's Windows browser, live DB-backed inquiry/settings
   reads, filter reset interaction, downloaded CSV contents in Excel, or the remaining
   tab-parity gaps. No database values, user roles, production deployment, or Windows files
-  were changed by this checkout. These fixes do not complete the 58-item parity review.
+  were changed by this checkout. These fixes do not complete the full parity review; use
+  `docs/qa/SCREEN_QA_CHECKLIST.md` for the current itemized progress snapshot.
 
 ## Completed
 
@@ -278,3 +279,16 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [ ] Windows inspection found no Excel command, Excel App Paths entry, Microsoft Office/365 or spreadsheet application in the uninstall registry, and no LibreOffice command. Excel's actual CSV rendering and 14-column layout remain unverified; no application was installed.
 - [x] Code-level option mapping reviewed: React sends mode, partial minimum length, four normalization flags, and category/risk prefilters; Streamlit builds the corresponding `MatchingConfig` and category/risk filters, with both paths calling the shared matching implementation.
 - [ ] This source review does not verify additional screen, filter, or option combinations. Existing same-data browser evidence remains limited to the seven cases above; no new test data or DB writes were made.
+
+## Migration progress tracking (2026-11-06)
+
+- [x] Reconciled the current progress against dated browser evidence and the design baseline in `docs/qa/SCREEN_QA_CHECKLIST.md`.
+- [x] The current manual screen checklist has 15 workflow groups: 3 have no browser evidence, 12 are partial/sample-only, and none completes every criterion in its group. This count is a scope tracker, not a readiness percentage.
+- [x] Clarified that the historical “58-item parity review” reference has no canonical 58-row checklist in this repository; it is not used as a progress metric.
+- [ ] Highest-priority blockers remain the unsaved-edit overwrite confirmation and Excel’s real 14-column rendering. Broader member/admin and screen parity remains substantial follow-up work.
+
+### Local verification (2026-11-06)
+
+- [x] Read-only HTTP checks returned 200 for React (`127.0.0.1:5173/`), API health (`127.0.0.1:8000/healthz`), Streamlit (`127.0.0.1:8501/`), and the local Supabase REST root (`127.0.0.1:54321/rest/v1/`). These checks establish service reachability only; no authenticated DB query or write was made.
+- [x] Frontend automated tests passed: 9/9; OCR save payload contract check passed; `npm run build` passed.
+- [ ] Computer Use reported that the browser access host is unavailable, so no new visual/UI or signed-in flow was verified.

@@ -89,3 +89,34 @@ React는 Streamlit과 별도의 사이드바/카드/페이지 레이아웃이다
 판정: 통과 / 실패 / 미검증 / 차단
 증거: 캡처 파일명 또는 HTTP 상태 코드 (토큰/개인정보 제외)
 ```
+
+## Current progress snapshot (2026-11-06)
+
+Status below is based on the dated browser reports in the repository and the latest
+`frontend/QA_STATUS.md` entries. “Partial” means the listed sample passed but the full
+workflow or role/edge-case coverage has not. No row implies production readiness.
+
+| # | Workflow | Status and evidence | Remaining |
+|---:|---|---|---|
+| 1 | Login, session, and roles | Partial — local admin login was used for browser QA; local member/admin API role smoke returned the expected 403/200. | Member navigation hiding, session refresh/expiry and role-specific screen checks. |
+| 2 | Exact, partial, and character-count matching | Partial — seven same-catalog React/Streamlit cases matched, including highlights and keyword details (`react_streamlit_parity_20261105.txt`). | Broader inputs, nested matches, and boundary combinations. |
+| 3 | Search, filters, and empty states | Partial — empty catalog search, reset and empty messaging were observed (`browser_patch_verification_20261105.txt`). | Populated category/risk/evidence filter combinations and filtered CSV contents. |
+| 4 | Analysis retry and result focus/scroll | Open — one option-change run lacked a result area until retry; timing cause is unknown. | Reproduce failure/retry and inspect focus/scroll behavior. |
+| 5 | Report and CSV | Partial — report download and CSV parsing/count checks passed. | Excel rendering and the 14-column layout; Excel is not installed in the checked environment. |
+| 6 | OCR image extraction | Partial — one image produced 15 recognized text items and 13 candidates (`browser_qa_results_20261105.txt`). | Blank-image and error/retry behavior in the signed-in UI. |
+| 7 | OCR candidate review and analysis handoff | Partial — candidate selection/validation and copying selected text to analysis input were observed. | Full follow-through across representative cases and error recovery. |
+| 8 | OCR candidate persistence | Sample verified — one synthetic candidate saved successfully and was removed afterward. | Broader classification/error cases; Render behavior remains separate and unverified. |
+| 9 | Unmatched candidate selection | Partial — selected all 144, retained selection on page 2, then cleared it (`unmatched_followup_browser_qa_20261105.txt`). | Search/sort changes, processed-status mixtures, concurrent changes, and over 1,000 rows. |
+| 10 | Normalization workspace and draft persistence | Partial — two-row save/re-entry/load restored contents, newline, order and selection; empty draft persisted after refresh (`draft_persistence_qa_20261105.txt`). | Accepting overwrite confirmation when unsaved edits exist. |
+| 11 | Registration requests and review | Open — no registration request, approval, or rejection was submitted. | Member submission and admin review in a safe local fixture. |
+| 12 | Keyword inquiries | Partial — Korean notification text and keyword search were checked. | Member create/edit/delete and admin reply/follow-up conversation. |
+| 13 | Regulation chat | Open — no signed-in browser result was recorded. | Query, sources, error display, and independence from analysis state. |
+| 14 | Keyword, user, and normalization administration | Partial — keyword/normalization views and API role guards were checked. | Full member UI boundary, admin editing workflows, pagination and persistence. |
+| 15 | Cross-page Streamlit/React parity | Partial — analysis results were compared on seven same-data cases. | Remaining screen layouts, interactions, filters, exports and role workflows. |
+
+The prior “58-item parity review” phrase in `frontend/QA_STATUS.md` is historical and is
+not backed by a canonical 58-row checklist in this repository. Use the 15 workflows above
+as the current count until a finer-grained, evidence-linked matrix is approved. The overall
+effort is therefore substantial: 3 workflows have no browser evidence yet, 12 have partial
+or sample-only evidence, and none closes every criterion in its group. The overwrite dialog
+and Excel display are separately identifiable blockers.
