@@ -10,7 +10,7 @@ again for each commit.
 - For an ordinary push, use this exact command without extra arguments:
 
   ```powershell
-  git -C D:/back-up/encore/keyword-risk-analyzer push https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git main:refs/heads/main
+  git -C C:/encore/keyword-risk-analyzer push https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git main:refs/heads/main
   ```
 
 This command has a project-specific user rule in
