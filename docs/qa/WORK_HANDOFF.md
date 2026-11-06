@@ -9,8 +9,8 @@ full activity transcript. Record dated verification details and evidence in
 
 ## Current state
 
-- Branch: `main`. At the start of this update, local `HEAD` was `15647a6` and matched
-  `origin/main`; the QA edits in this working copy are not committed or pushed.
+- Branch: `main`. The previously synced baseline was `ed49f51`; this session adds isolated
+  report-date tests and QA notes. Before switching PCs, pull the latest `main` and check its status.
 - React preview package version was advanced from `0.1.1` to `0.1.2` for this QA/documentation
   update. The Streamlit baseline remains FIXED329; this is not a Streamlit code release.
 - The React transition remains in QA. Streamlit remains the production UI until the remaining
@@ -22,8 +22,9 @@ full activity transcript. Record dated verification details and evidence in
   the catalog. This confirms only that overwrite scenario.
 - The agent's connected browser host was unavailable at the latest check. Screenshots and the
   user's report supplied the evidence; the agent did not independently control the browser.
-- Excel and LibreOffice were not found in the last environment inspection. CSV parsing passed, but
-  actual spreadsheet rendering and the 14-column layout remain unverified.
+- Excel and LibreOffice were not found in the latest environment inspection. CSV parsing passed,
+  and report date-range client/API behavior now has mock-backed tests; actual spreadsheet rendering
+  and the 14-column layout remain unverified.
 
 ## Next work, in order
 
@@ -38,6 +39,10 @@ full activity transcript. Record dated verification details and evidence in
 4. Keep operational writes isolated. Do not test by changing production Supabase/Render data or
    settings. Before any local DB mutation, identify the local Supabase URL and test rows; remove only
    QA data created in that test.
+
+The 2026-11-06 report date-range follow-up added isolated tests: backend 9/9 and frontend 15/15.
+These checks cover API parameter and response behavior only; no live database, report screen, or
+spreadsheet application was used.
 
 ## Environment notes
 

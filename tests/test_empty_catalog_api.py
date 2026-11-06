@@ -73,6 +73,54 @@ class EmptyCatalogApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.repository.load_setting.assert_not_called()
 
+    def test_report_range_requires_both_dates(self):
+        response = self.client.get('/api/v1/reports/top-keywords', params={
+            'start_date': '2026-10-30',
+        })
+        self.assertEqual(response.status_code, 422)
+        self.repository.report_range.assert_not_called()
+        self.repository.load_keywords.assert_not_called()
+
+    def test_report_range_rejects_end_date_before_start_date(self):
+        response = self.client.get('/api/v1/reports/top-keywords', params={
+            'start_date': '2026-11-05', 'end_date': '2026-10-30',
+        })
+        self.assertEqual(response.status_code, 422)
+        self.repository.report_range.assert_not_called()
+        self.repository.load_keywords.assert_not_called()
+
+    def test_report_range_forwards_dates_and_joins_catalog_snapshot(self):
+        self.frame = pd.DataFrame([
+            dict(zip(DB_COLS, ['B245', '안티에이징', '화장품', '2등급', '보습',
+                               '기준', '시험자료', '9', '2026-11-05 12:30:00'])),
+        ])
+        self.frame.attrs['revision'] = 8
+        self.repository.report_range.return_value = [{
+            'kwd_no': 'B245', 'hit_count': 3, 'term': '안티에이징',
+        }]
+        response = self.client.get('/api/v1/reports/top-keywords', params={
+            'start_date': '2026-10-30', 'end_date': '2026-11-05', 'limit': 10,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.repository.report_range.assert_called_once_with('2026-10-30', '2026-11-05', 10)
+        self.repository.report.assert_not_called()
+        payload = response.json()
+        self.assertEqual(payload['keyword_revision'], 8)
+        self.assertEqual(payload['items'][0]['search_rank'], 1)
+        self.assertEqual(payload['items'][0]['hit_count'], 3)
+        self.assertEqual(payload['items'][0]['keyword_data']['키워드명'], '안티에이징')
+        self.assertEqual(payload['items'][0]['keyword_data']['마지막 출력일자'],
+                         '2026-11-05 12:30:00')
+
+    def test_report_without_date_range_uses_rolling_days(self):
+        self.repository.report.return_value = []
+        response = self.client.get('/api/v1/reports/top-keywords', params={
+            'days': 30, 'limit': 5,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.repository.report.assert_called_once_with(30, 5)
+        self.repository.report_range.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

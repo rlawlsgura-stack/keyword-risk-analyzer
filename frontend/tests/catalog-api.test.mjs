@@ -66,6 +66,16 @@ test('empty full catalog remains compatible with existing callers', async () => 
   }
 })
 
+test('top-keyword report sends the selected inclusive date range and row limit', async () => {
+  const { api, calls } = await loadApi([{ items: [] }])
+  await api.loadTopKeywords('2026-10-30', '2026-11-05', 10)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].pathname, '/api/v1/reports/top-keywords')
+  assert.equal(calls[0].searchParams.get('start_date'), '2026-10-30')
+  assert.equal(calls[0].searchParams.get('end_date'), '2026-11-05')
+  assert.equal(calls[0].searchParams.get('limit'), '10')
+})
+
 test('CSV snapshot refuses to mix different catalog revisions', async () => {
   const { api } = await loadApi([
     { total: 2, revision: 7, items: [{ kwd_no: 'A001' }] },
