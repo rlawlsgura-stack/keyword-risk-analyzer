@@ -81,6 +81,8 @@
 - Rechecked local services: React `127.0.0.1:5173/` and API health `127.0.0.1:8000/healthz`
   returned 200. Local Supabase `127.0.0.1:54321/rest/v1/` and Streamlit `127.0.0.1:8501/` were
   unavailable. No separate-PC test environment was connected to this session.
+- Read-only Supabase project discovery found only the known active production project and no
+  development branches. No cloud branch/project was created for this task.
 - Windows Computer Use again failed to determine the active React Chrome URL. No report download,
   sign-in interaction, production text analysis, OCR upload, or candidate save was performed.
 - Safe isolated regression checks passed: 41 analysis/member/API persistence tests, 8 OCR tests,

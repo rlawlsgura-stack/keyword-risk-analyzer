@@ -57,6 +57,8 @@ full activity transcript. Record dated verification details and evidence in
   41 analysis/member API tests, 8 OCR tests, and 19 Streamlit AppTests. PaddleOCR is not installed in
   this `.venv`; no live model inference or database request/write occurred. See the latest
   `frontend/QA_STATUS.md` entry for exact scope. The three live/UI QA items remain open.
+- Read-only Supabase project discovery returned only the known production project and no
+  development branches. A distinct hosted test project/branch was not available; none was created.
 - A second PC may use a separate isolated test Supabase. Record it as a separate environment and
   never imply its data or results are shared with this production project. Do not copy `.env`,
   credentials, or database contents between PCs.
