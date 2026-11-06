@@ -292,6 +292,8 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] Read-only HTTP checks returned 200 for React (`127.0.0.1:5173/`), API health (`127.0.0.1:8000/healthz`), Streamlit (`127.0.0.1:8501/`), and the local Supabase REST root (`127.0.0.1:54321/rest/v1/`). These checks establish service reachability only; no authenticated DB query or write was made.
 - [x] Frontend automated tests passed: 9/9; OCR save payload contract check passed; `npm run build` passed.
 - [ ] Computer Use reported that the browser access host is unavailable, so no new visual/UI or signed-in flow was verified.
+- [x] Backend tests passed in the project `.venv` (Python 3.12.14): 117 tests run, 9 skipped, 0 failures. `KRA_TEST_LIVE_RESET=0`; Supabase environment variables were removed for the test process. The explicitly live reset and legacy UI assertions were not verified.
+- [ ] SQL integration scripts and authenticated local DB behavior were not run in this test pass.
 
 ### Draft overwrite follow-up (2026-11-06)
 
