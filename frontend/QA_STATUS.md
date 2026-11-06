@@ -297,3 +297,9 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 
 - [x] Source review: loading a saved recommendation draft prompts whenever the visible workspace has at least one row. On confirmation it reloads the saved payload and replaces the visible rows and selected IDs. It does not track whether rows are dirty, so the warning also appears for an unchanged non-empty workspace.
 - [ ] The browser access host was still unavailable on recheck. The confirmation was not clicked, no draft was written or replaced, and the browser path remains unverified.
+
+### Streamlit source baseline check (2026-11-06)
+
+- [x] `streamlit_cloud/app.py` selects the highest numbered `keyword_app2_fixed###.py`; the latest source is FIXED329. Comparing FIXED327 with FIXED329 found only the version label/docstring changed.
+- [x] Source navigation review found React counterparts for the Streamlit top-level functions. React exposes registration review and normalization as admin subpages; Streamlit places those flows within its tabs.
+- [ ] This source comparison does not verify visual or interactive parity. The browser host remains unavailable, so no new screen comparison was performed.

@@ -112,7 +112,7 @@ workflow or role/edge-case coverage has not. No row implies production readiness
 | 12 | Keyword inquiries | Partial — Korean notification text and keyword search were checked. | Member create/edit/delete and admin reply/follow-up conversation. |
 | 13 | Regulation chat | Open — no signed-in browser result was recorded. | Query, sources, error display, and independence from analysis state. |
 | 14 | Keyword, user, and normalization administration | Partial — keyword/normalization views and API role guards were checked. | Full member UI boundary, admin editing workflows, pagination and persistence. |
-| 15 | Cross-page Streamlit/React parity | Partial — analysis results were compared on seven same-data cases. | Remaining screen layouts, interactions, filters, exports and role workflows. |
+| 15 | Cross-page Streamlit/React parity | Partial — analysis results were compared on seven same-data cases. Source review confirms `streamlit_cloud/app.py` selects FIXED329; its source differs from the FIXED327 baseline only in the version text. React has counterparts for the top-level functions, with registration review and normalization under admin subpages. | This confirms source routing/scope only. Remaining screen layouts, interactions, filters, exports and role workflows need browser comparison. |
 
 The prior “58-item parity review” phrase in `frontend/QA_STATUS.md` is historical and is
 not backed by a canonical 58-row checklist in this repository. Use the 15 workflows above
