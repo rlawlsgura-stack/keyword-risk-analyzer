@@ -90,7 +90,7 @@ React는 Streamlit과 별도의 사이드바/카드/페이지 레이아웃이다
 증거: 캡처 파일명 또는 HTTP 상태 코드 (토큰/개인정보 제외)
 ```
 
-## Current progress snapshot (2026-11-06)
+## Current progress snapshot (2026-11-07)
 
 Status below is based on the dated browser reports in the repository and the latest
 `frontend/QA_STATUS.md` entries. “Partial” means the listed sample passed but the full
@@ -101,23 +101,37 @@ workflow or role/edge-case coverage has not. No row implies production readiness
 | 1 | Login, session, and roles | Partial — local admin login was used for browser QA; local member/admin API role smoke returned the expected 403/200. User-provided screenshot now shows the local React analysis page after the user reports test-account login. | Account/role identity is not visible in the screenshot. Member navigation hiding, session refresh/expiry and role-specific screen checks remain open. |
 | 2 | Exact, partial, and character-count matching | Partial — seven same-catalog React/Streamlit cases matched, including highlights and keyword details (`react_streamlit_parity_20261105.txt`). | Broader inputs, nested matches, and boundary combinations. |
 | 3 | Search, filters, and empty states | Partial — empty catalog search, reset and empty messaging were observed (`browser_patch_verification_20261105.txt`). | Populated category/risk/evidence filter combinations and filtered CSV contents. |
-| 4 | Analysis retry and result focus/scroll | Open — one option-change run lacked a result area until retry; timing cause is unknown. | Reproduce failure/retry and inspect focus/scroll behavior. |
-| 5 | Report and CSV | Partial — report download and CSV parsing/count checks passed; React date/limit parameter construction and API date-range validation have automated coverage. | Excel rendering and the 14-column layout; Excel is not installed in the checked environment. |
-| 6 | OCR image extraction | Partial — one image produced 15 recognized text items and 13 candidates (`browser_qa_results_20261105.txt`). | Blank-image and error/retry behavior in the signed-in UI. |
+| 4 | Analysis retry and result focus/scroll | Open — source review found that changing inputs/options clears stale results; an unchanged failed request retains its request ID for retry. Browser failure/recovery and focus/scroll behavior remain unverified. | Verify failure then retry after API recovery, plus focus/scroll in the browser. |
+| 5 | Report and CSV | Partial — React report UI showed L001 with 2 hits for 2026-11-07 and an empty state for 2026-11-06; the default 2026-11-01–07 range was restored. The 14-column serializer/API artifact and parser tests passed. | Fresh browser CSV artifact was not found after clicking download; Excel rendering and 14-column layout remain unverified. |
+| 6 | OCR image extraction | Partial — one image produced 15 recognized text items and 13 candidates (`browser_qa_results_20261105.txt`). The current signed-in React OCR screen rendered, but the in-app browser did not open a chooser from its file-selection control; no upload was submitted. | Blank-image and error/retry behavior in the signed-in UI, once file selection is available. |
 | 7 | OCR candidate review and analysis handoff | Partial — candidate selection/validation and copying selected text to analysis input were observed. | Full follow-through across representative cases and error recovery. |
 | 8 | OCR candidate persistence | Sample verified — one synthetic candidate saved successfully and was removed afterward. | Broader classification/error cases; Render behavior remains separate and unverified. |
 | 9 | Unmatched candidate selection | Partial — selected all 144, retained selection on page 2, then cleared it (`unmatched_followup_browser_qa_20261105.txt`). | Search/sort changes, processed-status mixtures, concurrent changes, and over 1,000 rows. |
 | 10 | Normalization workspace and draft persistence | Partial — two-row save/re-entry/load restored contents, newline, order and selection; empty draft persisted after refresh (`draft_persistence_qa_20261105.txt`). The user also added an unsaved blank row, accepted the load-overwrite confirmation, and reported returning to 0 rows/0 selected. | Broader row-content/selection overwrite cases remain open. The prompt is based on row count, not a dirty-state check, so it also appears when rows have not changed. |
-| 11 | Registration requests and review | Open — no registration request, approval, or rejection was submitted. | Member submission and admin review in a safe local fixture. |
+| 11 | Registration requests and review | Partial — a local member request was submitted; admin review and required-field editing were observed, and approval became enabled. No approval was submitted. | Rejection action and complete member-to-admin review remain open; prior reject click timed out. |
 | 12 | Keyword inquiries | Partial — Korean notification text and keyword search were checked. | Member create/edit/delete and admin reply/follow-up conversation. |
-| 13 | Regulation chat | Open — no signed-in browser result was recorded. | Query, sources, error display, and independence from analysis state. |
+| 13 | Regulation chat | Deferred — the user assigned this chatbot to a separate future implementation; exclude it from this QA run unless an error affects another feature. | No QA action in this run. |
 | 14 | Keyword, user, and normalization administration | Partial — keyword/normalization views and API role guards were checked. | Full member UI boundary, admin editing workflows, pagination and persistence. |
 | 15 | Cross-page Streamlit/React parity | Partial — analysis results were compared on seven same-data cases. Source review confirms `streamlit_cloud/app.py` selects FIXED329; its source differs from the FIXED327 baseline only in the version text. React has counterparts for the top-level functions, with registration review and normalization under admin subpages. | This confirms source routing/scope only. Remaining screen layouts, interactions, filters, exports and role workflows need browser comparison. |
 
 The prior “58-item parity review” phrase in `frontend/QA_STATUS.md` is historical and is
 not backed by a canonical 58-row checklist in this repository. Use the 15 workflows above
 as the current count until a finer-grained, evidence-linked matrix is approved. The overall
-effort is therefore substantial: 3 workflows have no browser evidence yet, 12 have partial
-or sample-only evidence, and none closes every criterion in its group. Excel display remains
-a blocker. The overwrite confirmation is now covered for the unsaved-blank-row to saved-empty-draft
+one workflow (regulation chat) is deferred and excluded from active QA; of the remaining 14,
+1 has no browser evidence yet and 13 have partial or sample-only evidence. None closes every
+criterion in its group. For a rough evidence-completion estimate, assigning 0.5 credit to each
+partial/sample-only group and 0 to the open group gives 6.5 / 14 = 46%. This is a QA evidence
+estimate, not an implementation or migration completion percentage. Excel display remains
+a blocker. The overwrite confirmation is covered for the unsaved-blank-row to saved-empty-draft
 case; broader replacement cases remain open.
+
+### Scope update (2026-11-07)
+
+- The regulation-evidence chatbot (row 13) is deferred to a separate future implementation by the user. Exclude it from this QA run unless a code or integration error affects another feature.
+- Count the remaining 14 workflows as active QA scope; do not treat the chatbot's unverified state as a blocker.
+
+### Latest evidence update (2026-11-07, DESKTOP-SINFIM6)
+
+- The six-item browser QA bundle remains at 2/6 complete; no new browser PASS was added because Windows browser URL-trust enforcement stopped UI control.
+- API state and exact OCR fixture extraction were revalidated against the loopback Supabase test DB. This does not count as browser UI evidence.
+- CSV search found only older/wrong-condition report files; the required template, current-day report download, and analysis-results download remain unverified. See the dated run log for file paths, sizes, dates, and parsed shapes.

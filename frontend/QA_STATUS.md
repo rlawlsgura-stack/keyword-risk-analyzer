@@ -172,7 +172,7 @@
 - [ ] Excel is not installed in this environment; visual rendering of the downloaded report CSV and its 14-column layout remain unverified.
 - [x] The user reports progress comparing major React and Streamlit screens.
 - [x] User-reported React/Streamlit comparison matched on seven same-data cases (2026-11-05); this is sample coverage only. Continue remaining page-by-page visual and interaction checks.
-- [ ] Complete signed-in member and admin UI checks for the catalog, OCR, regulation search, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings.
+- [ ] Complete signed-in member and admin UI checks for the catalog, OCR, unmatched candidates, inquiries, user management, keyword management, registration review, and normalization settings. The regulation-evidence chatbot is deferred to a separate implementation task per the user's 2026-11-07 instruction.
 - [ ] Finish the interaction parity review against the Streamlit UI; keep Streamlit as the production interface until this is complete.
 
 The OCR dependency deployment is complete. Authenticated local OCR API inference and candidate persistence have since been exercised; Render OCR behavior and React UI flow remain unverified. The user has verified the report screen and downloaded its CSV. Keep Streamlit as the production UI until the remaining signed-in checks pass.
@@ -460,3 +460,165 @@ Use `docs/qa/SCREEN_QA_CHECKLIST.md` for the first manual screen review. Product
 - [x] While checking report CSV generation, found that `reportCsv.ts` contained corrupted Korean string literals. Replaced them with Unicode escapes matching the report table's actual field names and headers. `npm test` passed 17/17 and `npm run build` passed. The existing serializer test confirms 14 columns, Korean text, date/count fields, BOM, escaping, and formula safety.
 - [ ] Fresh CSV download through the React screen and Excel visual inspection remain unverified. Windows Computer Use reported that both the native-app pipe and browser access host are unavailable, so no UI interaction or workbook inspection was possible. Serializer tests are code-level evidence only.
 - [ ] Member/admin screens and React-Streamlit interaction comparison remain open. API checks above do not verify those screens. Do not delete QA rows as cleanup; retain the user's no-delete constraint.
+
+### Local QA continuation and CSV schema fix (2026-11-07, DESKTOP-SINFIM6)
+
+- [x] Reconfirmed the live React test build uses Supabase Auth at `127.0.0.1:54321` and API at
+  `127.0.0.1:8000`; the API launch script validated its database URL as local loopback. CLI status
+  and the repository's local Supabase Docker containers matched. Authenticated `/readyz` returned
+  `ready`. No production DB write or role change was made.
+- [x] The active DB initially had 0 catalog rows at revision 14 and 144 unmatched terms, which
+  differs from the earlier 2026-11-07 note that reported three `LOCAL%` rows. Current state is
+  revision 15 with the retained QA OCR row `L001`; unmatched candidates were not deleted.
+- [x] Actual Python 3.13.15 / PaddleOCR 3.7.0 API inference on
+  `docs/qa/ocr_korean_sample.png` returned `안티에이징` at confidence 0.9998558. Saved the extracted
+  term as local QA code `L001`, then re-queried it successfully. One recorded exact local analysis
+  was added for a report fixture; retain both test records.
+- [x] Exact, partial, and similar API matching returned code `L001`; matching category/risk filters
+  returned one result; a wrong-risk filter and a missing term returned zero. The requests used
+  `record=false` except the one report fixture, so no extra histories were added.
+- [x] API read checks: normalization settings returned 200; local users had two admins and one
+  member; unmatched total was 144 and an impossible search returned zero; registration review had
+  zero pending requests. No member credentials were used, so member UI/API denial remains open.
+- [x] Found that the report API's live `keyword_data` had 9 fields while the CSV contract requires
+  12 catalog columns plus rank and period count. `frontend/src/reportCsv.ts` now writes a fixed
+  14-column schema, with absent optional metadata as empty cells. Added a regression case for the
+  9-field API response.
+- [x] Generated `docs/qa/artifacts/local_report_csv_serializer_20261107.csv` from the live local
+  report API and the frontend serializer. Parsed UTF-8 BOM and both rows at 14 fields; Korean text,
+  code, date, and period count were correct. This is serializer/API evidence, not a browser download.
+- [x] `npm test`: 18/18. Clean temporary copy: `npm ci`, tests 18/18, TypeScript check and Vite
+  production build passed. OCR regression suite: 8/8 with external Supabase environment removed.
+- [ ] The browser host again refused the Chrome capture because current URL confidence was
+  insufficient. Template/report/analysis CSV download events, Excel rendering, draft Cancel and
+  confirm behavior, member/admin UI, inquiry/registration workflows, and React–Streamlit comparison
+  remain UNVERIFIED. The user's report is separately preserved as user-reported in
+  `docs/qa/KRA_QA_HANDOFF_20261107.txt`; the original attachment was unavailable.
+- [ ] Law.go.kr search is DEFERRED by the user as a separate chatbot implementation. Do not spend
+  remaining QA time on API-key issuance or service behavior; reopen only if a code error or
+  integration issue with another area appears.
+
+### Additional isolated authorization and workflow regression tests (2026-11-07)
+
+- [x] With a deliberately absent env-file path, `STORAGE_BACKEND=csv`, live reset disabled, and
+  Supabase environment variables removed, the focused analysis, catalog, inquiry, and unmatched
+  suites passed 41/41. These mocked/unit tests cover member/admin request boundaries, role checks,
+  request ownership/replies, normalization authorization, registration queue permissions, and
+  persistence contracts. No live database was used by these tests.
+- [x] Streamlit `AppTest` suites passed 19/19 (`test_approved_matching.py` 6/6 and
+  `test_shared_unmatched_ui.py` 13/13). These are source-level AppTests with mocked repository
+  calls, not live browser or React evidence. Expected mocked offline-save logging and Streamlit
+  deprecation/script-context warnings appeared; no test failed.
+- [ ] Current member React/API live denial and same-fixture React/Streamlit UI comparison remain
+  UNVERIFIED because no confirmed member login session or controllable browser was available.
+
+### Frontend tooling and browser access follow-up (2026-11-07, DESKTOP-SINFIM6)
+
+- [x] Rechecked the current frontend without stopping Vite. `npm test` passed 18/18, but
+  `npx tsc --noEmit` could not run because the repository `node_modules` is incomplete after the
+  earlier `npm ci` hit `EPERM` on the locked Rolldown binary; `typescript` and `rolldown` were
+  absent. `npx` offered to fetch unrelated `tsc@2.0.4`; it was not added to the repository.
+- [x] Copied frontend source to an isolated `%TEMP%` directory, excluding `.env*`, `node_modules`,
+  and `dist`. There `npm ci` installed 41 packages (0 audit vulnerabilities), tests passed 18/18,
+  TypeScript `--noEmit` passed, and `npm run build` passed. Copy:
+  `%TEMP%/kra-frontend-verify-01b447fb588c4369a69a992e37d31e89`.
+- [x] Reconfirmed React `127.0.0.1:5173/` and API `127.0.0.1:8000/healthz` each returned HTTP
+  200 via `curl.exe`. Vite PID 17520 remains active and was not stopped or killed.
+- [x] The earlier `npm ci` failure was resolved after verifying and stopping Vite PID 17520, which
+  still held the Rolldown binary. In-place `npm ci` then installed 41 packages (0 audit
+  vulnerabilities); `npm run build` and `npm test` passed. The test frontend was restarted with
+  `scripts/start_local_test_frontend.ps1`; frontend and API both returned HTTP 200. See the later
+  11:17 KST entry in `docs/qa/qa_run_20261107_DESKTOP-SINFIM6.md`.
+- [ ] Browser interaction remains UNVERIFIED. A new in-app tab to the local React URL failed
+  because the computer/browser access host itself returned `unavailable`; no click, login,
+  download, or database action occurred. This is a tooling block, not evidence of an app defect.
+- Law-search chatbot remains DEFERRED per the user's scope instruction and is not an active QA
+  blocker.
+
+### Local admin read-only QA and full Python regression (2026-11-07, DESKTOP-SINFIM6)
+
+- [x] Reconfirmed the environment before authenticated checks: CLI-reported API URL, backend
+  `SUPABASE_URL`, and frontend `VITE_SUPABASE_URL` all matched local loopback `:54321`; backend
+  `STORAGE_BACKEND=supabase`, local HTTP was enabled, and `API_ACCESS_TOKEN` was empty. Local
+  Supabase Auth login succeeded; credentials and bearer token were not printed or recorded.
+- [x] Read-only API checks returned `/readyz` 200, admin user list 200 (3 users: 2 admins, 1
+  member), keyword inquiry list 200 (0), registration review queue 200 (0), normalization
+  settings 200, and request notifications 200 (`configured=false`, `enabled=false`). The current
+  admin's saved recommendation draft returned 200 with `payload=null`. No write, account/role
+  change, or data deletion occurred.
+- [x] Full backend/Streamlit suite: `python -m unittest discover -s tests -p "test_*.py" -v` with
+  `KRA_ENV_FILE` pointing to an absent file, `STORAGE_BACKEND=csv`, `KRA_TEST_LIVE_RESET=0`, and
+  all Supabase variables removed. Result: 121 tests passed; 9 skipped (explicit live reset opt-in
+  and legacy screen assertions). Expected Streamlit context/deprecation warnings and a mocked
+  offline persistence error appeared. No live Supabase data was used by the suite.
+- [ ] Member inquiry submission/reply, registration request/review, and draft save/reload remain
+  UNVERIFIED end to end: there is no confirmed member credential/session, local inbox/review
+  queues are empty, and browser automation is unavailable. Do not create or alter accounts/roles to
+  force this check. The existing member/admin API unit tests passed.
+- The law-search chatbot remains deferred and excluded from this QA run.
+
+### User handoff revalidation: CSV search, OCR fixture, and API state (2026-11-07, DESKTOP-SINFIM6)
+
+- [x] Independently confirmed the running frontend's served Auth host and the API process DB
+  target: Vite PID 9280 serves Auth `127.0.0.1:54321` and API `127.0.0.1:8000`; API PID 18764
+  loads `.env.test.local`, `STORAGE_BACKEND=supabase`, and DB host `127.0.0.1:54321`. CLI local
+  status matched both frontend and backend URLs. No secret was printed.
+- [x] Rechecked API state without writes: health `{"status":"ok"}`, ready, 3 users (2 admin/1
+  member), inquiry 0, registration review 0, catalog revision 15 with L001/안티에이징 and expected
+  local QA category/risk, 144 unmatched candidates. Query for 2026-11-07 with Top 10 returned
+  L001, hit count 1, last search `2026-11-07 10:56:32`; normalization symbols and 55 suffixes
+  matched the handoff.
+- [x] API candidate paging returned 100 first-page rows and 44 at offset 100; unique no-match
+  search returned 0. API order was monotonic by occurrence count and `first_seen` for each sort.
+  This is API evidence only; latest browser observations remain user-reported and the six-item
+  browser completion count remains 2/6.
+- [x] Exact fixture OCR extraction only: inspected `docs/qa/ocr_korean_sample.png` (12,189 bytes,
+  valid PNG, Korean term visible); authenticated extract API returned one line and one
+  `안티에이징` candidate at confidence 0.9998558. Save API was not called; revision stayed 15.
+- [ ] CSV 실물: Downloads has three older 2026-11-06 report files (each 423 bytes, UTF-8 BOM,
+  2 rows, 11 columns, no L001). Repository-root report is 2,513 bytes, 11 rows, 14 columns, but
+  contains no L001 and dates only 2026-11-04/05. No template or analysis-results CSV found in
+  Downloads/repository/artifacts. These files do not meet the requested 2026-11-07 evidence. Fresh
+  download is BLOCKED by browser URL-trust automation failure. Excel/LibreOffice unavailable.
+- [ ] Draft UI Cancel/confirm and member flows remain BLOCKED by the same browser issue; current
+  local-admin draft API payload is null, but no draft or member test data was created.
+- No analysis was run, no database writes/deletes or account/role changes occurred, and existing
+  QA rows were preserved. See the dated detailed log for exact file paths and evidence. The law
+  chatbot remains excluded.
+
+### Browser recheck and HTML handoff summary (2026-11-07, DESKTOP-SINFIM6)
+
+- [ ] Browser QA remains BLOCKED. Chrome's React Preview window is visible to Windows inventory,
+  but the browser access host is unavailable and native control rejects the window because URL
+  trust cannot be established. No interaction or download was made.
+- [x] Added and parsed `docs/qa/react_migration_status_20261107.html`; its four relative links to
+  QA status, checklist, handoff, and detailed run log resolve correctly.
+- No DB, source code, account, or role changes were made in this continuation. Do not count this
+  as a new browser QA pass.
+
+### React report date filtering with local data (2026-11-07)
+
+- [x] React and API had stopped; local Supabase still returned HTTP 200. Started API and React only through `scripts/start_local_test_api.ps1` and `scripts/start_local_test_frontend.ps1`, which enforce loopback Supabase `127.0.0.1:54321`, API `127.0.0.1:8000`, and React `127.0.0.1:5173`. No production endpoint was used.
+- [x] In the authenticated local-admin React report screen, range 2026-11-01–2026-11-07 showed L001 / 안티에이징 with 2 period hits and cumulative count 2. Setting both dates to 2026-11-07 retained the row with 2 period hits; setting both to 2026-11-06 showed the empty state. Restored the default range. No analysis, reset, or DB write was made.
+- [ ] Clicked the visible report CSV control, but no new CSV appeared in the checked Downloads folder. This attempt does not verify a fresh browser download; existing 14-column serializer/API artifacts and tests remain code-level evidence. Excel visual inspection remains deferred.
+- [x] Frontend `npm test` passed 18/18 after the sandboxed Node worker spawn failed with `EPERM`; `npm run build` passed after the same Vite child-process restriction required an approved rerun. No source/test files were changed in this pass.
+- [x] `git diff --check` passed. Existing local L001 report fixture and 144 unmatched candidates were preserved. The React tab is left on the report page with the default range restored.
+
+### React OCR file selection control follow-up (2026-11-07)
+
+- [x] Opened the signed-in React OCR screen. Korean OCR action remained disabled until a file was selected.
+- [ ] Tried the visible file-selection control using the connected in-app browser. The control received focus, but no native/browser file chooser opened; no sample was selected and no OCR request was submitted. Treat OCR upload/result/recovery in this browser as BLOCKED by file chooser access, not as an application pass or defect.
+- [x] No OCR candidate, analysis, keyword, or database data was changed.
+
+### Analysis retry source review (2026-11-07)
+
+- Source review only; no completed test or browser flow was rerun. `App.tsx` clears an old result when analysis inputs/options change, retains the pending request ID after an error, and reuses that ID when an unchanged request is submitted again. Unmatched-candidate collection has its own retry action.
+- `service.py` reuses an existing analysis by ID/fingerprint, and existing tests cover candidate-collection retry without duplicate history writes. These are existing implementation/test findings, not new runtime verification.
+- The browser failure/recovery path and result focus/scroll behavior remain unverified. No analysis request or database write was sent for this source review.
+
+### React 0.1.5 release candidate validation (2026-11-07)
+
+- [x] Bumped `frontend/package.json` and lockfile from 0.1.4 to 0.1.5 for the fixed 14-column report CSV schema.
+- [x] Frontend test suite: 18 passed, 0 failed. Production build completed.
+- [x] `git diff --check` passed before staging. These checks validate the current release candidate; completed browser workflows were not retested.
+- [ ] Excel's visual rendering of the downloaded 14-column CSV remains unverified. No production DB write or live data test was made.

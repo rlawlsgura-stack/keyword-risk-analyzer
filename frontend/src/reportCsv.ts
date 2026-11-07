@@ -4,6 +4,21 @@ type ReportItem = {
   keyword_data?: Record<string, string>
 }
 
+const reportKeywordColumns = [
+  'kwd_no',
+  '\uD0A4\uC6CC\uB4DC\uBA85',
+  '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC',
+  '\uB9AC\uC2A4\uD06C \uB4F1\uAE09',
+  '\uB300\uCCB4\uD0A4\uC6CC\uB4DC',
+  '\uB9AC\uC2A4\uD06C \uB4F1\uAE09\uBCC4 \uC138\uBD80 \uC2EC\uC758\uAE30\uC900',
+  '\uC99D\uBE59\uC790\uB8CC\uC720\uD615',
+  '\uD0A4\uC6CC\uB4DC \uC870\uD68C \uC218(\uB204\uC801\uCE74\uC6B4\uD2B8)',
+  '\uB9C8\uC9C0\uB9C9 \uCD9C\uB825\uC77C\uC790',
+  '\uD0A4\uC6CC\uB4DC\uB4F1\uB85D\uC778',
+  '\uBE44\uACE0',
+  '\uD0A4\uC6CC\uB4DC \uB4F1\uB85D\uC77C\uC790',
+]
+
 function csvCell(value: string) {
   const safeValue = /^[\u0000-\u0020]*[=+\-@]/.test(value) ? `'${value}` : value
   return `"${safeValue.replaceAll('"', '""')}"`
@@ -13,8 +28,7 @@ export function buildTopKeywordCsv(
   reportItems: ReportItem[],
   formatDate: (value: string) => string,
 ) {
-  const keywordColumns = reportItems[0]?.keyword_data
-    ? Object.keys(reportItems[0].keyword_data) : []
+  const keywordColumns = reportKeywordColumns
   const alternativeColumn = '\uB300\uCCB4\uD0A4\uC6CC\uB4DC'
   const evidenceColumn = '\uC99D\uBE59\uC790\uB8CC\uC720\uD615'
   const periodCountColumn = '\uAE30\uAC04\uB0B4_\uC870\uD68C\uC218'

@@ -87,9 +87,34 @@ test('report CSV quotes commas and doubles quotes without allowing formulas', ()
     },
   }
   const rows = parseCsv(buildTopKeywordCsv([item], value => value))
-  assert.equal(rows[0][1], '대체키워드')
-  assert.equal(rows[0][2], '기간내_조회수')
-  assert.equal(rows[1][1], '"피부, 진정"')
-  assert.equal(rows[1][2], '1')
-  assert.equal(rows[1][3], "' =1+1")
+  assert.equal(rows[0][5], '대체키워드')
+  assert.equal(rows[0][6], '기간내_조회수')
+  assert.equal(rows[1][5], '"피부, 진정"')
+  assert.equal(rows[1][6], '1')
+  assert.equal(rows[1][12], "' =1+1")
+})
+
+test('report CSV keeps the full 14-column schema when API rows omit optional fields', () => {
+  const item = {
+    search_rank: 1,
+    hit_count: 7,
+    keyword_data: {
+      kwd_no: 'L001',
+      키워드명: '안티에이징',
+      상품카테고리: 'LOCAL QA OCR 20261107',
+      '리스크 등급': '4등급(사용가능)',
+      대체키워드: '-',
+      '리스크 등급별 세부 심의기준': '격리된 로컬 QA OCR 재검증',
+      증빙자료유형: '-',
+      '키워드 조회 수(누적카운트)': '1',
+      '마지막 출력일자': '2026-11-07T10:00:00',
+    },
+  }
+  const rows = parseCsv(buildTopKeywordCsv([item], value => value.replace('T', ' ')))
+
+  assert.equal(rows[0].length, 14)
+  assert.equal(rows[1].length, 14)
+  assert.deepEqual(rows[0].slice(-3), ['키워드등록인', '비고', '키워드 등록일자'])
+  assert.deepEqual(rows[1].slice(-3), ['', '', ''])
+  assert.equal(rows[1][2], '안티에이징')
 })
