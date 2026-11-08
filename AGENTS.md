@@ -9,7 +9,8 @@ again for each commit.
 - Review the intended changes and run appropriate checks before committing.
 - Before starting or reopening local frontend/API ports, verify the configured
   Supabase URL and client key, confirm frontend/backend Supabase URLs match, and
-  check Supabase Auth health. Report the result before launching the services.
+  check Supabase Auth health. Also confirm API CORS allows the frontend origin
+  and that the API health endpoint responds. Report these checks before launch.
 - For an ordinary push, use this exact command without extra arguments:
 
   ```powershell
