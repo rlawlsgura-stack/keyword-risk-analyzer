@@ -473,7 +473,7 @@ export function UnmatchedTab() {
           <h4>정규화 추천 및 분류 입력</h4>
           <div className="caption">새 행은 + 버튼으로 추가하거나 행을 선택해 위·아래에 삽입할 수 있습니다.</div>
           <div className="table-wrap mt">
-            <table className="grid normalization-grid">
+            <table className="grid">
               <thead><tr>
                 <th className="sel"><input type="checkbox" aria-label="선택" title="누르면 표의 항목을 모두 선택하거나 해제합니다." checked={allWsSelected}
                   onChange={e => setDraft(d => ({ ...d, selected_ids: e.target.checked ? wsRows.map(r => r.recommendation_id) : [] }), true)} /></th>
