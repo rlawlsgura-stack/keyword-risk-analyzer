@@ -15,7 +15,7 @@ import { ReportTab } from './tabs/ReportTab.tsx'
 import { KeywordAdminTab } from './tabs/KeywordAdminTab.tsx'
 import { UsersTab } from './tabs/UsersTab.tsx'
 
-export const APP_VERSION = 'REACT-1.9 (FIXED329 기준)'
+export const APP_VERSION = 'REACT-1.10 (FIXED329 기준)'
 const TITLE = '🔎 광고심의 자동화 솔루션'
 
 /** The recovery hash is read before supabase-js consumes it (L1660-1686). */
@@ -730,24 +730,32 @@ function Shell() {
     <div className="app">
       <button className="sidebar-toggle" onClick={() => setCollapsed(c => !c)} aria-label="사이드바 열기/닫기">{collapsed ? '»' : '«'}</button>
       <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
-        <div className="section">
+        <div className="sidebar-brand">
+          <span className="brand-mark" aria-hidden="true">K</span>
+          <span><strong>키워드 리스크</strong><small>ANALYZER</small></span>
+        </div>
+        <div className="section sidebar-account">
+          <span className="sidebar-section-label">계정</span>
+          <span className="account-email" title={user.email}>{user.email || '로그인됨'}</span>
           <Button onClick={logout}>로그아웃</Button>
           {logoutError && <Alert kind="error">{logoutError}</Alert>}
-          <span className="caption" style={{ marginTop: '.5rem' }}>{user.email || '로그인됨'}</span>
         </div>
         <div className="section">
-          <h3>🗂 데이터 저장</h3>
+          <span className="sidebar-section-label">데이터 저장소</span>
           <span className="caption">Supabase 공유 저장소</span>
           <Button disabled={reloading} onClick={async () => { setReloading(true); await reloadCatalog(); await reloadDropdowns(); setReloading(false) }}>
             최신 데이터 불러오기
           </Button>
         </div>
         <Expander title="키워드 문의"><KeywordRequestForm /></Expander>
-        <div className="caption mt">앱 버전 · {APP_VERSION}</div>
+        <div className="sidebar-footer">업무용 키워드 안전성 분석</div>
       </aside>
       <main className="main">
         <div className="main-inner">
-          <h1>{TITLE}</h1>
+          <header className="page-header">
+            <div><span className="page-kicker">KEYWORD RISK WORKSPACE</span><h1>{TITLE}</h1></div>
+            <span className="version-badge">앱 버전 · {APP_VERSION}</span>
+          </header>
           <Tabs tabs={tabs} active={tab} onChange={setTab} />
           {pendingCount > 0 && (
             <div>
@@ -764,14 +772,14 @@ function Shell() {
           {!catalog && !catalogError ? <Spinner text="키워드 DB를 불러오는 중입니다." /> : (
             <>
               {/* Kept mounted so each tab keeps its inputs like Streamlit session state. */}
-              <div hidden={tab !== 'analysis'}><AnalysisTab /></div>
-              <div hidden={tab !== 'ocr_import'}><OcrTab /></div>
-              {tab === 'candidate_pool' && <UnmatchedTab />}
-              {tab === 'requests' && <RequestsTab />}
-              <div hidden={tab !== 'regulation_chat'}><ChatTab /></div>
-              <div hidden={tab !== 'report'}><ReportTab active={tab === 'report'} /></div>
-              {isAdmin && <div hidden={tab !== 'keyword_admin'}><KeywordAdminTab /></div>}
-              {isAdmin && <div hidden={tab !== 'user_admin'}><UsersTab /></div>}
+              <div className="workspace-panel" hidden={tab !== 'analysis'}><AnalysisTab /></div>
+              <div className="workspace-panel" hidden={tab !== 'ocr_import'}><OcrTab /></div>
+              {tab === 'candidate_pool' && <div className="workspace-panel"><UnmatchedTab /></div>}
+              {tab === 'requests' && <div className="workspace-panel"><RequestsTab /></div>}
+              <div className="workspace-panel" hidden={tab !== 'regulation_chat'}><ChatTab /></div>
+              <div className="workspace-panel" hidden={tab !== 'report'}><ReportTab active={tab === 'report'} /></div>
+              {isAdmin && <div className="workspace-panel" hidden={tab !== 'keyword_admin'}><KeywordAdminTab /></div>}
+              {isAdmin && <div className="workspace-panel" hidden={tab !== 'user_admin'}><UsersTab /></div>}
             </>
           )}
         </div>
