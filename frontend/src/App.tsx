@@ -245,10 +245,10 @@ function Shell() {
       }
     }
     const columnText = (cell: HTMLTableCellElement) => {
-      const select = cell.querySelector('select')
-      if (select) return select.selectedOptions[0]?.text ?? ''
       const input = cell.querySelector('input[type="text"], textarea') as HTMLInputElement | HTMLTextAreaElement | null
       if (input) return input.value
+      const select = cell.querySelector('select')
+      if (select) return select.selectedOptions[0]?.text ?? ''
       const checkbox = cell.querySelector('input[type="checkbox"]') as HTMLInputElement | null
       if (checkbox) return checkbox.checked ? '✓' : ''
       return (cell.innerText || cell.textContent || '').trim()
@@ -591,7 +591,7 @@ function Shell() {
         const select = cell.querySelector('select')
         if (select && !select.disabled) {
           if (setSelect(select, value)) return
-          const direct = Array.from(select.options).find(option => option.value === '(직접 입력)')
+          const direct = select.querySelector<HTMLOptionElement>('option[data-direct-entry]')
           if (!direct) return
           selectSetter?.call(select, direct.value)
           select.dispatchEvent(new Event('change', { bubbles: true }))

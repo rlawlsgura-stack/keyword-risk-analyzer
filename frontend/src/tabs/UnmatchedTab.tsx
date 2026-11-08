@@ -370,7 +370,7 @@ export function UnmatchedTab() {
             editCell(row.recommendation_id, column, next)
           }
         }} aria-label={column}>
-          {directEnabled && <option value={DIRECT}>{DIRECT}</option>}
+          {directEnabled && <option value={DIRECT} data-direct-entry>{DIRECT}</option>}
           {list.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
         {direct && <textarea rows={2} value={value} placeholder={`${column} 직접 입력`}
