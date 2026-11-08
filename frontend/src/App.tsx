@@ -225,15 +225,15 @@ function Shell() {
     const initialColumnOrder = new WeakMap<HTMLTableElement, string[]>()
     const currentColumnOrder = new WeakMap<HTMLTableElement, string[]>()
     const sortState = new WeakMap<HTMLTableElement, { key: string; direction: 'asc' | 'desc' }>()
-    const selectedColumn = new WeakMap<HTMLTableElement, string>()
     let activeRange: { table: HTMLTableElement; startRow: number; startCol: number; endRow: number; endCol: number } | null = null
     let suppressClickTable: HTMLTableElement | null = null
-    const clearRange = () => {
-      document.querySelectorAll('table.grid td.range-selected').forEach(cell => cell.classList.remove('range-selected'))
+    const clearSelection = () => {
+      document.querySelectorAll('table.grid td.range-selected, table.grid th.column-selected, table.grid td.column-selected')
+        .forEach(cell => cell.classList.remove('range-selected', 'column-selected'))
       activeRange = null
     }
     const paintRange = (range: NonNullable<typeof activeRange>) => {
-      clearRange()
+      clearSelection()
       activeRange = range
       const rowStart = Math.min(range.startRow, range.endRow), rowEnd = Math.max(range.startRow, range.endRow)
       const colStart = Math.min(range.startCol, range.endCol), colEnd = Math.max(range.startCol, range.endCol)
@@ -298,8 +298,6 @@ function Shell() {
       })
     }
     const updateColumnSelection = (table: HTMLTableElement, key: string | null) => {
-      selectedColumn.delete(table)
-      if (key) selectedColumn.set(table, key)
       Array.from(table.rows).forEach(row => Array.from(row.cells).forEach(cell => {
         cell.classList.toggle('column-selected', !!key && cell.dataset.columnKey === key)
       }))
@@ -318,7 +316,10 @@ function Shell() {
             const result = numeric ? an - bn : collator.compare(a.value, b.value)
             return (direction === 'asc' ? result : -result) || a.i - b.i
           })
-        if (ordered.some((item, i) => rows[i] !== item.row)) ordered.forEach(item => body.append(item.row))
+        if (ordered.some((item, i) => rows[i] !== item.row)) {
+          if (table.querySelector('.range-selected, .column-selected')) clearSelection()
+          ordered.forEach(item => body.append(item.row))
+        }
         Array.from(body.rows).forEach((row, i) => {
           const indexCell = row.querySelector('td.idx')
           if (indexCell && indexCell.textContent !== String(i)) indexCell.textContent = String(i)
@@ -332,7 +333,7 @@ function Shell() {
       table.querySelectorAll<HTMLTableCellElement>('thead th.table-sortable').forEach(cell => {
         cell.setAttribute('data-sort-direction', cell.dataset.columnKey === key ? direction : '')
       })
-      clearRange()
+      clearSelection()
       sortedRows(table, key, direction)
     }
     const refreshTable = (table: HTMLTableElement) => {
@@ -351,7 +352,7 @@ function Shell() {
       currentColumnOrder.set(table, next)
       arrangeColumns(table)
       updateColumnSelection(table, null)
-      clearRange()
+      clearSelection()
     }
     const prepareTable = (table: HTMLTableElement) => {
       ensureColumnKeys(table)
@@ -419,10 +420,10 @@ function Shell() {
         window.addEventListener('pointerup', onUp, { once: true })
         return
       }
-      if (!(event.target instanceof Element)) { clearRange(); return }
-      if (event.target.closest('input, select, textarea, button, a')) { clearRange(); return }
+      if (!(event.target instanceof Element)) { clearSelection(); return }
+      if (event.target.closest('input, select, textarea, button, a')) { clearSelection(); return }
       const cell = event.target.closest('table.grid tbody td') as HTMLTableCellElement | null
-      if (!cell) { clearRange(); return }
+      if (!cell) { clearSelection(); return }
       const table = cell.closest('table.grid') as HTMLTableElement
       const rows = Array.from(table.tBodies[0]?.rows ?? [])
       const row = rows.indexOf(cell.parentElement as HTMLTableRowElement)
@@ -477,7 +478,7 @@ function Shell() {
         event.preventDefault(); event.stopImmediatePropagation()
         sortColumn(table, header.dataset.columnKey!)
       } else if (header.getBoundingClientRect().right - event.clientX > 8) {
-        clearRange()
+        clearSelection()
         updateColumnSelection(table, header.dataset.columnKey!)
       }
     }
