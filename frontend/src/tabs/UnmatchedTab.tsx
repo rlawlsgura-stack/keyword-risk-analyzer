@@ -4,7 +4,7 @@ import {
   loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests, saveRecommendationDraft,
   submitRegistrationRequests,
 } from '../lib/api.ts'
-import { formatDatetime, koSorted } from '../lib/catalog.ts'
+import { CRITERIA_COL, formatDatetime, koSorted } from '../lib/catalog.ts'
 import { downloadCsv } from '../lib/csv.ts'
 import type { UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
 import { blankRow, emptyDraft, orderRows, sourceKeys, toWsRow, type Draft, type WsRow } from '../lib/workspace.ts'
@@ -12,6 +12,7 @@ import { useStore } from '../store.tsx'
 import { Alert, Button, Checkbox, Help, Spinner, TextInput, errorText } from '../components/ui.tsx'
 
 const PAGE = 1000
+const DIRECT = '(직접 입력)'
 const STATUS_LABEL: Record<string, string> = { registration_requested: '신규 키워드 등록 요청', ignored: '관리자 거절' }
 const EXPORT_STATUS: Record<string, string> = { registration_requested: '신규키워드 등록요청', ignored: '관리자 거절' }
 
@@ -37,6 +38,7 @@ export function UnmatchedTab() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [listMsg, setListMsg] = useState<Msg | null>(null)
   const [busy, setBusy] = useState(false)
+  const [directCriteriaRows, setDirectCriteriaRows] = useState<Set<string>>(() => new Set())
 
   const selection = selections[search] ?? { all: false, ids: {} }
   const setSelection = (next: Selection) => setSelections(s => ({ ...s, [search]: next }))
@@ -193,10 +195,14 @@ export function UnmatchedTab() {
       ...(dropdowns?.opt_categories ?? []),
       ...(catalog?.rows ?? []).map(row => String(row['상품카테고리'] ?? '').trim()),
     ].filter(Boolean))
+    const details = new Set([
+      ...(dropdowns?.opt_details ?? []),
+      ...(catalog?.rows ?? []).map(row => String(row[CRITERIA_COL] ?? '').trim()),
+    ].filter(Boolean))
     return {
       상품카테고리: ['', ...koSorted(categories)],
       '리스크 등급': ['', ...(dropdowns?.opt_risks ?? [])],
-      '리스크 등급별 세부 심의기준': ['', ...(dropdowns?.opt_details ?? [])],
+      [CRITERIA_COL]: ['', ...koSorted(details)],
       증빙자료유형: ['', ...(dropdowns?.opt_evidences ?? [])],
       대체키워드: ['', ...(dropdowns?.opt_alt_terms ?? [])],
     }
@@ -346,11 +352,30 @@ export function UnmatchedTab() {
 
   const selectCell = (row: WsRow, column: keyof typeof options) => {
     const value = String(row[column] ?? '')
-    const list = options[column].includes(value) ? options[column] : [...options[column], value]
+    const isCriteria = column === CRITERIA_COL
+    const direct = isCriteria && (directCriteriaRows.has(row.recommendation_id) || (value !== '' && !options[column].includes(value)))
+    const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
     return (
-      <select value={value} onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label={column}>
-        {list.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <div className={direct ? 'cell-direct-entry' : undefined}>
+        <select value={direct ? DIRECT : value} onChange={e => {
+          const next = e.target.value
+          if (isCriteria && next === DIRECT) {
+            setDirectCriteriaRows(current => new Set(current).add(row.recommendation_id))
+          } else {
+            if (isCriteria) setDirectCriteriaRows(current => {
+              const nextRows = new Set(current)
+              nextRows.delete(row.recommendation_id)
+              return nextRows
+            })
+            editCell(row.recommendation_id, column, next)
+          }
+        }} aria-label={column}>
+          {list.map(o => <option key={o} value={o}>{o}</option>)}
+          {isCriteria && <option value={DIRECT}>{DIRECT}</option>}
+        </select>
+        {direct && <input type="text" value={value} placeholder="세부 심의기준 직접 입력"
+          onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label="세부 심의기준 직접 입력" />}
+      </div>
     )
   }
 
