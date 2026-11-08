@@ -431,6 +431,8 @@ function Shell() {
       const row = rows.indexOf(cell.parentElement as HTMLTableRowElement)
       const col = cell.cellIndex
       if (row < 0) return
+      cell.tabIndex = -1
+      cell.focus({ preventScroll: true })
       paintRange({ table, startRow: row, startCol: col, endRow: row, endCol: col })
       document.body.classList.add('grid-selecting')
       let moved = false
@@ -524,6 +526,35 @@ function Shell() {
       }
       event.clipboardData.setData('text/plain', values.join('\n'))
       event.preventDefault()
+    }
+    const onTableKeyDown = (event: KeyboardEvent) => {
+      if (!activeRange || event.altKey || event.ctrlKey || event.metaKey) return
+      const directions: Record<string, [number, number]> = {
+        ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
+      }
+      const delta = directions[event.key]
+      if (!delta) return
+      if (event.target instanceof Element && event.target.closest('input, select, textarea, button, [contenteditable="true"]')) return
+
+      const range = activeRange
+      const rows = Array.from(range.table.tBodies[0]?.rows ?? [])
+      if (!rows.length) return
+      const currentRow = Math.max(0, Math.min(rows.length - 1, range.endRow))
+      const currentCol = Math.max(0, Math.min((rows[currentRow]?.cells.length ?? 1) - 1, range.endCol))
+      const nextRow = Math.max(0, Math.min(rows.length - 1, currentRow + delta[0]))
+      const nextCol = Math.max(0, Math.min((rows[nextRow]?.cells.length ?? 1) - 1, currentCol + delta[1]))
+      event.preventDefault()
+      if (event.shiftKey) {
+        paintRange({ ...range, endRow: nextRow, endCol: nextCol })
+      } else {
+        paintRange({ table: range.table, startRow: nextRow, startCol: nextCol, endRow: nextRow, endCol: nextCol })
+      }
+      const nextCell = rows[nextRow]?.cells[nextCol]
+      if (nextCell) {
+        nextCell.tabIndex = -1
+        nextCell.focus({ preventScroll: true })
+        nextCell.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      }
     }
     const onPaste = (event: ClipboardEvent) => {
       if (!activeRange || !activeRange.table.isConnected || !event.clipboardData) return
@@ -628,6 +659,7 @@ function Shell() {
     document.addEventListener('drop', onDrop)
     document.addEventListener('dragend', onDragEnd, true)
     document.addEventListener('copy', onCopy)
+    document.addEventListener('keydown', onTableKeyDown, true)
     document.addEventListener('paste', onPaste)
     document.addEventListener('input', onTableInput)
     document.addEventListener('change', onTableValueChange)
@@ -640,6 +672,7 @@ function Shell() {
       document.removeEventListener('drop', onDrop)
       document.removeEventListener('dragend', onDragEnd, true)
       document.removeEventListener('copy', onCopy)
+      document.removeEventListener('keydown', onTableKeyDown, true)
       document.removeEventListener('paste', onPaste)
       document.body.classList.remove('grid-selecting')
       document.removeEventListener('input', onTableInput)
