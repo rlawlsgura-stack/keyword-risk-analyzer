@@ -1,3 +1,7 @@
+## React preview 0.1.5
+
+- Clear range and column selection across shared tables after sorting, cell clicks, and row reordering.
+
 ## React preview 0.1.4
 
 - Fix Korean report CSV field detection and headers.
