@@ -369,8 +369,8 @@ export function UnmatchedTab() {
             editCell(row.recommendation_id, column, next)
           }
         }} aria-label={column}>
-          {list.map(o => <option key={o} value={o}>{o}</option>)}
           <option value={DIRECT}>{DIRECT}</option>
+          {list.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
         {direct && <input type="text" value={value} placeholder={`${column} 직접 입력`}
           onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label={`${column} 직접 입력`} />}

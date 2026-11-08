@@ -146,7 +146,8 @@ body.grid-selecting { user-select: none; cursor: cell; }
 table.grid td.num, table.grid th.num { text-align: right; }
 table.grid td.idx { color: var(--muted); }
 table.grid td input[type=text], table.grid td select, table.grid td textarea { background: transparent; padding: .15rem .3rem; border-radius: 4px; min-width: 7rem; }
-table.grid td .cell-direct-entry { display: grid; gap: .25rem; min-width: 9rem; }
+table.grid td .cell-direct-entry { display: grid; gap: .25rem; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+table.grid td .cell-direct-entry input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 table.grid td input[type=text]:focus, table.grid td select:focus, table.grid td textarea:focus { background: #fff; }
 table.grid td.sel, table.grid th.sel { width: 2.2rem; text-align: center; }
 .table-meta { font-size: .85rem; color: var(--muted); margin: .25rem 0; display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
