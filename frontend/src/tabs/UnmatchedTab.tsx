@@ -38,7 +38,7 @@ export function UnmatchedTab() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [listMsg, setListMsg] = useState<Msg | null>(null)
   const [busy, setBusy] = useState(false)
-  const [directCriteriaRows, setDirectCriteriaRows] = useState<Set<string>>(() => new Set())
+  const [directCells, setDirectCells] = useState<Set<string>>(() => new Set())
 
   const selection = selections[search] ?? { all: false, ids: {} }
   const setSelection = (next: Selection) => setSelections(s => ({ ...s, [search]: next }))
@@ -191,20 +191,19 @@ export function UnmatchedTab() {
   const allWsSelected = wsRows.length > 0 && wsRows.every(r => selectedIds.has(r.recommendation_id))
 
   const options = useMemo(() => {
-    const categories = new Set([
-      ...(dropdowns?.opt_categories ?? []),
-      ...(catalog?.rows ?? []).map(row => String(row['상품카테고리'] ?? '').trim()),
-    ].filter(Boolean))
-    const details = new Set([
-      ...(dropdowns?.opt_details ?? []),
-      ...(catalog?.rows ?? []).map(row => String(row[CRITERIA_COL] ?? '').trim()),
-    ].filter(Boolean))
+    const merged = (configured: string[], column: string) => {
+      const values = new Set([
+        ...configured,
+        ...(catalog?.rows ?? []).map(row => String(row[column] ?? '').trim()),
+      ].map(value => String(value).trim()).filter(Boolean))
+      return ['', ...koSorted(values)]
+    }
     return {
-      상품카테고리: ['', ...koSorted(categories)],
-      '리스크 등급': ['', ...(dropdowns?.opt_risks ?? [])],
-      [CRITERIA_COL]: ['', ...koSorted(details)],
-      증빙자료유형: ['', ...(dropdowns?.opt_evidences ?? [])],
-      대체키워드: ['', ...(dropdowns?.opt_alt_terms ?? [])],
+      상품카테고리: merged(dropdowns?.opt_categories ?? [], '상품카테고리'),
+      '리스크 등급': merged(dropdowns?.opt_risks ?? [], '리스크 등급'),
+      [CRITERIA_COL]: merged(dropdowns?.opt_details ?? [], CRITERIA_COL),
+      증빙자료유형: merged(dropdowns?.opt_evidences ?? [], '증빙자료유형'),
+      대체키워드: merged(dropdowns?.opt_alt_terms ?? [], '대체키워드'),
     }
   }, [catalog, dropdowns])
 
@@ -352,29 +351,29 @@ export function UnmatchedTab() {
 
   const selectCell = (row: WsRow, column: keyof typeof options) => {
     const value = String(row[column] ?? '')
-    const isCriteria = column === CRITERIA_COL
-    const direct = isCriteria && (directCriteriaRows.has(row.recommendation_id) || (value !== '' && !options[column].includes(value)))
+    const key = `${row.recommendation_id}\u0000${column}`
+    const direct = directCells.has(key) || (value !== '' && !options[column].includes(value))
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
     return (
       <div className={direct ? 'cell-direct-entry' : undefined}>
         <select value={direct ? DIRECT : value} onChange={e => {
           const next = e.target.value
-          if (isCriteria && next === DIRECT) {
-            setDirectCriteriaRows(current => new Set(current).add(row.recommendation_id))
+          if (next === DIRECT) {
+            setDirectCells(current => new Set(current).add(key))
           } else {
-            if (isCriteria) setDirectCriteriaRows(current => {
+            setDirectCells(current => {
               const nextRows = new Set(current)
-              nextRows.delete(row.recommendation_id)
+              nextRows.delete(key)
               return nextRows
             })
             editCell(row.recommendation_id, column, next)
           }
         }} aria-label={column}>
           {list.map(o => <option key={o} value={o}>{o}</option>)}
-          {isCriteria && <option value={DIRECT}>{DIRECT}</option>}
+          <option value={DIRECT}>{DIRECT}</option>
         </select>
-        {direct && <input type="text" value={value} placeholder="세부 심의기준 직접 입력"
-          onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label="세부 심의기준 직접 입력" />}
+        {direct && <input type="text" value={value} placeholder={`${column} 직접 입력`}
+          onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label={`${column} 직접 입력`} />}
       </div>
     )
   }
