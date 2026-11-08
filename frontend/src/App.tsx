@@ -529,6 +529,30 @@ function Shell() {
     }
     const onTableKeyDown = (event: KeyboardEvent) => {
       if (!activeRange || event.altKey || event.ctrlKey || event.metaKey) return
+      if ((event.key === ' ' || event.code === 'Space') && !event.shiftKey) {
+        if (event.target instanceof Element && event.target.closest('input, select, textarea, button, [contenteditable="true"]')) return
+        const range = activeRange
+        const rows = Array.from(range.table.tBodies[0]?.rows ?? [])
+        const checkboxes: HTMLInputElement[] = []
+        for (let row = Math.min(range.startRow, range.endRow); row <= Math.max(range.startRow, range.endRow); row++) {
+          for (let col = Math.min(range.startCol, range.endCol); col <= Math.max(range.startCol, range.endCol); col++) {
+            const cell = rows[row]?.cells[col]
+            if (cell?.classList.contains('sel')) {
+              const checkbox = cell.querySelector<HTMLInputElement>('input[type="checkbox"]')
+              if (checkbox && !checkbox.disabled) checkboxes.push(checkbox)
+            }
+          }
+        }
+        if (checkboxes.length) {
+          event.preventDefault()
+          const checkedSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set
+          checkboxes.forEach(checkbox => {
+            checkedSetter?.call(checkbox, !checkbox.checked)
+            checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+          })
+          return
+        }
+      }
       const directions: Record<string, [number, number]> = {
         ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1],
       }
