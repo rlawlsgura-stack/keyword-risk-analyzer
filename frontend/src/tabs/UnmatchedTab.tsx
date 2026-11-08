@@ -4,7 +4,7 @@ import {
   loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests, saveRecommendationDraft,
   submitRegistrationRequests,
 } from '../lib/api.ts'
-import { formatDatetime } from '../lib/catalog.ts'
+import { formatDatetime, koSorted } from '../lib/catalog.ts'
 import { downloadCsv } from '../lib/csv.ts'
 import type { UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
 import { blankRow, emptyDraft, orderRows, sourceKeys, toWsRow, type Draft, type WsRow } from '../lib/workspace.ts'
@@ -19,7 +19,7 @@ type Selection = { all: boolean; ids: Record<string, boolean> }
 type Msg = { kind: 'success' | 'info' | 'warning' | 'error'; text: string; caption?: string }
 
 export function UnmatchedTab() {
-  const { user, isAdmin, dropdowns, reloadCatalog } = useStore()
+  const { user, isAdmin, catalog, dropdowns, reloadCatalog } = useStore()
 
   /* ---------- candidate list ---------- */
   const [searchInput, setSearchInput] = useState('')
@@ -188,13 +188,19 @@ export function UnmatchedTab() {
   const selectedRows = wsRows.filter(r => selectedIds.has(r.recommendation_id))
   const allWsSelected = wsRows.length > 0 && wsRows.every(r => selectedIds.has(r.recommendation_id))
 
-  const options = useMemo(() => ({
-    상품카테고리: ['', ...(dropdowns?.opt_categories ?? [])],
-    '리스크 등급': ['', ...(dropdowns?.opt_risks ?? [])],
-    '리스크 등급별 세부 심의기준': ['', ...(dropdowns?.opt_details ?? [])],
-    증빙자료유형: ['', ...(dropdowns?.opt_evidences ?? [])],
-    대체키워드: ['', ...(dropdowns?.opt_alt_terms ?? [])],
-  }), [dropdowns])
+  const options = useMemo(() => {
+    const categories = new Set([
+      ...(dropdowns?.opt_categories ?? []),
+      ...(catalog?.rows ?? []).map(row => String(row['상품카테고리'] ?? '').trim()),
+    ].filter(Boolean))
+    return {
+      상품카테고리: ['', ...koSorted(categories)],
+      '리스크 등급': ['', ...(dropdowns?.opt_risks ?? [])],
+      '리스크 등급별 세부 심의기준': ['', ...(dropdowns?.opt_details ?? [])],
+      증빙자료유형: ['', ...(dropdowns?.opt_evidences ?? [])],
+      대체키워드: ['', ...(dropdowns?.opt_alt_terms ?? [])],
+    }
+  }, [catalog, dropdowns])
 
   const editCell = (id: string, column: string, value: unknown) => {
     setDraft(d => {
