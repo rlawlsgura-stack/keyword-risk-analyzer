@@ -228,6 +228,7 @@ function Shell() {
     const sortState = new WeakMap<HTMLTableElement, { key: string; direction: 'asc' | 'desc' }>()
     let activeRange: { table: HTMLTableElement; startRow: number; startCol: number; endRow: number; endCol: number } | null = null
     let suppressClickTable: HTMLTableElement | null = null
+    let isPasting = false
     const clearSelection = () => {
       document.querySelectorAll('table.grid td.range-selected, table.grid th.column-selected, table.grid td.column-selected')
         .forEach(cell => cell.classList.remove('range-selected', 'column-selected'))
@@ -524,7 +525,81 @@ function Shell() {
       event.clipboardData.setData('text/plain', values.join('\n'))
       event.preventDefault()
     }
+    const onPaste = (event: ClipboardEvent) => {
+      if (!activeRange || !activeRange.table.isConnected || !event.clipboardData) return
+      const text = event.clipboardData.getData('text/plain')
+      if (!text) return
+      const matrix = text.replace(/\r\n?$/, '').split(/\r\n|\n|\r/).map(line => line.split('\t'))
+      const { table, startRow, endRow, startCol, endCol } = activeRange
+      const rows = Array.from(table.tBodies[0]?.rows ?? [])
+      if (!rows.length) return
+      event.preventDefault()
+
+      const rowStart = Math.min(startRow, endRow), colStart = Math.min(startCol, endCol)
+      const selectedHeight = Math.abs(endRow - startRow) + 1, selectedWidth = Math.abs(endCol - startCol) + 1
+      const repeatCell = matrix.length === 1 && matrix[0].length === 1 && (selectedHeight > 1 || selectedWidth > 1)
+      const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      const textareaSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set
+      const selectSetter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set
+      const checkboxSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'checked')?.set
+      const setText = (control: HTMLInputElement | HTMLTextAreaElement, value: string) => {
+        const setter = control instanceof HTMLTextAreaElement ? textareaSetter : inputSetter
+        setter?.call(control, value)
+        control.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      const setSelect = (select: HTMLSelectElement, value: string) => {
+        if (!Array.from(select.options).some(option => option.value === value || option.textContent?.trim() === value.trim())) return false
+        const option = Array.from(select.options).find(item => item.value === value || item.textContent?.trim() === value.trim())!
+        selectSetter?.call(select, option.value)
+        select.dispatchEvent(new Event('change', { bubbles: true }))
+        return true
+      }
+      const pasteCell = (cell: HTMLTableCellElement, value: string) => {
+        const input = cell.querySelector('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]), textarea') as HTMLInputElement | HTMLTextAreaElement | null
+        if (input && !input.disabled && !input.readOnly) { setText(input, value); return }
+        const select = cell.querySelector('select')
+        if (select && !select.disabled) {
+          if (setSelect(select, value)) return
+          const direct = Array.from(select.options).find(option => option.value === '(직접 입력)')
+          if (!direct) return
+          selectSetter?.call(select, direct.value)
+          select.dispatchEvent(new Event('change', { bubbles: true }))
+          window.requestAnimationFrame(() => {
+            const directInput = cell.querySelector('input[type="text"], textarea') as HTMLInputElement | HTMLTextAreaElement | null
+            if (directInput && !directInput.disabled && !directInput.readOnly) setText(directInput, value)
+          })
+          return
+        }
+        const checkbox = cell.querySelector('input[type="checkbox"]') as HTMLInputElement | null
+        if (!checkbox || checkbox.disabled) return
+        const normalized = value.trim().toLowerCase()
+        const checked = ['✓', '☑', 'true', '1', 'yes', 'y', 'on', 'x'].includes(normalized)
+        if (checked || ['', '☐', 'false', '0', 'no', 'n', 'off'].includes(normalized)) {
+          checkboxSetter?.call(checkbox, checked)
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+      }
+
+      isPasting = true
+      try {
+        if (repeatCell) {
+          for (let r = rowStart; r < rowStart + selectedHeight; r++) for (let c = colStart; c < colStart + selectedWidth; c++) {
+            const cell = rows[r]?.cells[c]
+            if (cell) pasteCell(cell, matrix[0][0])
+          }
+        } else {
+          matrix.forEach((line, r) => line.forEach((value, c) => {
+            const cell = rows[rowStart + r]?.cells[colStart + c]
+            if (cell) pasteCell(cell, value)
+          }))
+        }
+      } finally {
+        isPasting = false
+      }
+      window.requestAnimationFrame(() => { if (table.isConnected) refreshTable(table) })
+    }
     const onTableInput = (event: Event) => {
+      if (isPasting) return
       if (!(event.target instanceof Element)) return
       const table = event.target.closest('table.grid') as HTMLTableElement | null
       if (!table) return
@@ -536,6 +611,7 @@ function Shell() {
       }, 120))
     }
     const onTableValueChange = (event: Event) => {
+      if (isPasting) return
       if (!(event.target instanceof Element)) return
       const table = event.target.closest('table.grid') as HTMLTableElement | null
       if (!table) return
@@ -552,6 +628,7 @@ function Shell() {
     document.addEventListener('drop', onDrop)
     document.addEventListener('dragend', onDragEnd, true)
     document.addEventListener('copy', onCopy)
+    document.addEventListener('paste', onPaste)
     document.addEventListener('input', onTableInput)
     document.addEventListener('change', onTableValueChange)
     return () => {
@@ -563,6 +640,7 @@ function Shell() {
       document.removeEventListener('drop', onDrop)
       document.removeEventListener('dragend', onDragEnd, true)
       document.removeEventListener('copy', onCopy)
+      document.removeEventListener('paste', onPaste)
       document.body.classList.remove('grid-selecting')
       document.removeEventListener('input', onTableInput)
       document.removeEventListener('change', onTableValueChange)
