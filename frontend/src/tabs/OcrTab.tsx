@@ -246,6 +246,9 @@ export function OcrTab() {
 
 /** Image with a transparent, selectable text layer at each recognised line (ocr_keyword_import.py). */
 function OcrPreview({ src, result }: { src?: string; result?: OCRFileResult }) {
+  const [previewFailed, setPreviewFailed] = useState(false)
+  useEffect(() => setPreviewFailed(false), [result?.preview_data])
+
   if (!result || !result.preview_data) {
     return (
       <>
@@ -256,10 +259,18 @@ function OcrPreview({ src, result }: { src?: string; result?: OCRFileResult }) {
   }
   const w = result.image_width || 1, h = result.image_height || 1
   const boxed = result.lines.filter(l => l.text && l.bbox && l.bbox.length === 4 && l.bbox[2] > l.bbox[0] && l.bbox[3] > l.bbox[1])
+  if (previewFailed) {
+    return (
+      <>
+        {src && <img src={src} alt="업로드한 스캔 이미지" style={{ maxWidth: '100%' }} />}
+        <div className="caption">OCR 미리보기 이미지를 불러오지 못해 업로드한 원본을 표시합니다.</div>
+      </>
+    )
+  }
   return (
     <>
       <div className="ocr-wrap" style={{ containerType: 'inline-size' }}>
-        <img src={result.preview_data} alt="" />
+        <img src={result.preview_data} alt="OCR 분석 이미지" onError={() => setPreviewFailed(true)} />
         {boxed.map((l, i) => {
           const [x1, y1, x2, y2] = l.bbox as number[]
           return (
