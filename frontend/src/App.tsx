@@ -187,6 +187,8 @@ function Shell() {
       const context = document.createElement('canvas').getContext('2d')
       if (!context) return Array.from(table.rows[0]?.cells ?? [], cell => cell.getBoundingClientRect().width)
       const widths: number[] = []
+      const responsiveColumns = table.classList.contains('normalization-grid')
+      const columnsWithContent: boolean[] = []
       const measureCellStyle = (cell: HTMLTableCellElement) => {
         const style = getComputedStyle(cell)
         return {
@@ -206,18 +208,27 @@ function Shell() {
           const metrics = (row.parentElement === table.tHead ? headerMetrics : bodyMetrics)[column] ?? headerMetrics[column]
           const select = cell.querySelector('select')
           const controls = Array.from(cell.querySelectorAll('input[type="text"], textarea'))
-            .map(control => (control as HTMLInputElement).value).filter(Boolean)
-          const controlText = controls.length ? controls.join(', ') : select?.selectedOptions[0]?.text ?? ''
-          const text = controlText || cell.textContent?.trim() || ''
-          const measuredText = Array.from(text).slice(0, 100).join('')
+          const controlValues = controls.map(control => (control as HTMLInputElement).value)
+          const text = controls.length ? controlValues.join(', ') : select ? select.selectedOptions[0]?.text ?? '' : cell.textContent?.trim() || ''
+          const measuredText = responsiveColumns ? text : Array.from(text).slice(0, 100).join('')
           const controlPadding = select ? 24 : controls.length ? 12 : 0
           const selectionWidth = cell.classList.contains('sel') ? metrics?.selectionWidth ?? 0 : 0
           if (metrics) context.font = metrics.font
           const width = Math.ceil(Math.max(context.measureText(measuredText).width + controlPadding, selectionWidth) + (metrics?.padding ?? 0) + (metrics?.borders ?? 0) + 1)
           widths[column] = Math.max(widths[column] ?? 0, width)
+          if (responsiveColumns && row.parentElement !== table.tHead && text.trim()) columnsWithContent[column] = true
           column += 1
         })
       })
+      if (responsiveColumns) {
+        Array.from(table.tHead?.rows[0]?.cells ?? []).forEach((cell, column) => {
+          if (cell.classList.contains('sel') || columnsWithContent[column]) return
+          const metrics = bodyMetrics[column] ?? headerMetrics[column]
+          if (metrics) context.font = metrics.font
+          const defaultWidth = context.measureText('가'.repeat(20)).width + (metrics?.padding ?? 0) + (metrics?.borders ?? 0) + 1
+          widths[column] = Math.max(widths[column] ?? 0, Math.ceil(defaultWidth))
+        })
+      }
       return widths
     }
     const fitTable = (table: HTMLTableElement) => applyWidths(table, measureNaturalWidths(table))

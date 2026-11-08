@@ -127,7 +127,6 @@ details.expander > .expander-body { padding: 0.25rem 1rem 1rem; }
 /* tables */
 .table-wrap { width: 100%; min-width: 0; max-width: 100%; max-height: min(80vh, 740px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
 table.grid { border-collapse: collapse; width: max-content; font-size: 0.875rem; }
-table.grid.normalization-grid th, table.grid.normalization-grid td { max-width: 100em; }
 table.grid th, table.grid td { border-bottom: 1px solid rgba(49,51,63,.1); border-right: 1px solid rgba(49,51,63,.06); padding: 0.25rem 0.4rem; text-align: left; vertical-align: top; white-space: normal; overflow-wrap: anywhere; word-break: normal; }
 table.grid td { padding-top: 0.4rem; padding-bottom: 0.45rem; }
 table.grid th { position: sticky; top: 0; background: #fafafa; font-weight: 600; z-index: 1; color: var(--muted); user-select: none; }
