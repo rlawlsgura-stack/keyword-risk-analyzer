@@ -198,8 +198,8 @@ table.grid td.sel, table.grid th.sel { width: 2.2rem; text-align: center; }
 .badge.red { background: #ffe0e0; color: #a01b1b; } .badge.green { background: #dcf5e3; color: #176c32; } .badge.blue { background: #e1ecff; color: #1c4a9c; }
 
 /* OCR overlay */
-.ocr-wrap { position: relative; display: inline-block; max-width: 100%; }
-.ocr-wrap img { max-width: 100%; display: block; }
+.ocr-wrap { position: relative; display: block; width: 100%; max-width: 100%; }
+.ocr-wrap img { width: 100%; height: auto; max-width: 100%; display: block; }
 .ocr-box { position: absolute; border: 1px solid rgba(255,75,75,.8); background: rgba(255,75,75,.08); color: transparent; overflow: hidden; white-space: nowrap; cursor: text; user-select: text; }
 .ocr-box.low { border-color: rgba(120,120,120,.7); background: rgba(120,120,120,.08); }
 .ocr-box::selection { background: rgba(0,104,201,.35); color: transparent; }

@@ -269,7 +269,7 @@ function OcrPreview({ src, result }: { src?: string; result?: OCRFileResult }) {
   }
   return (
     <>
-      <div className="ocr-wrap" style={{ containerType: 'inline-size' }}>
+      <div className="ocr-wrap" style={{ containerType: 'inline-size', width: '100%' }}>
         <img src={result.preview_data} alt="OCR 분석 이미지" onError={() => setPreviewFailed(true)} />
         {boxed.map((l, i) => {
           const [x1, y1, x2, y2] = l.bbox as number[]
