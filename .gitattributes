@@ -1,0 +1,2 @@
+# Preserve downloaded source HTML exactly; extracted text remains reviewable.
+data/regulations/source_snapshots/*.html binary

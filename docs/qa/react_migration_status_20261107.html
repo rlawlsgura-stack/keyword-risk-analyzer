@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyword Risk Analyzer React 전환 현황</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1e293b;
+      --muted: #526174;
+      --line: #d8e0ea;
+      --paper: #ffffff;
+      --canvas: #f3f6fa;
+      --blue: #174ea6;
+      --blue-soft: #eaf2ff;
+      --green: #176b45;
+      --green-soft: #e9f7ef;
+      --amber: #895600;
+      --amber-soft: #fff5d9;
+      --red: #a22d26;
+      --red-soft: #fff0ee;
+      --gray-soft: #eef1f5;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font: 16px/1.65 "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    }
+    main { max-width: 1020px; margin: 36px auto; padding: 0 22px 48px; }
+    header, section, footer {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(27, 48, 76, .045);
+    }
+    header { padding: 34px 38px; border-top: 5px solid var(--blue); }
+    section { margin-top: 18px; padding: 26px 32px; }
+    h1 { margin: 0 0 8px; font-size: clamp(26px, 4vw, 36px); line-height: 1.25; letter-spacing: -.035em; }
+    h2 { margin: 0 0 16px; font-size: 22px; line-height: 1.35; }
+    h3 { margin: 22px 0 8px; font-size: 17px; }
+    p { margin: 8px 0 12px; }
+    ul, ol { margin: 8px 0 0; padding-left: 23px; }
+    li { margin: 5px 0; }
+    a { color: var(--blue); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    code { font: 0.92em Consolas, "Courier New", monospace; overflow-wrap: anywhere; }
+    .subtitle { color: var(--muted); margin: 0 0 20px; }
+    .summary {
+      border-left: 4px solid var(--amber);
+      background: var(--amber-soft);
+      padding: 13px 16px;
+      border-radius: 7px;
+      font-weight: 600;
+    }
+    .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .card { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+    .card h3 { margin: 0 0 6px; }
+    .status {
+      display: inline-block; vertical-align: 1px; margin-right: 7px; padding: 2px 9px;
+      border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+    }
+    .pass { color: var(--green); background: var(--green-soft); }
+    .partial { color: var(--amber); background: var(--amber-soft); }
+    .blocked { color: var(--red); background: var(--red-soft); }
+    .deferred { color: #475569; background: var(--gray-soft); }
+    .note { color: var(--muted); font-size: 14px; }
+    .callout { padding: 13px 16px; border-radius: 8px; background: var(--blue-soft); }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+    th, td { padding: 10px 11px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { background: #f5f8fc; font-weight: 700; }
+    footer { margin-top: 18px; padding: 18px 24px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 680px) {
+      main { margin: 14px auto; padding: 0 12px 24px; }
+      header, section { padding: 22px 19px; }
+      .grid { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; }
+    }
+    @media print {
+      body { background: white; font-size: 11pt; }
+      main { max-width: none; margin: 0; padding: 0; }
+      header, section, footer { box-shadow: none; break-inside: avoid; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="note">전환 및 QA 현황 · 2026년 11월 7일</p>
+    <h1>Keyword Risk Analyzer<br>Streamlit → React 전환</h1>
+    <p class="subtitle">구현 상태와 실제 검증 상태를 구분한 작업 인계 요약</p>
+    <p class="summary">주요 React 기능과 API 연동은 구현됐습니다. 다만 브라우저 기반 관리자·회원 QA와 실제 다운로드 검증이 남아 있어 운영 UI 전환은 아직 완료되지 않았습니다.</p>
+    <div class="meta">
+      <span>기준 브랜치: <code>main</code></span>
+      <span>HEAD: <code>7f31159177a10b8f73ffb6db084c86d8c7cf8310</code></span>
+      <span>작업 트리: 미커밋 변경 있음</span>
+      <span>브라우저 QA 묶음: 2/6</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>현재까지 진행된 작업</h2>
+    <div class="grid">
+      <article class="card">
+        <h3><span class="status pass">구현</span>React 기능과 API 연결</h3>
+        <p>매칭·필터·검색, 원장과 보고서, OCR 후보 검토, 미매칭 후보와 추천 작업본, 문의, 관리자 화면 및 정규화 설정 등 주요 기능이 React에 구현돼 있습니다.</p>
+      </article>
+      <article class="card">
+        <h3><span class="status pass">자동 검사</span>회귀와 빌드</h3>
+        <p>프론트엔드 테스트 18/18, TypeScript 검사와 프로덕션 빌드가 통과했습니다. Python/Streamlit 전체 테스트는 121개 통과, 9개 건너뜀이었습니다.</p>
+      </article>
+      <article class="card">
+        <h3><span class="status partial">부분 검증</span>Streamlit과 결과 비교</h3>
+        <p>동일 입력 7건의 React/Streamlit 분석 결과가 일치했습니다. 전체 화면, 계정 역할, 예외 및 UI 상호작용의 동등성을 뜻하지는 않습니다.</p>
+      </article>
+      <article class="card">
+        <h3><span class="status pass">로컬 API</span>격리 테스트</h3>
+        <p>프론트 인증과 API DB가 로컬 Supabase <code>127.0.0.1:54321</code>을 사용함을 재확인했습니다. 원장 revision 15, L001/안티에이징, 미매칭 144건과 2026-11-07 보고서 API 결과를 확인했습니다.</p>
+      </article>
+      <article class="card">
+        <h3><span class="status pass">코드 수정</span>보고서 CSV 스키마</h3>
+        <p>API 응답에서 선택 필드가 빠져도 보고서 CSV가 고정 14열을 유지하도록 보정하고 회귀 테스트를 추가했습니다. 브라우저 다운로드 실물 검증은 별도입니다.</p>
+      </article>
+      <article class="card">
+        <h3><span class="status pass">OCR API</span>정확한 fixture</h3>
+        <p><code>docs/qa/ocr_korean_sample.png</code>를 API로 추출해 안티에이징 후보를 확인했습니다. 후보 저장은 하지 않았습니다. React 화면에서의 업로드·표시는 검증되지 않았습니다.</p>
+      </article>
+    </div>
+    <p class="callout"><strong>운영 전환 기준:</strong> QA 기록은 잔여 브라우저 검증이 끝날 때까지 Streamlit FIXED329를 운영 UI로 유지하도록 권고합니다. React 미리보기의 존재만으로 운영 전환이 완료된 것은 아닙니다.</p>
+  </section>
+
+  <section>
+    <h2>앞으로 남은 작업</h2>
+    <ol>
+      <li><strong>실제 CSV 다운로드:</strong> 템플릿 9열, 2026-11-07 Top 10 보고서 14열, 분석 결과 CSV 7열을 각각 받아 파일명·내용·한글·열 수를 확인합니다.</li>
+      <li><strong>보고서 Excel 표시:</strong> Excel 설치 환경에서 UTF-8, 14열 및 날짜·조회 수의 표시를 확인합니다.</li>
+      <li><strong>작업본 취소·복원:</strong> 저장 후 편집한 작업본에서 불러오기 취소 시 편집값 보존, 확인 시 저장본 복원을 브라우저에서 검증합니다.</li>
+      <li><strong>회원/관리자 화면:</strong> 회원 문의 작성·목록, 후보 등록 요청, 관리자 답변·검토를 적법한 회원 세션으로 확인합니다.</li>
+      <li><strong>화면 동작 비교:</strong> 검색·초기화·정렬, OCR UI와 분석 연결, 관리자 권한 경계, React/Streamlit 페이지별 동작과 시각적 차이를 확인합니다.</li>
+      <li><strong>배포 환경 확인:</strong> 로컬에서 검증된 OCR 및 UI 연동이 Render 등 배포 환경에서도 동작하는지 확인합니다.</li>
+    </ol>
+    <p class="note">체크리스트상 15개 흐름 중 법령 챗봇 1개는 제외되어 활성 범위는 14개입니다. 2개는 브라우저 근거가 없고, 12개는 일부·표본 결과만 있습니다. 6개 브라우저 QA 묶음은 2/6입니다. 과거 70% 수치는 공식 통과율이 아닙니다.</p>
+  </section>
+
+  <section>
+    <h2>연결 불가 및 검토 제한</h2>
+    <table>
+      <thead><tr><th>항목</th><th>상태와 영향</th></tr></thead>
+      <tbody>
+        <tr><td>브라우저 자동화</td><td><span class="status blocked">차단</span>Chrome 창은 감지됐지만 URL 신뢰 확인에서 도구가 중단됐습니다. 새 CSV 다운로드, 확인창 조작, 로그인 화면 및 시각 비교를 수행하지 못했습니다.</td></tr>
+        <tr><td>회원 로그인</td><td><span class="status blocked">차단</span>회원 역할 계정은 있으나 확인된 회원 세션·자격 정보가 없습니다. 계정 생성, 비밀번호 재설정, 역할 변경은 하지 않았습니다.</td></tr>
+        <tr><td>문의·검토 데이터</td><td><span class="status partial">대기열 비어 있음</span>현재 문의와 등록 검토 대기열이 모두 0건이라 답변·승인 상호작용을 검증할 항목이 없습니다.</td></tr>
+        <tr><td>CSV 파일</td><td><span class="status partial">조건 불일치</span>Downloads의 기존 보고서 3개는 11열·2026-11-06이며 L001이 없습니다. 저장소 루트의 14열 보고서도 L001이 없고 검색일은 11월 4~5일입니다. 템플릿과 분석 결과 파일은 지정 위치에서 찾지 못했습니다.</td></tr>
+        <tr><td>Excel</td><td><span class="status blocked">사용 불가</span>Excel과 LibreOffice가 이 PC에서 확인되지 않아 실제 스프레드시트 표시 검증은 미완료입니다.</td></tr>
+        <tr><td>법령 근거 검색 챗봇</td><td><span class="status deferred">범위 제외</span>별도 구현 예정이라는 사용자 지시에 따라 이번 QA에서 제외합니다.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>테스트 데이터와 저장소 상태</h2>
+    <ul>
+      <li>이번 재검증에서는 DB 쓰기, 삭제, 새 분석 실행, 계정 또는 권한 변경을 하지 않았습니다. 기존 L001과 테스트 기록을 보존했습니다.</li>
+      <li>저장소는 <code>main</code>의 <code>7f31159177a10b8f73ffb6db084c86d8c7cf8310</code>이며, 보고서 CSV 코드·테스트와 QA 문서 변경이 미커밋 상태입니다. 커밋·푸시는 하지 않았습니다.</li>
+      <li>다른 PC에서 이어갈 때 현재 변경 파일과 QA 기록을 먼저 동기화하고, 해당 PC의 프론트·API·DB 대상을 다시 확인해야 합니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>이어보기 자료</h2>
+    <ul>
+      <li><a href="./legacy_react_QA_STATUS.md">프론트엔드 QA 상태 (이전 React 미리보기)</a></li>
+      <li><a href="SCREEN_QA_CHECKLIST.md">화면 QA 체크리스트</a></li>
+      <li><a href="WORK_HANDOFF.md">작업 인계</a></li>
+      <li><a href="qa_run_20261107_DESKTOP-SINFIM6.md">2026-11-07 상세 실행 로그</a></li>
+    </ul>
+  </section>
+
+  <footer>
+    작성 기준: 저장소의 QA_STATUS, SCREEN_QA_CHECKLIST, WORK_HANDOFF 및 2026-11-07 상세 실행 로그. 상태 표기는 코드 구현, API 검증, 브라우저 확인을 구분합니다.
+  </footer>
+</main>
+</body>
+</html>

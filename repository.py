@@ -1,0 +1,525 @@
+"""Server-only Supabase REST access. No mutable user session is shared."""
+import json
+import os
+import unicodedata
+from datetime import datetime, timezone
+from uuid import UUID
+
+import pandas as pd
+import requests
+from urllib.parse import urlencode, urlsplit
+
+from matching_engine import DB_COLS
+
+COUNT_COL = '키워드 조회 수(누적카운트)'
+LAST_COL = '마지막 출력일자'
+
+
+class StorageError(RuntimeError):
+    pass
+
+
+class ConflictError(StorageError):
+    pass
+
+
+def _user_summary(user):
+    """Expose only fields used by the application administrator screen."""
+    return {'id': user['id'], 'email': user.get('email', ''),
+            'role': (user.get('app_metadata') or {}).get('role'),
+            'email_confirmed': bool(user.get('email_confirmed_at'))}
+
+
+class SupabaseRepository:
+    def __init__(self):
+        self.url = os.getenv('SUPABASE_URL', '').rstrip('/')
+        self.key = os.getenv('SUPABASE_SECRET_KEY', '')
+        parsed_url = urlsplit(self.url)
+        local_http = (os.getenv('SUPABASE_ALLOW_LOCAL_HTTP') == '1' and
+                      parsed_url.scheme == 'http' and
+                      parsed_url.hostname in {'localhost', '127.0.0.1', '::1'})
+        if (parsed_url.scheme != 'https' and not local_http) or not self.key:
+            raise StorageError('SUPABASE_URL and SUPABASE_SECRET_KEY are required')
+
+    def request(self, method, path, payload=None, token=None, prefer=None):
+        headers = {'apikey': self.key, 'Content-Type': 'application/json'}
+        if prefer:
+            headers['Prefer'] = prefer
+        # Modern secret keys are API keys, not bearer JWTs.
+        if token:
+            headers['Authorization'] = 'Bearer ' + token
+        elif not self.key.startswith('sb_secret_'):
+            headers['Authorization'] = 'Bearer ' + self.key
+        try:
+            response = requests.request(method, self.url + path, headers=headers,
+                                        json=payload, timeout=(5, 30))
+        except requests.RequestException as exc:
+            raise StorageError('Supabase connection failed') from exc
+        if response.status_code >= 400:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            if path.startswith('/auth/v1/token?grant_type=password'):
+                detail = body.get('msg') or body.get('message') or body.get('error_description')
+                code = body.get('code') or body.get('error_code')
+                diagnostic = ': '.join(str(value) for value in (code, detail) if value)
+                if diagnostic:
+                    diagnostic = ' '.join(diagnostic.split())[:240]
+                    raise StorageError(f'Supabase Auth: {diagnostic}')
+            if path.split('?', 1)[0] == '/auth/v1/signup':
+                detail = body.get('msg') or body.get('message') or body.get('error_description')
+                code = body.get('code') or body.get('error_code')
+                diagnostic = ': '.join(str(value) for value in (code, detail) if value)
+                if diagnostic:
+                    diagnostic = ' '.join(diagnostic.split())[:240]
+                    raise StorageError(
+                        f'Supabase request failed ({response.status_code}): {diagnostic}')
+            if body.get('code') in {'40001', '23505'}:
+                raise ConflictError('데이터가 변경되었습니다. 새로 불러온 후 다시 시도하세요.')
+            if response.status_code in {401, 403}:
+                raise PermissionError('인증 또는 데이터 접근 권한을 확인하세요.')
+            raise StorageError(f'Supabase request failed ({response.status_code})')
+        return response.json() if response.content else None
+
+    def rpc(self, name, **params):
+        return self.request('POST', '/rest/v1/rpc/kra_' + name, params)
+
+    def load_keywords(self):
+        # One JSON snapshot avoids the Data API's default 1,000-row limit and
+        # keeps rows, column order and revision from the same DB statement.
+        snapshot = self.rpc('snapshot')
+        columns = snapshot['columns'] or DB_COLS
+        df = pd.DataFrame(snapshot['rows'], columns=columns).fillna('').astype(str)
+        for col in DB_COLS:
+            if col not in df:
+                df[col] = '0' if col == COUNT_COL else ''
+        df.attrs['revision'] = snapshot['revision']
+        return df
+
+    def save_keywords(self, df, revision):
+        if revision is None:
+            raise ConflictError('편집 전 데이터를 먼저 불러오세요.')
+        ids = df['kwd_no'].astype(str).str.strip()
+        if ids.eq('').any() or ids.duplicated().any():
+            raise ValueError('kwd_no는 비어 있거나 중복될 수 없습니다.')
+        return self.rpc('save_keywords', p_rows=df.fillna('').astype(str).to_dict('records'),
+                        p_columns=list(df.columns), p_revision=revision)
+
+    def load_setting(self, name, default):
+        value = self.rpc('get_setting', p_name=name)
+        return default if value is None else value
+
+    def save_setting(self, name, value):
+        return self.rpc('set_setting', p_name=name, p_value=value)
+
+    def submit_keyword_request(self, payload, access_token):
+        rows = self.request(
+            'POST', '/rest/v1/kra_keyword_requests', payload,
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('문의가 저장되었는지 확인할 수 없습니다.')
+        return rows[0]
+
+    def load_keyword_requests(self, access_token, limit=1000):
+        limit = max(1, min(int(limit), 1000))
+        path = ('/rest/v1/kra_keyword_requests?select=id,requester_id,requester_email,'
+                'kwd_no,keyword_name,request_type,request_detail,status,admin_reply,created_at'
+                '&order=created_at.desc&limit=' + str(limit))
+        return self.request('GET', path, token=access_token) or []
+
+    def update_keyword_request(self, request_id, status, admin_reply, access_token):
+        path = ('/rest/v1/kra_keyword_requests?id=eq.' + str(request_id)
+                + '&select=id,status,admin_reply')
+        rows = self.request(
+            'PATCH', path,
+            {'status': status, 'admin_reply': admin_reply},
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('문의 처리 내용이 저장되지 않았습니다. 관리자 권한과 DB 정책을 확인하세요.')
+        return rows[0]
+
+    def edit_own_keyword_request(self, request_id, request_type, request_detail, access_token):
+        if not access_token:
+            raise PermissionError('로그인 후 본인 문의를 수정하세요.')
+        request_id = str(UUID(str(request_id)))
+        if request_type not in {
+            'risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration',
+        }:
+            raise ValueError('문의 유형이 올바르지 않습니다.')
+        request_detail = str(request_detail or '').strip()
+        if len(request_detail) > 4000:
+            raise ValueError('요청 상세 내용은 4,000자 이내로 입력하세요.')
+        row = self.request(
+            'POST', '/rest/v1/rpc/kra_edit_own_keyword_request',
+            {'p_request_id': request_id, 'p_request_type': request_type,
+             'p_request_detail': request_detail},
+            token=access_token,
+        )
+        if not row:
+            raise StorageError('본인 문의가 없거나 수정 내용을 저장하지 못했습니다.')
+        return row
+
+    def load_keyword_request_messages(self, request_id, access_token, limit=1000):
+        request_id = str(UUID(str(request_id)))
+        limit = max(1, min(int(limit), 1000))
+        path = ('/rest/v1/kra_keyword_request_messages?select=id,request_id,author_id,'
+                'author_email,author_role,is_initial,is_legacy,reply_to_id,body,status,created_at'
+                '&request_id=eq.' + request_id
+                + '&order=created_at.asc,id.asc&limit=' + str(limit))
+        return self.request('GET', path, token=access_token) or []
+
+    def mutate_own_keyword_inquiry(self, request_id, inquiry_id, action, access_token,
+                                   body=None, request_type=None):
+        if not access_token:
+            raise PermissionError('로그인 후 본인 문의를 수정·삭제하세요.')
+        request_id = str(UUID(str(request_id)))
+        inquiry_id = str(UUID(str(inquiry_id)))
+        if action not in {'edit', 'delete'}:
+            raise ValueError('문의 변경 작업이 올바르지 않습니다.')
+        if action == 'edit':
+            body = str(body or '').strip()
+            if len(body) > 4000:
+                raise ValueError('문의 내용은 4,000자 이내로 입력하세요.')
+        result = self.request(
+            'POST', '/rest/v1/rpc/kra_mutate_own_keyword_inquiry',
+            {'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+             'p_action': action, 'p_body': body, 'p_request_type': request_type},
+            token=access_token,
+        )
+        if not result:
+            raise StorageError('본인 문의가 없거나 변경 내용을 저장하지 못했습니다.')
+        return result
+
+    def respond_to_keyword_inquiry(self, request_id, inquiry_id, body, status, access_token):
+        request_id = str(UUID(str(request_id)))
+        inquiry_id = str(UUID(str(inquiry_id)))
+        body = str(body).strip()
+        if not body or len(body) > 4000:
+            raise ValueError('피드백 내용을 1~4,000자 이내로 입력하세요.')
+        if status not in {'대기', '검토중', '처리완료'}:
+            raise ValueError('처리상태 값이 올바르지 않습니다.')
+        return self.request(
+            'POST', '/rest/v1/rpc/kra_admin_respond_to_keyword_inquiry',
+            {'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+             'p_body': body, 'p_status': status},
+            token=access_token,
+        )
+
+    def add_keyword_request_message(self, request_id, author_id, author_email,
+                                    body, access_token, author_role='user', reply_to_id=None):
+        request_id = str(UUID(str(request_id)))
+        author_id = str(UUID(str(author_id)))
+        if author_role not in {'user', 'admin'}:
+            raise ValueError('작성자 유형이 올바르지 않습니다.')
+        if reply_to_id is not None:
+            reply_to_id = str(UUID(str(reply_to_id)))
+        if author_role == 'admin' and reply_to_id is None:
+            raise ValueError('관리자 답변은 답변 대상 문의를 지정해야 합니다.')
+        body = str(body).strip()
+        if not body or len(body) > 4000:
+            raise ValueError('메시지는 1~4,000자 이내로 입력하세요.')
+        rows = self.request(
+            'POST', '/rest/v1/kra_keyword_request_messages',
+            {'request_id': request_id, 'author_id': author_id,
+             'author_email': str(author_email).strip(), 'author_role': author_role,
+             'reply_to_id': reply_to_id, 'body': body},
+            token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('메시지가 저장되었는지 확인할 수 없습니다.')
+        return rows[0]
+
+    def delete_keyword_request(self, request_id, access_token):
+        if not access_token:
+            raise PermissionError('로그인 후 문의를 삭제하세요.')
+        request_id = str(UUID(str(request_id)))
+        path = '/rest/v1/kra_keyword_requests?id=eq.' + request_id
+        rows = self.request(
+            'DELETE', path, token=access_token, prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('본인 문의 또는 관리자 권한이 있는 문의만 삭제할 수 있습니다.')
+        return rows[0]
+
+    def load_request_email_notifications(self, access_token=None):
+        rows = self.request(
+            'GET', '/rest/v1/kra_keyword_request_config?select=email_notifications_enabled'
+            '&id=eq.singleton&limit=1', token=access_token,
+        )
+        return bool(rows and rows[0].get('email_notifications_enabled'))
+
+    def save_request_email_notifications(self, enabled, access_token):
+        rows = self.request(
+            'PATCH', '/rest/v1/kra_keyword_request_config?id=eq.singleton'
+            '&select=email_notifications_enabled',
+            {'email_notifications_enabled': bool(enabled)}, token=access_token,
+            prefer='return=representation',
+        )
+        if not rows:
+            raise StorageError('알림 설정을 저장할 권한이 없거나 설정 행을 찾을 수 없습니다.')
+        return bool(rows[0].get('email_notifications_enabled'))
+
+    def record_analysis(self, analysis_id, fingerprint, actor, revision, result):
+        return self.rpc('record_analysis', p_id=analysis_id, p_fingerprint=fingerprint,
+                        p_actor=actor, p_revision=revision, p_result=result)
+
+    @staticmethod
+    def _unmatched_terms(candidates):
+        terms = []
+        for row in candidates or ():
+            if not isinstance(row, dict):
+                continue
+            term_norm = str(row.get('surface_key') or '').strip()
+            display_term = str(row.get('surface') or '').strip()
+            if not term_norm or not display_term:
+                continue
+            try:
+                occurrences = int(row.get('occurrences') or 1)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if occurrences < 1:
+                continue
+            terms.append({'term_norm': term_norm, 'display_term': display_term,
+                          'occurrences': occurrences})
+        return terms
+
+    def record_analysis_with_unmatched(self, analysis_id, fingerprint, actor,
+                                       revision, result, candidates):
+        return self.rpc('record_analysis_with_unmatched', p_id=str(UUID(str(analysis_id))),
+                        p_fingerprint=fingerprint, p_actor=actor, p_revision=revision,
+                        p_result=result, p_terms=self._unmatched_terms(candidates))
+
+    def collect_unmatched_terms(self, analysis_id, candidates):
+        return self.rpc('collect_unmatched_terms', p_id=str(UUID(str(analysis_id))),
+                        p_terms=self._unmatched_terms(candidates))
+
+    def load_unmatched_terms(self, offset=0, limit=100, search='', sort='occurrences'):
+        if sort not in {'occurrences', 'registered'}:
+            raise ValueError('Invalid unmatched-term sort order')
+        return self.rpc('unmatched_term_page', p_offset=offset, p_limit=limit,
+                        p_search=search, p_sort=sort)
+
+    def export_unmatched_terms(self):
+        return self.rpc('unmatched_term_export')
+
+    def delete_unmatched_terms(self, terms, access_token):
+        self._require_admin(access_token)
+        return self.rpc('delete_unmatched_terms', p_terms=list(terms))
+
+    def _require_admin(self, access_token):
+        actor = self.user(access_token)
+        if (actor.get('app_metadata') or {}).get('role') != 'admin':
+            raise PermissionError('\uad00\ub9ac\uc790\ub9cc \uc0ac\uc6a9\ud560 \uc218 \uc788\ub294 \uc791\uc5c5\uc785\ub2c8\ub2e4.')
+        return actor
+
+    def submit_unmatched_registration_requests(self, candidates, access_token):
+        self.user(access_token)
+        if not candidates or len(candidates) > 1000:
+            raise ValueError('Request between 1 and 1,000 candidates.')
+        rows = []
+        for candidate in candidates:
+            row = {
+                'term': str(candidate.get('term') or '').strip(),
+                'term_norm': unicodedata.normalize('NFKC', str(candidate.get('term') or '')).casefold().strip(),
+                'source_terms': str(candidate.get('source_terms') or '').strip(),
+                'occurrences': int(candidate.get('occurrences') or 0),
+                'category': str(candidate.get('category') or '').strip(),
+                'risk': str(candidate.get('risk') or '').strip(),
+                'criteria': str(candidate.get('criteria') or '').strip(),
+                'evidence_type': str(candidate.get('evidence_type') or '').strip(),
+                'alternative': str(candidate.get('alternative') or '-').strip() or '-',
+            }
+            if not 1 <= len(row['term']) <= 150 or len(row['source_terms']) > 500:
+                raise ValueError('Invalid candidate or source-term length.')
+            if not 1 <= len(row['term_norm']) <= 100:
+                raise ValueError('Normalized candidate length must be between 1 and 100 characters.')
+            if any(len(row[key]) > 500 for key in ('category', 'risk', 'criteria', 'evidence_type', 'alternative')):
+                raise ValueError('Classification field is too long.')
+            if not 0 <= row['occurrences'] <= 1_000_000_000:
+                raise ValueError('Invalid occurrence count.')
+            rows.append(row)
+        return self.request(
+            'POST', '/rest/v1/kra_unmatched_registration_requests', rows,
+            prefer='return=representation',
+        )
+
+    def load_unmatched_recommendation_draft(self, access_token):
+        actor = self.user(access_token)
+        user_id = str(UUID(str(actor['id'])))
+        rows = self.request(
+            'GET', '/rest/v1/kra_unmatched_recommendation_drafts'
+            '?user_id=eq.' + user_id + '&select=payload',
+        ) or []
+        return rows[0]['payload'] if rows else None
+
+    def save_unmatched_recommendation_draft(self, payload, access_token):
+        actor = self.user(access_token)
+        if not isinstance(payload, dict):
+            raise ValueError('Invalid unmatched recommendation draft.')
+        try:
+            if len(json.dumps(payload, ensure_ascii=False).encode('utf-8')) > 2_000_000:
+                raise ValueError('Unmatched recommendation draft is too large.')
+        except (TypeError, OverflowError) as exc:
+            raise ValueError('Invalid unmatched recommendation draft.') from exc
+        user_id = str(UUID(str(actor['id'])))
+        rows = self.request(
+            'POST', '/rest/v1/kra_unmatched_recommendation_drafts?on_conflict=user_id',
+            {'user_id': user_id, 'payload': payload,
+             'updated_at': datetime.now(timezone.utc).isoformat()},
+            prefer='resolution=merge-duplicates,return=representation',
+        ) or []
+        if not rows:
+            raise StorageError('Unmatched recommendation draft was not saved.')
+
+    def submit_new_keyword_registration_requests(self, terms, access_token):
+        self.user(access_token)
+        rows = []
+        seen = set()
+        for value in terms or ():
+            term = str(value or '').strip()
+            term_norm = unicodedata.normalize('NFKC', term).casefold().strip()
+            if not term:
+                continue
+            if not 1 <= len(term) <= 150 or not 1 <= len(term_norm) <= 100:
+                raise ValueError('Keyword length must be between 1 and 100 normalized characters.')
+            if term_norm not in seen:
+                rows.append({'term': term, 'term_norm': term_norm})
+                seen.add(term_norm)
+        if not rows or len(rows) > 1000:
+            raise ValueError('Request between 1 and 1,000 unique keywords.')
+        return self.rpc('submit_new_keyword_registration_requests', p_terms=rows)
+
+    def load_unmatched_registration_requests(self, access_token):
+        self._require_admin(access_token)
+        return self.request(
+            'GET', '/rest/v1/kra_unmatched_registration_requests'
+            '?select=id,term,term_norm,source_terms,occurrences,category,risk,criteria,evidence_type,alternative,created_at'
+            '&order=created_at.asc&limit=1000',
+        ) or []
+
+    def delete_unmatched_registration_requests(self, request_ids, access_token):
+        self._require_admin(access_token)
+        ids = list(dict.fromkeys(str(UUID(str(value))) for value in request_ids))
+        if not ids:
+            return 0
+        if len(ids) > 1000:
+            raise ValueError('At most 1,000 requests can be cleared at once.')
+        path = '/rest/v1/kra_unmatched_registration_requests?' + urlencode(
+            {'id': 'in.(' + ','.join(ids) + ')'}
+        )
+        rows = self.request('DELETE', path, prefer='return=representation') or []
+        return len(rows)
+
+    def reject_unmatched_registration_requests(self, request_ids, access_token):
+        self._require_admin(access_token)
+        ids = list(dict.fromkeys(str(UUID(str(value))) for value in request_ids))
+        if not ids:
+            return 0
+        if len(ids) > 1000:
+            raise ValueError('At most 1,000 requests can be rejected at once.')
+        return self.rpc('reject_unmatched_registration_requests', p_ids=ids)
+
+    def previous_analysis(self, analysis_id, actor, fingerprint=None):
+        return self.rpc('get_analysis', p_id=analysis_id, p_actor=actor,
+                        p_fingerprint=fingerprint)
+
+    def load_hits(self):
+        # Weekly UI reads only its report window, using indexed server filters.
+        rows = self.rpc('recent_hits', p_days=7)
+        return pd.DataFrame(rows, columns=['ts', 'kwd_no'])
+
+    def report(self, days=7, limit=10):
+        return self.rpc('top_keywords', p_days=days, p_limit=limit)
+
+    def report_range(self, start_date, end_date, limit=10):
+        return self.rpc('top_keywords_range', p_start_date=start_date,
+                        p_end_date=end_date, p_limit=limit)
+
+    def reset_counts(self):
+        self.rpc('reset_counts')
+
+    def reset_week(self):
+        return self.rpc('reset_week')
+
+    def login(self, email, password):
+        return self.request('POST', '/auth/v1/token?grant_type=password',
+                            {'email': email, 'password': password})
+
+    def sign_up(self, email, password, redirect_to):
+        query = urlencode({'redirect_to': redirect_to})
+        return self.request('POST', '/auth/v1/signup?' + query,
+                            {'email': email.strip(), 'password': password})
+
+    def request_password_reset(self, email, redirect_to):
+        query = urlencode({'redirect_to': redirect_to})
+        return self.request('POST', '/auth/v1/recover?' + query,
+                            {'email': email.strip()})
+
+    def update_password(self, access_token, password):
+        return self.request('PUT', '/auth/v1/user', {'password': password},
+                            token=access_token)
+
+    def refresh(self, refresh_token):
+        return self.request('POST', '/auth/v1/token?grant_type=refresh_token',
+                            {'refresh_token': refresh_token})
+
+    def user(self, token):
+        user = self.request('GET', '/auth/v1/user', token=token)
+        if user.get('is_anonymous') or not user.get('id'):
+            raise PermissionError('사내 사용자 계정으로 로그인하세요.')
+        return user
+
+    def _require_app_admin(self, token):
+        # Validate against Auth for each operation, never a UI flag or decoded JWT.
+        actor = self.user(token)
+        if (actor.get('app_metadata') or {}).get('role') != 'admin':
+            raise PermissionError('사용자 관리는 관리자만 이용할 수 있습니다.')
+        return actor
+
+    def list_users(self, token, page=1, per_page=1000):
+        self._require_app_admin(token)
+        if not isinstance(page, int) or not 1 <= page <= 100000:
+            raise ValueError('올바른 페이지 번호를 입력하세요.')
+        if not isinstance(per_page, int) or not 1 <= per_page <= 1000:
+            raise ValueError('페이지당 조회 수는 1~1,000이어야 합니다.')
+        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page={per_page}')
+        return [_user_summary(user) for user in result['users']]
+
+    def has_users_page(self, token, page):
+        self._require_app_admin(token)
+        if not isinstance(page, int) or not 1 <= page <= 100000:
+            raise ValueError('올바른 페이지 번호를 입력하세요.')
+        result = self.request('GET', f'/auth/v1/admin/users?page={page}&per_page=1')
+        return bool(result.get('users'))
+
+    def set_user_role(self, token, user_id, role, expected_role):
+        if role not in {'admin', 'member'}:
+            raise ValueError('역할은 admin 또는 member만 지정할 수 있습니다.')
+        user_id = str(UUID(str(user_id)))
+        actor = self._require_app_admin(token)
+        if user_id == actor['id'] and role != 'admin':
+            raise ValueError('자신의 관리자 권한은 해제할 수 없습니다.')
+        path = '/auth/v1/admin/users/' + user_id
+        target = self.request('GET', path)
+        if target.get('is_anonymous'):
+            raise ValueError('익명 계정에는 앱 역할을 부여할 수 없습니다.')
+        # ponytail: this preflight check is not atomic; serialize edits if concurrent admins need it.
+        if (target.get('app_metadata') or {}).get('role') != expected_role:
+            raise ConflictError('이 계정의 역할이 변경되었습니다. 목록을 새로 불러오세요.')
+        # Auth Admin merges this metadata patch, preserving provider and other keys.
+        # Always use the server key here; the actor's token is only used above.
+        updated = self.request('PUT', path, {'app_metadata': {'role': role}})
+        if updated.get('id') != user_id or (updated.get('app_metadata') or {}).get('role') != role:
+            raise StorageError('역할 변경 결과를 확인할 수 없습니다. 목록을 새로 불러오세요.')
+        return _user_summary(updated)
+
+    def logout(self, token):
+        try:
+            self.request('POST', '/auth/v1/logout', token=token)
+        except PermissionError:
+            # An expired or revoked token is already unusable; local logout
+            # should still complete even when Supabase cannot revoke it again.
+            pass

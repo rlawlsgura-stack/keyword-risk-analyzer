@@ -1,0 +1,57 @@
+{
+  "status": "captured_not_ingested_or_embedded",
+  "hash_format": "UTF-8 text without BOM, with CRLF/CR normalized to LF",
+  "sources": [
+    {
+      "source_key": "KR-COSMETICS-ACT",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1027656895",
+      "observed_version": "법률 제22113호",
+      "observed_header_effective_on": "2026-10-20",
+      "provision_key": "article_13",
+      "captured_on_kst": "2026-10-22",
+      "review_status": "captured_not_reviewed",
+      "files": {
+        "source_snapshots/cosmetics.html": {
+          "sha256_utf8_lf": "6ad98f9f9acf778f1de762e8e4ca206b19fbc6c0129e54e0e274b29baa2c087e"
+        },
+        "source_snapshots/cosmetics.txt": {
+          "sha256_utf8_lf": "6176b1b4127d1a9fb5fd8d925912783c3988a407bbc317c80d4d0148cd7a2f40"
+        }
+      }
+    },
+    {
+      "source_key": "KR-FOOD-ADS-ACT",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1029094361",
+      "observed_version": "법률 제20826호",
+      "observed_header_effective_on": "2025-09-19",
+      "provision_key": "article_8",
+      "captured_on_kst": "2026-10-22",
+      "review_status": "captured_not_reviewed",
+      "files": {
+        "source_snapshots/food.html": {
+          "sha256_utf8_lf": "5126249e48a9a1b099ba7c7ec5a4c3307049930755340daf0ed2203cf1f085a2"
+        },
+        "source_snapshots/food.txt": {
+          "sha256_utf8_lf": "266e281d0e059807fc54c2c4db3c07575f97cc873e4906c0634ec5074e44e2ef"
+        }
+      }
+    },
+    {
+      "source_key": "KR-FAIR-ADS-ACT",
+      "source_url": "https://www.law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1026818955",
+      "observed_version": "법률 제20712호",
+      "observed_header_effective_on": "2025-01-21",
+      "provision_key": "article_3",
+      "captured_on_kst": "2026-10-22",
+      "review_status": "captured_not_reviewed",
+      "files": {
+        "source_snapshots/common.html": {
+          "sha256_utf8_lf": "38874a411635174517645caaa3f16ac5372e3c31485bfa279cbf4c1170f77beb"
+        },
+        "source_snapshots/common.txt": {
+          "sha256_utf8_lf": "d33eece99735ccec7be750b5e7068cda689d5750f80f270bc7a074d929a68fe2"
+        }
+      }
+    }
+  ]
+}

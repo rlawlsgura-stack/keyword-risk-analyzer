@@ -1,0 +1,35 @@
+KRA QA handoff 2026-11-07
+
+SOURCE NOTICE
+The original attached file was not present in the repository, Downloads, or Desktop when checked.
+This file preserves the handoff text supplied in the user's message; it is a transcription, not the
+original attachment. If the original is supplied later, compare it with this transcription and
+append/preserve the original rather than replacing this record.
+
+SOURCE EXECUTION METADATA
+The browser report below was supplied by the user. Its PC label, repository commit, dirty state,
+and independently verified authentication/database targets were not included. Do not attribute it
+to the current local run or treat it as a current-code verification.
+
+USER-REPORTED BROWSER OBSERVATION
+Date: 2026-11-07
+URL: http://127.0.0.1:5173/
+Account/role reported: local_admin@example.com / administrator
+Status in this checkout: USER-REPORTED; current execution remains UNVERIFIED.
+
+- Administrator screen access worked.
+- User list showed two administrators and one member.
+- Catalog showed 0 keywords at revision 14; unmatched candidates showed 144.
+- Catalog search empty-state text and filter reset worked.
+- Candidate search empty-state text worked; clearing the search restored 144 candidates.
+- Normalization settings loaded.
+- Loading the saved empty draft worked.
+- A confirmation appeared when loading over an unsaved row, but whether Cancel preserved the content
+  was not verified.
+- The CSV template button was clicked, but no completion signal was received; file creation was not
+  verified.
+- Regulation search returned “LEGISLATION_API_KEY is not configured”.
+- Keyword-request email notification was disabled because server-side delivery was not configured.
+- The OCR screen was viewed. Whether the Korean OCR package error had been fixed was not verified.
+
+END OF USER-SUPPLIED HANDOFF

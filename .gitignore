@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*.local
+.local-test-credentials.txt
+.streamlit/secrets.toml
+.pytest_cache/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.npm-cache/
+logs/streamlit_*.out.log
+logs/streamlit_*.err.log

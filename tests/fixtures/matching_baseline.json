@@ -1,0 +1,1028 @@
+{
+  "source_commit": "2d17555",
+  "cases": [
+    {
+      "name": "exact_inner",
+      "mode": "exact",
+      "text": "초필러술",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러",
+          "start": 1,
+          "end": 3,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_suffix",
+      "mode": "exact",
+      "text": "필러는 필러를",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 4,
+          "end": 6,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_case",
+      "mode": "exact",
+      "text": "SKIN skin",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "skin",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "skin",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "skin",
+          "start": 5,
+          "end": 9,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_bracket_off",
+      "mode": "exact",
+      "text": "필러",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러(filler)",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": []
+    },
+    {
+      "name": "exact_bracket_on",
+      "mode": "exact",
+      "text": "필러",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러(filler)",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러(filler)",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러(filler)",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러(filler)",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_symbols",
+      "mode": "exact",
+      "text": "안티/에이징 안티&에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 6,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 7,
+          "end": 13,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_symbols_off",
+      "mode": "exact",
+      "text": "안티/에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": []
+    },
+    {
+      "name": "exact_spacing",
+      "mode": "exact",
+      "text": "피부보습 피부  보습 피부\n보습",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "피부 보습",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "피부 보습",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "피부 보습",
+          "start": 5,
+          "end": 11,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "피부 보습",
+          "start": 5,
+          "end": 11,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "피부 보습",
+          "start": 12,
+          "end": 17,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "피부 보습",
+          "start": 12,
+          "end": 17,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_long_fallback",
+      "mode": "exact",
+      "text": "Skin\nlooked more even-toned",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "Skin looked more even-toned",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "Skin looked more even-toned",
+          "start": 0,
+          "end": 27,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "exact_overlaps",
+      "mode": "exact",
+      "text": "안티에이징 필러",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A002",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A003",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "필러",
+          "start": 6,
+          "end": 8,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A003"
+        },
+        {
+          "term": "필러",
+          "start": 6,
+          "end": 8,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A003"
+        },
+        {
+          "term": "필러",
+          "start": 6,
+          "end": 8,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A003"
+        }
+      ]
+    },
+    {
+      "name": "exact_same_span_rows",
+      "mode": "exact",
+      "text": "필러",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A002",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        }
+      ]
+    },
+    {
+      "name": "similar_inner",
+      "mode": "similar",
+      "text": "초필러술",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": []
+    },
+    {
+      "name": "similar_suffix",
+      "mode": "similar",
+      "text": "여드름에는",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "여드름",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "여드름",
+          "start": 0,
+          "end": 3,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "similar_compound",
+      "mode": "similar",
+      "text": "필러시술 미세스피큘",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A002",
+          "키워드명": "스피큘",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "스피큘",
+          "start": 7,
+          "end": 10,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        }
+      ]
+    },
+    {
+      "name": "similar_bracket",
+      "mode": "similar",
+      "text": "필러 filler",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러(filler)",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러(filler)",
+          "start": 0,
+          "end": 9,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "similar_english",
+      "mode": "similar",
+      "text": "spots spotless hotspot",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "spot",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "spot",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "spot",
+          "start": 6,
+          "end": 10,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "spot",
+          "start": 18,
+          "end": 22,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "similar_inflection",
+      "mode": "similar",
+      "text": "looked brighter",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "look bright",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {},
+      "expected": [
+        {
+          "term": "look bright",
+          "start": 0,
+          "end": 13,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "similar_joined",
+      "mode": "similar",
+      "text": "피부보습",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "피부 보습",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": []
+    },
+    {
+      "name": "similar_reverse_off",
+      "mode": "similar",
+      "text": "spot",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "dark spot",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {
+        "similar_reverse_single": false
+      },
+      "expected": []
+    },
+    {
+      "name": "similar_reverse_on",
+      "mode": "similar",
+      "text": "spot",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "dark spot",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {
+        "similar_reverse_single": true
+      },
+      "expected": [
+        {
+          "term": "dark spot",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "similar_reverse_any",
+      "mode": "similar",
+      "text": "spot care",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "dark spot",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {
+        "similar_reverse_any": true
+      },
+      "expected": [
+        {
+          "term": "dark spot",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "partial_two",
+      "mode": "partial",
+      "text": "티에 케어 에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {
+        "partial_min_len": 2
+      },
+      "expected": [
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 6,
+          "end": 8,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 6,
+          "end": 9,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 7,
+          "end": 9,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        }
+      ]
+    },
+    {
+      "name": "partial_four",
+      "mode": "partial",
+      "text": "티에 케어 에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": false,
+      "options": {
+        "partial_min_len": 4
+      },
+      "expected": []
+    },
+    {
+      "name": "partial_overlaps",
+      "mode": "partial",
+      "text": "안티에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A002",
+          "키워드명": "에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {
+        "partial_min_len": 2
+      },
+      "expected": [
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 2,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 3,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 0,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 1,
+          "end": 3,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 1,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 1,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 2,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "에이징",
+          "start": 2,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "안티에이징",
+          "start": 2,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "에이징",
+          "start": 2,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        },
+        {
+          "term": "안티에이징",
+          "start": 3,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "에이징",
+          "start": 3,
+          "end": 5,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        }
+      ]
+    },
+    {
+      "name": "emoji_offsets",
+      "mode": "exact",
+      "text": "😀 필러와 안티/에이징",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        },
+        {
+          "kwd_no": "A002",
+          "키워드명": "안티에이징",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": [
+        {
+          "term": "필러",
+          "start": 2,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 2,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "필러",
+          "start": 2,
+          "end": 4,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A001"
+        },
+        {
+          "term": "안티에이징",
+          "start": 6,
+          "end": 12,
+          "category": "cosmetics",
+          "risk": "risk1",
+          "detail": "",
+          "kwd_no": "A002"
+        }
+      ]
+    },
+    {
+      "name": "empty_input",
+      "mode": "exact",
+      "text": "",
+      "keywords": [
+        {
+          "kwd_no": "A001",
+          "키워드명": "필러",
+          "상품카테고리": "cosmetics",
+          "리스크 등급": "risk1"
+        }
+      ],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": []
+    },
+    {
+      "name": "empty_keywords",
+      "mode": "similar",
+      "text": "필러",
+      "keywords": [],
+      "exact_relaxed": true,
+      "options": {},
+      "expected": []
+    }
+  ]
+}

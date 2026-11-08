@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: keyword-risk-ui
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: python -m streamlit run streamlit_cloud/app.py --server.address=0.0.0.0 --server.port=$PORT --server.headless=true
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.15
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+  - type: web
+    name: keyword-risk-api
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.lock.txt -r requirements-ocr.txt
+    startCommand: python -m uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.15
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: API_ACCESS_TOKEN
+        sync: false
+      - key: LEGISLATION_API_KEY
+        sync: false
+      - key: API_CORS_ORIGINS
+        value: https://keyword-risk-react-preview.onrender.com
+  - type: web
+    name: keyword-risk-react-preview
+    runtime: static
+    autoDeployTrigger: commit
+    buildCommand: cd frontend && npm ci --ignore-scripts && npm run build
+    staticPublishPath: frontend/dist
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: VITE_SUPABASE_URL
+        value: https://qmhdwfqcihpfjfvcjcwa.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: sb_publishable_HTILfxgoBJT8GpY9Gebu0w_7C5SKyWi
+      - key: VITE_API_BASE_URL
+        value: https://keyword-risk-api.onrender.com
