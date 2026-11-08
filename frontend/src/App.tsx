@@ -207,7 +207,7 @@ function Shell() {
           const select = cell.querySelector('select')
           const controls = Array.from(cell.querySelectorAll('input[type="text"], textarea'))
             .map(control => (control as HTMLInputElement).value).filter(Boolean)
-          const controlText = [select?.selectedOptions[0]?.text, ...controls].filter(Boolean).join(', ')
+          const controlText = controls.length ? controls.join(', ') : select?.selectedOptions[0]?.text ?? ''
           const text = controlText || cell.textContent?.trim() || ''
           const measuredText = Array.from(text).slice(0, 100).join('')
           const controlPadding = select ? 24 : controls.length ? 12 : 0

@@ -352,27 +352,28 @@ export function UnmatchedTab() {
   const selectCell = (row: WsRow, column: keyof typeof options) => {
     const value = String(row[column] ?? '')
     const key = `${row.recommendation_id}\u0000${column}`
-    const direct = directCells.has(key) || (value !== '' && !options[column].includes(value))
+    const directEnabled = column !== '상품카테고리' && column !== '리스크 등급'
+    const direct = directEnabled && (directCells.has(key) || (value !== '' && !options[column].includes(value)))
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
     return (
       <div className={direct ? 'cell-direct-entry' : undefined}>
         <select value={direct ? DIRECT : value} onChange={e => {
           const next = e.target.value
-          if (next === DIRECT) {
+          if (directEnabled && next === DIRECT) {
             setDirectCells(current => new Set(current).add(key))
           } else {
-            setDirectCells(current => {
-              const nextRows = new Set(current)
-              nextRows.delete(key)
-              return nextRows
-            })
+            if (directEnabled) setDirectCells(current => {
+                const nextRows = new Set(current)
+                nextRows.delete(key)
+                return nextRows
+              })
             editCell(row.recommendation_id, column, next)
           }
         }} aria-label={column}>
-          <option value={DIRECT}>{DIRECT}</option>
+          {directEnabled && <option value={DIRECT}>{DIRECT}</option>}
           {list.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
-        {direct && <input type="text" value={value} placeholder={`${column} 직접 입력`}
+        {direct && <textarea rows={2} value={value} placeholder={`${column} 직접 입력`}
           onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label={`${column} 직접 입력`} />}
       </div>
     )

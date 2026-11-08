@@ -147,7 +147,9 @@ table.grid td.num, table.grid th.num { text-align: right; }
 table.grid td.idx { color: var(--muted); }
 table.grid td input[type=text], table.grid td select, table.grid td textarea { background: transparent; padding: .15rem .3rem; border-radius: 4px; min-width: 7rem; }
 table.grid td .cell-direct-entry { display: grid; gap: .25rem; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
-table.grid td .cell-direct-entry input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+table.grid td .cell-direct-entry input, table.grid td .cell-direct-entry textarea {
+  width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: anywhere; resize: vertical;
+}
 table.grid td input[type=text]:focus, table.grid td select:focus, table.grid td textarea:focus { background: #fff; }
 table.grid td.sel, table.grid th.sel { width: 2.2rem !important; min-width: 2.2rem; max-width: 2.2rem; text-align: center; box-sizing: border-box; }
 table.grid td.sel input[type=checkbox], table.grid th.sel input[type=checkbox] { width: 1rem; min-width: 1rem; max-width: 1rem; }
