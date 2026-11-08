@@ -175,17 +175,14 @@ function TooltipPopup({ entry, anchor, onEnter, onLeave }: { entry: CodeEntry; a
   const rows = entry.tooltip.length ? entry.tooltip : [{ kind: 'plain', label: 'kwd_no', value: 'tooltip 데이터가 없습니다.' } as TooltipRow]
   return (
     <div id="kwd-tt-float" ref={ref} role="dialog" aria-label={`${entry.code} 상세 정보`} onMouseEnter={onEnter} onMouseLeave={onLeave}
-      style={{
-        position: 'fixed', left: pos.left, top: pos.top, zIndex: 60, minWidth: 'min(360px, calc(100vw - 24px))',
-        maxWidth: 'min(720px, calc(100vw - 24px))', maxHeight: pos.maxHeight ?? 'calc(100vh - 16px)', overflow: 'auto',
-        background: '#f3f3f3', border: '1px solid rgba(0,0,0,.15)', borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,.18)', padding: 8,
-      }}>
-      <table style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+      className="kwd-tooltip"
+      style={{ left: pos.left, top: pos.top, maxHeight: pos.maxHeight }}>
+      <table className="kwd-tooltip-table">
         <tbody>
           {rows.map((row, i) => (
             <tr key={i}>
-              <th style={{ textAlign: 'left', verticalAlign: 'top', padding: '3px 8px 3px 2px', whiteSpace: 'nowrap', fontWeight: 600 }}>{row.label}</th>
-              <td style={{ padding: '3px 2px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{rowValue(row)}</td>
+              <th scope="row">{row.label}</th>
+              <td>{rowValue(row)}</td>
             </tr>
           ))}
         </tbody>
