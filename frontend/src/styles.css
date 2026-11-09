@@ -367,6 +367,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-options-title { margin-bottom: .75rem; color: #303b46; font-weight: 700; }
 .chat-options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1rem; align-items: end; }
 .chat-options .check { color: #31333f; }
+.chat-option-checks { grid-column: 1 / -1; display: flex; flex-direction: column; gap: .5rem; }
 .chat-context-count { margin-top: .6rem; color: #727b86; font-size: .78rem; text-align: right; }
 .chat-context-count.over { color: #b42318; }
 .chat-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 1rem clamp(.8rem, 3vw, 1.5rem); background: #fff; }
