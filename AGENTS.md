@@ -11,6 +11,10 @@ again for each commit.
   Supabase URL and client key, confirm frontend/backend Supabase URLs match, and
   check Supabase Auth health. Also confirm API CORS allows the frontend origin
   and that the API health endpoint responds. Report these checks before launch.
+- Before changing the API port or `VITE_API_BASE_URL`, check the currently
+  served frontend API URL, listening API ports, `/healthz`, and CORS preflight
+  for the frontend origin. Confirm the intended frontend/backend port pairing
+  before editing either setting, then report the checks before restarting.
 - Select the ordinary push command by the PC's repository location. On the
   D-drive PC, use:
 
