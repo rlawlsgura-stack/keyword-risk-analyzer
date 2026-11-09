@@ -117,7 +117,9 @@ export function AnalysisTab() {
 
   return (
     <div>
+      <div className="analysis-text-input">
       <TextArea label="분석할 텍스트 입력" value={analysisText} onChange={setAnalysisText} maxLength={20000} height={180} />
+      </div>
       <hr />
       <h3>분석 실행</h3>
       <Expander title="사전 필터 (선택)" defaultOpen>

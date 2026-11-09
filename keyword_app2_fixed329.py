@@ -3853,6 +3853,16 @@ with tabs['analysis']:
     sample = "\uc774 \ubb38\uc7a5\uc5d0\ub294 \ud544\ub7ec\uc640 \uc548\ud2f0\uc5d0\uc774\uc9d5\uc774\ub77c\ub294 \ud0a4\uc6cc\ub4dc\uac00 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4."
     if "analysis_input_text" not in st.session_state:
         st.session_state.analysis_input_text = sample
+    st.markdown(
+        """<style>
+        .st-key-analysis_input_text [data-testid="stWidgetLabel"] p {
+            font-size: 1.5rem !important;
+            font-weight: 700 !important;
+            line-height: 1.25 !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
     text = st.text_area(
         "\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8 \uc785\ub825", key="analysis_input_text", height=180,
         max_chars=20000, on_change="ignore",
