@@ -746,7 +746,6 @@ function Shell() {
             최신 데이터 불러오기
           </Button>
         </div>
-        <div className="sidebar-footer">업무용 키워드 안전성 분석</div>
       </aside>
       <main className="main">
         <div className="main-inner">
