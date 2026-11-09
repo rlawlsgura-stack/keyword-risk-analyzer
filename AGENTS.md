@@ -11,7 +11,16 @@ again for each commit.
   Supabase URL and client key, confirm frontend/backend Supabase URLs match, and
   check Supabase Auth health. Also confirm API CORS allows the frontend origin
   and that the API health endpoint responds. Report these checks before launch.
-- For an ordinary push, use this exact command without extra arguments:
+- Select the ordinary push command by the PC's repository location. On the
+  D-drive PC, use:
+
+  ```powershell
+  cd D:\back-up\encore\keyword-risk-analyzer
+  git push https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git main:refs/heads/main
+  ```
+
+  On the other PC, where the checkout is on C:, use this exact command without
+  extra arguments:
 
   ```powershell
   git -C C:/encore/keyword-risk-analyzer push https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git main:refs/heads/main
