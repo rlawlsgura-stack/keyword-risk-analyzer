@@ -15,20 +15,27 @@ const receipt = (id: string) => `KR-${id.slice(0, 8).toUpperCase()}`
 const typeLabel = (t: string) => REQUEST_TYPE_LABELS[t as KeywordRequestType] ?? t
 
 export function RequestsTab() {
-  const { isAdmin } = useStore()
+  const { user, isAdmin } = useStore()
   const [items, setItems] = useState<KeywordRequestRecord[] | null>(null)
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
   const [open, setOpen] = useState<KeywordRequestRecord | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notif, setNotif] = useState<{ enabled: boolean; configured: boolean } | null>(null)
   const [notifOn, setNotifOn] = useState(false)
   const [notifMsg, setNotifMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [notifError, setNotifError] = useState('')
 
   const load = useCallback(async () => {
-    try { setItems((await loadKeywordRequests()).items); setError('') }
+    try {
+      const all = (await loadKeywordRequests()).items
+      const visible = isAdmin ? all : all.filter(item => item.requester_id === user.id)
+      setItems(visible)
+      setSelectedId(current => current && visible.some(item => item.id === current) ? current : visible[0]?.id ?? null)
+      setError('')
+    }
     catch { setError('문의 내역을 불러오지 못했습니다. 문의용 DB 설정과 RLS 정책을 확인하세요.') }
-  }, [])
+  }, [isAdmin, user.id])
   useEffect(() => { void load() }, [load])
   useEffect(() => {
     if (!isAdmin) return
@@ -38,25 +45,26 @@ export function RequestsTab() {
 
   const columns = [
     { key: 'receipt', label: '접수번호', render: (r: KeywordRequestRecord) => receipt(r.id) },
-    { key: 'kwd_no', label: 'kwd_no' },
-    { key: 'keyword_name', label: '키워드명' },
+    ...(isAdmin ? [{ key: 'requester_email', label: '요청자' }] : []),
+    { key: 'keyword', label: '키워드', render: (r: KeywordRequestRecord) => `${r.kwd_no || '신규'} | ${r.keyword_name || '신규 키워드'}` },
     { key: 'request_type', label: '문의 유형', render: (r: KeywordRequestRecord) => typeLabel(r.request_type) },
-    { key: 'request_detail', label: '요청 상세 내용' },
-    { key: 'status', label: '처리상태', render: (r: KeywordRequestRecord) => r.status || '대기' },
-    { key: 'admin_reply', label: '관리자 답변' },
-    ...(isAdmin ? [{ key: 'requester_email', label: '요청자 이메일' }] : []),
+    { key: 'request_detail', label: '요청 내용', render: (r: KeywordRequestRecord) => <span className="request-table-summary">{r.request_detail || '상세 내용 없음'}</span> },
+    { key: 'status', label: '처리 상태', render: (r: KeywordRequestRecord) => <span className={`request-status ${r.status === '처리완료' ? 'done' : 'active'}`}>{r.status || '대기'}</span> },
     { key: 'created_at', label: '접수 시각', render: (r: KeywordRequestRecord) => formatDatetime(r.created_at) },
+    { key: 'detail', label: '', render: () => '상세 보기' },
   ]
+  const selected = items?.find(item => item.id === selectedId) ?? null
 
   return (
     <div>
       {flash && <Alert kind="success">{flash}</Alert>}
       <h3>키워드 문의</h3>
-      <section className="request-entry-panel">
+      {!isAdmin && <section className="request-entry-panel">
         <h4>문의 등록</h4>
         <KeywordRequestForm onSubmitted={() => void load()} />
-      </section>
-      <h4 className="request-history-heading">내 문의 내역</h4>
+      </section>}
+      {isAdmin && <div className="request-admin-intro">접수된 문의를 확인하고 답변 및 처리 상태를 관리합니다.</div>}
+      <h4 className="request-history-heading">{isAdmin ? '접수된 문의 내역' : '내 문의 내역'}</h4>
       {isAdmin && (
         <div className="mb">
           {notifError && <Alert kind="error">{notifError}</Alert>}
@@ -78,26 +86,41 @@ export function RequestsTab() {
       )}
       {error && <Alert kind="error">{error}</Alert>}
       {items === null && !error && <Spinner />}
-      {items && !items.length && <Alert kind="info">등록된 키워드 문의가 없습니다.</Alert>}
+      {items && !items.length && <Alert kind="info">{isAdmin ? '접수된 키워드 문의가 없습니다.' : '등록된 키워드 문의가 없습니다.'}</Alert>}
       {items && items.length > 0 && (
         <>
-          <div className="caption">문의 행을 선택하면 상세 내역과 댓글을 확인할 수 있습니다.</div>
+          <div className="caption">{isAdmin ? '행을 선택해 문의를 확인하고 상세 대화에서 답변 및 처리 상태를 관리하세요.' : '행을 선택하면 문의 내용과 관리자 답변을 확인할 수 있습니다.'}</div>
           <div className="table-wrap">
             <table className="grid">
               <thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead>
               <tbody>
                 {items.map(r => (
-                  <tr key={r.id} style={{ cursor: 'pointer' }} tabIndex={0} onClick={() => { setFlash(''); setOpen(r) }}
-                    onKeyDown={e => { if (e.key === 'Enter') { setFlash(''); setOpen(r) } }}>
-                    {columns.map(c => <td key={c.key}>{c.render ? c.render(r) : String(r[c.key] ?? '')}</td>)}
+                  <tr key={r.id} className={selectedId === r.id ? 'selected' : ''} style={{ cursor: 'pointer' }} tabIndex={0}
+                    onClick={() => setSelectedId(r.id)} onKeyDown={e => { if (e.key === 'Enter') setSelectedId(r.id) }}>
+                    {columns.map(c => <td key={c.key}>{c.key === 'detail'
+                      ? <Button small onClick={() => { setSelectedId(r.id); setFlash(''); setOpen(r) }}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
+                      : c.render ? c.render(r) : String(r[c.key] ?? '')}</td>)}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {items.length >= 1000 && <div className="caption">최근 1,000건만 표시했습니다. 더 오래된 요청은 관리자에게 문의하세요.</div>}
+          {items.length >= 1000 && <div className="caption">최근 1,000건만 표시했습니다.</div>}
         </>
       )}
+      {selected && <section className="request-selected-panel">
+        <div className="request-selected-heading">
+          <div>
+            <h4>선택한 문의 상세</h4>
+            <div className="caption">{receipt(selected.id)} | {selected.kwd_no || '신규'} {selected.keyword_name || '신규 키워드'} | {typeLabel(selected.request_type)}{isAdmin && selected.requester_email ? ` | ${selected.requester_email}` : ''}</div>
+          </div>
+          <Button small onClick={() => { setFlash(''); setOpen(selected) }}>{isAdmin ? '답변 및 처리 열기' : '대화 상세 열기'}</Button>
+        </div>
+        <div className="request-selected-body">
+          <div><strong>사용자 문의</strong><p>{selected.request_detail || '상세 요청 내용이 없습니다.'}</p></div>
+          <div><strong>관리자 답변</strong><p>{selected.admin_reply || '아직 관리자 답변이 없습니다.'}</p></div>
+        </div>
+      </section>}
       {open && (
         <RequestDialog request={open} onClose={() => { setOpen(null); void load() }}
           onChanged={async (message, closeDialog) => {

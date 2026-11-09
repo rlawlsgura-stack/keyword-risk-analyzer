@@ -304,7 +304,17 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .request-entry-panel { margin: .75rem 0 1.25rem; padding: 1rem; border: 1px solid #e6e8eb; border-radius: 6px; background: #fcfdfe; }
 .request-entry-panel h4 { margin: 0 0 .75rem; }
 .request-entry-fields { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: .75rem; align-items: start; }
+.request-detail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: end; }
 .request-history-heading { margin-top: 1rem; }
+.request-admin-intro { margin: .75rem 0 1rem; padding: .75rem 1rem; color: #5f6d7b; background: #f8f9fa; border: 1px solid #e6e8eb; border-radius: 4px; }
+.request-table-summary { display: block; max-width: 24rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.request-status { display: inline-block; padding: .15rem .55rem; border-radius: 999px; color: #1670b5; background: #e9f5ff; white-space: nowrap; }
+.request-status.done { color: #268350; background: #e9f7ef; }
+.request-selected-panel { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #e6e8eb; }
+.request-selected-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.request-selected-heading h4 { margin: 0 0 .35rem; }
+.request-selected-body { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: .75rem; padding: .75rem 1rem; border: 1px solid #e6e8eb; border-radius: 6px; }
+.request-selected-body p { margin: .3rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .sidebar { width: 258px; flex-basis: 258px; padding: 1rem; box-shadow: none; }
@@ -321,4 +331,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
   .workspace-panel { margin-top: .75rem; padding: .8rem; }
   .request-entry-panel { padding: .75rem; }
   .request-entry-fields { grid-template-columns: minmax(0, 1fr); }
+  .request-detail-row { grid-template-columns: minmax(0, 1fr); }
+  .request-selected-heading { align-items: flex-start; flex-direction: column; }
+  .request-selected-body { grid-template-columns: minmax(0, 1fr); }
 }

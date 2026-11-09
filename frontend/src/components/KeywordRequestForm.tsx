@@ -81,10 +81,12 @@ export function KeywordRequestForm({ onSubmitted }: { onSubmitted?: () => void }
         placeholder="번호 또는 키워드명을 입력하세요." disabled={!options.length} />
       </div>
       {isNew && <div className="caption">신규키워드는 한 항목씩 입력해 주세요. 여러 키워드는 쉼표(,)로 구분하세요. 예: 키워드A, 키워드B</div>}
-      <TextArea rows={2} label={isNew ? '요청 상세 내용' : '요청 상세 내용 (선택)'} value={detail} onChange={setDetail} maxLength={4000}
-        placeholder={isNew ? '키워드A, 키워드B' : ''}
-        help={isNew ? '신규키워드는 쉼표(,)로 구분해 입력하세요.' : '변경이 필요한 이유나 원하는 내용을 적어주세요. 최대 4,000자까지 입력할 수 있습니다.'} />
-      <div><Button primary onClick={submit} disabled={busy}>입력</Button></div>
+      <div className="request-detail-row">
+        <TextArea rows={2} label={isNew ? '요청 상세 내용' : '요청 상세 내용 (선택)'} value={detail} onChange={setDetail} maxLength={4000}
+          placeholder={isNew ? '키워드A, 키워드B' : ''}
+          help={isNew ? '신규키워드는 쉼표(,)로 구분해 입력하세요.' : '변경이 필요한 이유나 원하는 내용을 적어주세요. 최대 4,000자까지 입력할 수 있습니다.'} />
+        <div><Button primary onClick={submit} disabled={busy}>문의 등록</Button></div>
+      </div>
       {messages.map(m => (
         <div key={m.text}>
           <Alert kind={m.kind}>{m.text}</Alert>
