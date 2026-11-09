@@ -7,6 +7,13 @@ again for each commit.
 - Repository: `https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git`
 - Branch: `main`
 - Review the intended changes and run appropriate checks before committing.
+- For every UI change, verify the active app entrypoint in `README.md` and inspect
+  role-specific branches for both administrator and member accounts. Keep common
+  screens and behavior aligned across roles. The current production/local
+  Streamlit entrypoint selects the highest numbered `keyword_app2_fixed###.py`;
+  the React frontend is a separate implementation and must not be assumed to be
+  the active app. When a requested shared feature exists in both implementations,
+  update both or clearly identify which app is active before concluding.
 - Before starting or reopening local frontend/API ports, verify the configured
   Supabase URL and client key, confirm frontend/backend Supabase URLs match, and
   check Supabase Auth health. Also confirm API CORS allows the frontend origin

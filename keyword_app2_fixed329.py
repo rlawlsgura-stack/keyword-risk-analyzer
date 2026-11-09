@@ -3683,70 +3683,93 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
 
 def render_regulation_chat_tab():
     st.subheader("심의 Chat-bot")
-    st.caption("기존 분석과 별도로, 질문을 보냈을 때만 키워드 DB와 공식 법령·판례 검색을 수행합니다. 검색 결과가 법적 결론을 뜻하지는 않습니다.")
+    st.caption("공식 자료를 근거로 키워드·법령 문의를 이어서 확인합니다. 검색 결과가 법적 결론을 뜻하지는 않습니다.")
     history = st.session_state.setdefault("regulation_chat_history", [])
-    for turn in history:
-        with st.chat_message("user"):
-            st.write(turn["question"])
-        with st.chat_message("assistant"):
-            st.markdown(turn["result"].get("answer", "검색 결과가 없습니다."))
-            if turn["result"].get("administrator_review"):
-                st.warning("검색 근거가 상충하거나 설명을 검증하지 못했습니다. 세부 판단은 관리자에게 문의해 주세요.")
-            matches = turn["result"].get("keyword_matches", [])
-            if matches:
-                _selectable_dataframe(pd.DataFrame(matches), hide_index=True, width="stretch", alt="법령 조문에서 확인한 키워드 DB 결과")
-            for source in turn["result"].get("sources", []):
-                with st.expander(f"근거: {source['label']}"):
-                    if source.get("url"):
-                        st.link_button("원문/API 응답 열기", source["url"])
-                    st.text(source.get("text", ""))
 
-    ocr_candidates = [str(row.get("term", "")).strip()
-                      for row in st.session_state.get("ocr_keyword_candidates", [])
-                      if str(row.get("term", "")).strip()]
-    with st.form("regulation_chat_form", clear_on_submit=True):
+    ocr_candidates = _ko_sorted({
+        str(row.get("term", "")).strip()
+        for row in st.session_state.get("ocr_keyword_candidates", [])
+        if str(row.get("term", "")).strip()
+    })
+    category_options = {str(value).strip() for value in st.session_state.get("opt_categories", []) if str(value).strip()}
+    if "상품카테고리" in st.session_state.kw_df:
+        category_options.update(
+            str(value).strip() for value in st.session_state.kw_df["상품카테고리"].dropna()
+            if str(value).strip()
+        )
+    category_options = [""] + _ko_sorted(category_options)
+
+    with st.expander("⚡ 검색 옵션", expanded=False):
         direction_label = st.selectbox(
             "질문 방향",
             ["광고 문구·키워드에서 법령 찾기", "법령·조항에서 등록 키워드 찾기"],
             key="regulation_chat_direction",
         )
-        question = st.text_input(
-            "질문 또는 검색어",
-            max_chars=500,
-            placeholder="예: 화장품 광고의 주름 개선 표현 관련 조항 / 화장품법 제13조에서 등록 키워드 찾기",
+        category = st.selectbox(
+            "상품 카테고리", category_options,
+            format_func=lambda value: value or "전체 카테고리",
+            key="regulation_chat_category",
         )
         selected_ocr = st.multiselect(
-            "현재 OCR 후보 연결 (선택)", sorted(set(ocr_candidates)),
+            "현재 OCR 분석 키워드", ocr_candidates,
             key="regulation_chat_ocr_context",
-        ) if ocr_candidates else []
+        )
+        include_ocr = st.checkbox(
+            "현재 OCR 분석 키워드 검색 포함", value=False,
+            key="regulation_chat_include_ocr",
+            disabled=not ocr_candidates,
+        )
         include_analysis_text = st.checkbox(
-            "현재 텍스트 분석 문구도 검색에 포함", value=False,
+            "현재 텍스트 분석 키워드 검색 포함", value=False,
             key="regulation_chat_include_analysis_text",
         )
-        category_options = [""]
-        if "상품카테고리" in st.session_state.kw_df:
-            category_options += sorted({str(value).strip() for value in
-                                        st.session_state.kw_df["상품카테고리"].dropna()
-                                        if str(value).strip()})
-        category = st.selectbox("상품 분류", category_options,
-                                format_func=lambda value: value or "모든 분류",
-                                key="regulation_chat_category")
-        submitted = st.form_submit_button("검색하고 답변 보기", type="primary")
+        context_parts = list(selected_ocr) if include_ocr else []
+        if include_analysis_text:
+            analysis_text = str(st.session_state.get("analysis_input_text", "")).strip()
+            if analysis_text:
+                context_parts.append(analysis_text)
+        context_text = "\n".join(context_parts)
+        st.caption(f"연결 자료 {len(context_text):,} / 20,000자")
 
-    clear_col, _ = st.columns([1, 5])
-    if clear_col.button("대화 지우기", key="clear_regulation_chat"):
+    if st.button("대화 지우기", key="clear_regulation_chat"):
         st.session_state["regulation_chat_history"] = []
         st.rerun()
 
-    if not submitted:
+    for turn in history:
+        with st.chat_message("user"):
+            st.write(turn["question"])
+        with st.chat_message("assistant"):
+            st.markdown("**AI**")
+            st.markdown(turn["result"].get("answer", "검색 결과가 없습니다."))
+            if turn["result"].get("administrator_review"):
+                st.warning("검색 근거가 상충하거나 설명을 검증하지 못했습니다. 세부 판단은 관리자에게 문의해 주세요.")
+            matches = turn["result"].get("keyword_matches", [])
+            if matches:
+                with st.expander("관련 키워드 보기"):
+                    _selectable_dataframe(pd.DataFrame(matches), hide_index=True, width="stretch", alt="법령 조문에서 확인한 키워드 DB 결과")
+            sources = turn["result"].get("sources", [])
+            if sources:
+                with st.expander(f"공식 출처 및 근거 ({len(sources)})"):
+                    for source in sources:
+                        with st.container(border=True):
+                            st.markdown(f"**{source.get('label', '공식 출처')}**")
+                            if source.get("url"):
+                                st.link_button("공식 자료 열기 ↗", source["url"])
+                            st.text(source.get("text", ""))
+
+    question = st.chat_input("메시지를 입력하세요…", max_chars=500, key="regulation_chat_input")
+    if question is None:
         return
-    if not question.strip():
-        st.warning("질문이나 검색어를 입력해 주세요.")
+    question = question.strip()
+    if len(question) < 2:
+        st.warning("질문은 2~500자로 입력해 주세요.")
+        return
+    if len(context_text) > 20000:
+        st.error(f"연결 자료가 {len(context_text):,}자입니다. 최대 20,000자까지 연결할 수 있습니다.")
         return
 
-    context_parts = list(selected_ocr)
-    if include_analysis_text:
-        context_parts.append(str(st.session_state.get("analysis_input_text", "")))
+    with st.chat_message("user"):
+        st.write(question)
     session = st.session_state.get("auth_session") or {}
     access_token = session.get("access_token", "")
     api_url = os.getenv("REGULATION_API_URL", "").strip()
@@ -3757,36 +3780,51 @@ def render_regulation_chat_tab():
             api_url = ""
     api_url = api_url.rstrip("/")
     if not api_url or not access_token:
-        st.session_state["regulation_chat_history"].append({
-            "question": question,
-            "result": {"answer": "법령 검색 API 주소 또는 로그인 토큰이 설정되지 않았습니다. 운영자 설정을 확인해 주세요.",
-                       "sources": [], "keyword_matches": []},
-        })
-        st.rerun()
-
-    direction = "keyword_to_law" if direction_label.startswith("광고") else "law_to_keywords"
-    try:
-        response = requests.post(
-            f"{api_url}/api/v1/regulation/questions",
-            headers={"Authorization": f"Bearer {access_token}"},
-            json={"direction": direction, "query": question.strip(),
-                  "context_text": "\n".join(context_parts), "category": category},
-            timeout=90,
-        )
-        if response.status_code >= 400:
-            try:
-                detail = response.json().get("detail", "법령 검색을 완료하지 못했습니다.")
-            except ValueError:
-                detail = "법령 검색을 완료하지 못했습니다."
-            result = {"answer": str(detail)[:500], "sources": [], "keyword_matches": []}
-        else:
-            result = response.json()
-    except requests.RequestException:
-        result = {"answer": "법령 검색 API에 연결할 수 없습니다. 기존 키워드/OCR 분석은 계속 사용할 수 있습니다.",
-                  "sources": [], "keyword_matches": []}
-    st.session_state["regulation_chat_history"].append({"question": question, "result": result})
+        result = {"answer": "법령 검색 API 주소 또는 로그인 토큰이 설정되지 않았습니다. 운영자 설정을 확인해 주세요.", "sources": [], "keyword_matches": []}
+        failed = True
+    else:
+        prior_messages = []
+        prior_chars = 0
+        for turn in reversed([item for item in history if not item.get("failed")][-6:]):
+            pair = [
+                {"role": "user", "content": str(turn.get("question", ""))[:4000]},
+                {"role": "assistant", "content": str(turn.get("result", {}).get("answer", ""))[:4000]},
+            ]
+            pair_chars = sum(len(item["content"]) for item in pair)
+            if prior_chars + pair_chars > 20000:
+                break
+            prior_messages[0:0] = pair
+            prior_chars += pair_chars
+        direction = "keyword_to_law" if direction_label.startswith("광고") else "law_to_keywords"
+        try:
+            with st.chat_message("assistant"):
+                st.markdown("**AI**")
+                with st.spinner("공식 자료와 키워드를 확인하고 있습니다…"):
+                    response = requests.post(
+                        f"{api_url}/api/v1/regulation/questions",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        json={"direction": direction, "query": question,
+                              "context_text": context_text, "category": category,
+                              "conversation_history": prior_messages},
+                        timeout=90,
+                    )
+                    if response.status_code >= 400:
+                        try:
+                            detail = response.json().get("detail", "법령 검색을 완료하지 못했습니다.")
+                        except ValueError:
+                            detail = "법령 검색을 완료하지 못했습니다."
+                        result = {"answer": str(detail)[:500], "sources": [], "keyword_matches": []}
+                        failed = True
+                    else:
+                        result = response.json()
+                        failed = False
+        except requests.RequestException:
+            result = {"answer": "API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", "sources": [], "keyword_matches": []}
+            failed = True
+    st.session_state["regulation_chat_history"].append({
+        "question": question, "result": result, "failed": failed,
+    })
     st.rerun()
-
 
 show_user_management = cloud_enabled() and is_admin()
 tab_specs = [('analysis', '스크립트 분석')]
