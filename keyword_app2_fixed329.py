@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Keyword Risk Analyzer (FIXED329 - React analysis connected)
 - Based on v97
@@ -3856,7 +3856,7 @@ with tabs['analysis']:
     st.markdown(
         """<style>
         .st-key-analysis_input_text [data-testid="stWidgetLabel"] p {
-            font-size: 1.5rem !important;
+            font-size: 1.25rem !important;
             font-weight: 700 !important;
             line-height: 1.25 !important;
         }
@@ -6000,3 +6000,4 @@ if 'regulation_chat' in tabs:
     with tabs['regulation_chat']:
         if tabs['regulation_chat'].open:
             render_regulation_chat_tab()
+
