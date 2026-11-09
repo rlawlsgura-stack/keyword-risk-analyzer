@@ -60,7 +60,7 @@ def _db_source(keywords: pd.DataFrame, query: str, category: str) -> dict[str, A
     return {"matches": matches, "source": _source("DB1", "현재 키워드 DB", evidence)}
 
 
-def _llm_explanation(question: str, sources: list[dict[str, str]]) -> dict[str, Any] | None:
+def _llm_explanation(question: str, sources: list[dict[str, str]], conversation_history: list[dict[str, str]] | None = None) -> dict[str, Any] | None:
     if os.getenv("REGULATION_LLM_ENABLED", "false").lower() != "true":
         return None
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -83,6 +83,7 @@ def _llm_explanation(question: str, sources: list[dict[str, str]]) -> dict[str, 
                     "또는 insufficient로 하고, administrator_review를 true로 하라. 각 주장에 source_id와 원문에 실제 "
                     "포함된 짧은 quote를 붙여라. JSON 형식: {status, answer, administrator_review, claims:[{text,source_id,quote}]}"
                 )},
+                *[{"role": item["role"], "content": item["content"]} for item in (conversation_history or [])[-12:]],
                 {"role": "user", "content": json.dumps(
                     {"question": question, "sources": sources}, ensure_ascii=False)},
             ],
@@ -112,8 +113,11 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
     query = request["query"].strip()
     context = request.get("context_text", "")[:20000]
     category = request.get("category", "")
+    conversation_history = request.get("conversation_history", [])[-12:]
+    prior_context = "\n".join(item["content"] for item in conversation_history)
+    retrieval_context = "\n".join(part for part in (query, prior_context, context) if part)
     keywords = repository.load_keywords()
-    db_result = (_db_source(keywords, f"{query}\n{context}", category)
+    db_result = (_db_source(keywords, retrieval_context, category)
                  if direction == "keyword_to_law" else {"matches": [], "source": None})
     sources = [db_result["source"]] if db_result["source"] else []
     matches = db_result["matches"]
@@ -198,7 +202,7 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
     llm_question = query + (f"\n\n사용자가 제공한 분석 문구:\n{context}" if context else "")
     try:
         llm_sources = [{**source, "text": source["text"][:3000]} for source in sources[:6]]
-        llm = _llm_explanation(llm_question, llm_sources)
+        llm = _llm_explanation(llm_question, llm_sources, conversation_history)
     except (requests.RequestException, ValueError, KeyError):
         # Retrieval remains useful when the optional explanation service is unavailable.
         llm = None

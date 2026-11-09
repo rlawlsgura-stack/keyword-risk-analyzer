@@ -15,7 +15,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
 from app_config import configure, cloud_enabled
@@ -90,12 +90,26 @@ class AnalysisRequest(BaseModel):
     analysis_id: UUID | None = None
 
 
+class RegulationConversationMessage(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    role: Literal['user', 'assistant']
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class RegulationQuestionRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     direction: Literal['keyword_to_law', 'law_to_keywords']
     query: str = Field(min_length=2, max_length=500)
     context_text: str = Field(default='', max_length=20000)
     category: str = Field(default='', max_length=100)
+    conversation_history: list[RegulationConversationMessage] = Field(default_factory=list, max_length=12)
+
+    @field_validator('conversation_history')
+    @classmethod
+    def validate_conversation_size(cls, messages):
+        if sum(len(message.content) for message in messages) > 20000:
+            raise ValueError('conversation history must not exceed 20000 characters')
+        return messages
 
 
 class CurrentAnalysisRequest(BaseModel):

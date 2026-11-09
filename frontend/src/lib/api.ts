@@ -103,7 +103,8 @@ export const resetReport = (scope: 'all' | 'last-7-days') =>
   request<{ scope: string; reset?: boolean; removed?: number }>(`/api/v1/admin/reports/reset/${scope}`, { method: 'POST' })
 
 /* ---------- regulation ---------- */
-export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string }) =>
+export type RegulationConversationMessage = { role: 'user' | 'assistant'; content: string }
+export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
 
 /* ---------- OCR ---------- */
