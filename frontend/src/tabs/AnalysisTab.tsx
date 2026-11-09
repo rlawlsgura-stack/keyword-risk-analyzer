@@ -171,9 +171,11 @@ export function AnalysisTab() {
         </>
       )}
 
+      <hr className="analysis-section-separator" />
       <h3>하이라이트 미리보기<Help text={numberedHelp(HIGHLIGHT_HELP)} /></h3>
       {outcome.segments && <HighlightPreview segments={outcome.segments} />}
 
+      <hr className="analysis-section-separator" />
       <h4>🧰 리스트 필터</h4>
       <KeywordList rows={catalog?.rows ?? []} columns={columns} />
     </div>

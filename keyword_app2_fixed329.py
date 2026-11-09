@@ -4062,6 +4062,7 @@ with tabs['analysis']:
             st.download_button("분석 결과 CSV 다운로드", data=_persist_csv, file_name="analysis_results.csv", mime="text/csv", key="dl_analysis")
 
 
+    st.markdown("---")
     st.subheader(
         "하이라이트 미리보기",
         help=_numbered_help('검출 문구를 클릭하면 같은 검출 대상의 번호 표시를 전환합니다.\n\n'
@@ -4524,6 +4525,7 @@ with tabs['analysis']:
         st.session_state["list_filter_applied_proof_tab1"] = []
         st.session_state["list_filter_has_applied_tab1"] = False
 
+    st.markdown("---")
     st.markdown("#### 🧰 리스트 필터")
 
     # --------------------------------
