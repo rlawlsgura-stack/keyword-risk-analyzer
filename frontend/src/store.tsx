@@ -52,7 +52,21 @@ export function useStore(): Store {
 }
 
 export function StoreProvider({ user, role, children }: { user: User; role: Role; children: ReactNode }) {
-  const [tab, setTab] = useState<TabKey>('analysis')
+  const tabStorageKey = `keyword-risk.active-tab:${user.id}`
+  const [tab, setTabState] = useState<TabKey>(() => {
+    try {
+      const saved = sessionStorage.getItem(tabStorageKey) as TabKey | null
+      const commonTabs: TabKey[] = ['analysis', 'ocr_import', 'candidate_pool', 'requests', 'regulation_chat', 'report']
+      const validTabs = role === 'admin' ? [...commonTabs, 'keyword_admin', 'user_admin'] : commonTabs
+      return saved && validTabs.includes(saved) ? saved : 'analysis'
+    } catch {
+      return 'analysis'
+    }
+  })
+  const setTab = useCallback((next: TabKey) => {
+    try { sessionStorage.setItem(tabStorageKey, next) } catch { /* storage may be unavailable */ }
+    setTabState(next)
+  }, [tabStorageKey])
   const [catalog, setCatalog] = useState<Catalog | null>(null)
   const [catalogError, setCatalogError] = useState('')
   const [catalogVersion, setCatalogVersion] = useState(0)

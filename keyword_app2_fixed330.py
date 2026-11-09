@@ -3840,7 +3840,7 @@ if show_user_management:
 
 tabs = dict(zip(
     (key for key, _ in tab_specs),
-    st.tabs([label for _, label in tab_specs], on_change="rerun", key="main_app_tabs"),
+    st.tabs([label for _, label in tab_specs], key="main_app_tabs", bind="query-params"),
 ))
 
 if st.session_state.get('unmatched_pending_collections'):
