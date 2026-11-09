@@ -19,11 +19,12 @@ function MarkdownText({ text }: { text: string }) {
 }
 
 export function ChatTab() {
-  const { catalog, ocr, analysisText } = useStore()
+  const { catalog, dropdowns, ocr, analysisText } = useStore()
   const [history, setHistory] = useState<Turn[]>([])
   const [direction, setDirection] = useState<Direction>('keyword_to_law')
   const [question, setQuestion] = useState('')
   const [ocrTerms, setOcrTerms] = useState<string[]>([])
+  const [includeOcr, setIncludeOcr] = useState(false)
   const [includeText, setIncludeText] = useState(false)
   const [category, setCategory] = useState('')
   const [optionsOpen, setOptionsOpen] = useState(false)
@@ -31,8 +32,11 @@ export function ChatTab() {
   const [busy, setBusy] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ocrOptions = useMemo(() => pySorted(new Set(ocr.candidates.map(c => c.term.trim()).filter(Boolean))), [ocr.candidates])
-  const categories = useMemo(() => ['', ...pySorted(uniqueValues(catalog?.rows ?? [], '상품 카테고리'))], [catalog])
-  const contextText = [...ocrTerms.filter(t => ocrOptions.includes(t)), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
+  const categories = useMemo(() => ['', ...pySorted(new Set([
+    ...(dropdowns?.opt_categories ?? []),
+    ...uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'),
+  ].map(value => value.trim()).filter(Boolean)))], [catalog, dropdowns])
+  const contextText = [...(includeOcr ? ocrTerms.filter(t => ocrOptions.includes(t)) : []), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
@@ -80,23 +84,24 @@ export function ChatTab() {
       {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
         <div className="chat-options-grid"><Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
           <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
-          {ocrOptions.length > 0 && <MultiSelect label="현재 OCR 분석 키워드 검색" value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
+          {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
+          <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
           <Checkbox label="현재 텍스트 분석 키워드 검색 포함" checked={includeText} onChange={setIncludeText} />
         </div>
         <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
       </div>}
       <main className="chat-thread" aria-live="polite">
-        {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">심</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.</div></div>}
+        {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.</div></div>}
         {history.map((turn, i) => <article className="chat-turn" key={i}>
           <div className="chat-msg user"><div className="chat-bubble user">{turn.question}</div></div>
-          <div className="chat-msg assistant"><div className="chat-bot-avatar">심</div><div className={`chat-bubble assistant${turn.failed ? ' failed' : ''}`}>
+          <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className={`chat-bubble assistant${turn.failed ? ' failed' : ''}`}>
             <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'} />
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}
             {turn.result.keyword_matches?.length > 0 && <Expander title="관련 키워드 보기"><DataTable rows={turn.result.keyword_matches as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={MATCH_COLUMNS.map(c => ({ key: c }))} showIndex={false} /></Expander>}
             {(turn.result.sources ?? []).length > 0 && <div className="chat-sources"><Expander title={`공식 출처 및 근거 (${turn.result.sources.length})`}>{(turn.result.sources ?? []).map((source, j) => <div className="chat-source" key={j}><strong>{source.label}</strong>{source.url && <a href={String(source.url)} target="_blank" rel="noreferrer">공식 자료 열기 ↗</a>}<pre>{String(source.text ?? '')}</pre></div>)}</Expander></div>}
           </div></div>
         </article>)}
-        {busy && <div className="chat-msg assistant"><div className="chat-bot-avatar">심</div><div className="chat-bubble assistant chat-thinking">답변을 확인하고 있습니다…</div></div>}
+        {busy && <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant chat-thinking">답변을 확인하고 있습니다…</div></div>}
         <div ref={bottomRef} />
       </main>
       <form className="chat-composer" onSubmit={submit}><div className="chat-input-wrap">
