@@ -3850,12 +3850,11 @@ if st.session_state.get('unmatched_pending_collections'):
         st.rerun()
 with tabs['analysis']:
     # ① 텍스트 입력
-    st.subheader("텍스트 입력")
     sample = "\uc774 \ubb38\uc7a5\uc5d0\ub294 \ud544\ub7ec\uc640 \uc548\ud2f0\uc5d0\uc774\uc9d5\uc774\ub77c\ub294 \ud0a4\uc6cc\ub4dc\uac00 \ud3ec\ud568\ub418\uc5b4 \uc788\uc2b5\ub2c8\ub2e4."
     if "analysis_input_text" not in st.session_state:
         st.session_state.analysis_input_text = sample
     text = st.text_area(
-        "\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8", key="analysis_input_text", height=180,
+        "\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8 \uc785\ub825", key="analysis_input_text", height=180,
         max_chars=20000, on_change="ignore",
     )
 
