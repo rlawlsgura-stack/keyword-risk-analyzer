@@ -329,7 +329,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .request-table.admin .request-col-status { width: 9%; }
 .request-table.admin .request-col-created_at { width: 13%; }
 .request-table.admin .request-col-detail { width: 10%; }
-.request-table .request-col-detail .btn { width: 100%; min-width: 7rem; padding-inline: .45rem; white-space: nowrap; }
+.request-table .request-col-detail .btn { width: 100%; min-width: 6rem; padding-inline: .3rem; white-space: nowrap; }
 .request-table-summary { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .request-status { display: inline-block; padding: .15rem .55rem; border-radius: 999px; color: #1670b5; background: #e9f5ff; white-space: nowrap; }
 .request-status.done { color: #268350; background: #e9f7ef; }
