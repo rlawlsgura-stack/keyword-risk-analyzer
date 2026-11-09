@@ -305,7 +305,10 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .kwd-tooltip { border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 27, 35, .12); }
 .request-entry-panel { margin: .75rem 0 1.25rem; padding: 1rem; border: 1px solid #e6e8eb; border-radius: 6px; background: #fcfdfe; }
 .request-entry-panel h4 { margin: 0 0 .75rem; }
-.request-entry-fields { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: .75rem; align-items: start; }
+.request-entry-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; align-items: start; }
+.request-entry-fields > div { min-width: 0; }
+.request-entry-fields .ms { width: 100%; }
+.request-entry-fields .ms > input { display: block; width: 100%; min-width: 0; height: 2.4rem; min-height: 2.4rem; box-sizing: border-box; }
 .request-detail-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .75rem; align-items: end; }
 .request-history-heading { margin-top: 1rem; }
 .request-admin-intro { margin: .75rem 0 1rem; padding: .75rem 1rem; color: #5f6d7b; background: #f8f9fa; border: 1px solid #e6e8eb; border-radius: 4px; }
