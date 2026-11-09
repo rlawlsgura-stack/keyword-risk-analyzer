@@ -4,8 +4,7 @@ import { configurationReady, supabase } from './lib/supabase.ts'
 import type { Role } from './lib/types.ts'
 import { StoreProvider, useStore, type TabKey } from './store.tsx'
 import { LoginScreen, NewPasswordScreen } from './components/Login.tsx'
-import { KeywordRequestForm } from './components/KeywordRequestForm.tsx'
-import { Alert, Button, Expander, Spinner, Tabs } from './components/ui.tsx'
+import { Alert, Button, Spinner, Tabs } from './components/ui.tsx'
 import { AnalysisTab } from './tabs/AnalysisTab.tsx'
 import { OcrTab } from './tabs/OcrTab.tsx'
 import { UnmatchedTab } from './tabs/UnmatchedTab.tsx'
@@ -137,7 +136,7 @@ const TAB_LABELS: Record<TabKey, string> = {
   analysis: '스크립트 분석',
   ocr_import: '이미지 OCR분석',
   candidate_pool: '미매칭 후보군',
-  requests: '키워드 문의내역',
+  requests: '키워드 문의',
   regulation_chat: '심의 Chat-bot',
   report: '분석리포트',
   keyword_admin: '키워드 관리',
@@ -747,7 +746,6 @@ function Shell() {
             최신 데이터 불러오기
           </Button>
         </div>
-        <Expander title="키워드 문의"><KeywordRequestForm /></Expander>
         <div className="sidebar-footer">업무용 키워드 안전성 분석</div>
       </aside>
       <main className="main">

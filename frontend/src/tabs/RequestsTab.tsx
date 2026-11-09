@@ -6,7 +6,7 @@ import {
 import { formatDatetime } from '../lib/catalog.ts'
 import type { KeywordRequestMessage, KeywordRequestRecord, KeywordRequestType } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
-import { REQUEST_TYPE_LABELS } from '../components/KeywordRequestForm.tsx'
+import { KeywordRequestForm, REQUEST_TYPE_LABELS } from '../components/KeywordRequestForm.tsx'
 import { Alert, Button, Checkbox, Dialog, Expander, Select, Spinner, TextArea, errorText } from '../components/ui.tsx'
 
 const STATUSES = ['대기', '검토중', '처리완료'] as const
@@ -51,7 +51,12 @@ export function RequestsTab() {
   return (
     <div>
       {flash && <Alert kind="success">{flash}</Alert>}
-      <h3>키워드 문의내역</h3>
+      <h3>키워드 문의</h3>
+      <section className="request-entry-panel">
+        <h4>문의 등록</h4>
+        <KeywordRequestForm onSubmitted={() => void load()} />
+      </section>
+      <h4 className="request-history-heading">내 문의 내역</h4>
       {isAdmin && (
         <div className="mb">
           {notifError && <Alert kind="error">{notifError}</Alert>}

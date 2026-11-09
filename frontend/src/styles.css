@@ -301,6 +301,10 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .thread-item.admin { background: #f8fbff; }
 .kwd-ref { color: #1670b5; }
 .kwd-tooltip { border-radius: 6px; box-shadow: 0 4px 16px rgba(20, 27, 35, .12); }
+.request-entry-panel { margin: .75rem 0 1.25rem; padding: 1rem; border: 1px solid #e6e8eb; border-radius: 6px; background: #fcfdfe; }
+.request-entry-panel h4 { margin: 0 0 .75rem; }
+.request-entry-fields { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr); gap: .75rem; align-items: start; }
+.request-history-heading { margin-top: 1rem; }
 
 @media (max-width: 900px) {
   .sidebar { width: 258px; flex-basis: 258px; padding: 1rem; box-shadow: none; }
@@ -315,4 +319,6 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
   .tabs { gap: 1rem; }
   .tab { font-size: .82rem; }
   .workspace-panel { margin-top: .75rem; padding: .8rem; }
+  .request-entry-panel { padding: .75rem; }
+  .request-entry-fields { grid-template-columns: minmax(0, 1fr); }
 }
