@@ -101,9 +101,9 @@ export function ChatTab() {
         <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
         <TextInput label="질문 또는 검색어" value={question} onChange={setQuestion} maxLength={500}
           placeholder="예: 화장품 광고의 주름 개선 표현 관련 조항 / 화장품법 제13조에서 등록 키워드 찾기" />
-        {ocrOptions.length > 0 && <MultiSelect label="현재 OCR 후보 연결 (선택)" value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
-        <Checkbox label="현재 텍스트 분석 문구도 검색에 포함" checked={includeText} onChange={setIncludeText} />
-        <Select label="상품 분류" value={category} options={categories} format={c => c || '모든 분류'} onChange={setCategory} />
+        {ocrOptions.length > 0 && <MultiSelect label="현재 OCR 분석 키워드 검색" value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
+        <Checkbox label="현재 텍스트 분석 키워드 검색" checked={includeText} onChange={setIncludeText} />
+        <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
         <div><Button primary type="submit" disabled={busy}>검색하고 답변 보기</Button></div>
       </form>
       {busy && <Spinner text="검색 중입니다." />}
