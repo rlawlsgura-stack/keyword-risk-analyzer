@@ -3864,7 +3864,7 @@ with tabs['analysis']:
         unsafe_allow_html=True,
     )
     text = st.text_area(
-        "\ubd84\uc11d\ud560 \ud14d\uc2a4\ud2b8 \uc785\ub825", key="analysis_input_text", height=180,
+        "\uc2a4\ud06c\ub9bd\ud2b8 \uc785\ub825", key="analysis_input_text", height=180,
         max_chars=20000, on_change="ignore",
     )
 
