@@ -1,7 +1,7 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED329** (`keyword_app2_fixed329.py`).
-The React screens were rebuilt on 2026-11-07 to match FIXED329 tab for tab; see [frontend/README.md](frontend/README.md). The existing Streamlit app remains the production UI until the React screens are verified against production data.
+Current local development version: **FIXED330** (`keyword_app2_fixed330.py`).
+The React screens were rebuilt on 2026-11-07 to match FIXED330 tab for tab; see [frontend/README.md](frontend/README.md). The existing Streamlit app remains the production UI until the React screens are verified against production data.
 For work across PCs, see the [QA continuation handoff](docs/qa/WORK_HANDOFF.md); QA evidence for the previous React preview is kept in [docs/qa/legacy_react_QA_STATUS.md](docs/qa/legacy_react_QA_STATUS.md).
 `run_latest.ps1` checks Supabase Auth connectivity first, then starts the same `streamlit_cloud/app.py` entrypoint used by Streamlit Cloud and Render. That shared entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.

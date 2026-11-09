@@ -1,3 +1,9 @@
+## FIXED330 - Align shared analysis and regulation chat screens
+
+- Match the script input label typography to the analysis heading and rename the label to Script input.
+- Separate the text analysis result, highlight preview, and keyword list filter with consistent rules and spacing.
+- Align regulation chat category options with the script analysis tab and keep its shared administrator/member UI in sync.
+
 ## React preview 0.1.5
 
 - Clear range and column selection across shared tables after sorting, cell clicks, and row reordering.

@@ -1,7 +1,7 @@
-# React 화면 (Streamlit FIXED329 기능 전환본)
+# React 화면 (Streamlit FIXED330 기능 전환본)
 
-`frontend/`는 Streamlit 운영 화면(`keyword_app2_fixed329.py`)의 기능을 그대로 옮긴 React/TypeScript 화면입니다.
-2026-11-07에 이전 React 미리보기 코드를 모두 지우고 FIXED329 기준으로 새로 구현했습니다.
+`frontend/`는 Streamlit 운영 화면(`keyword_app2_fixed330.py`)의 기능을 그대로 옮긴 React/TypeScript 화면입니다.
+2026-11-07에 이전 React 미리보기 코드를 모두 지우고 FIXED330 기준으로 새로 구현했습니다.
 이전 QA 기록은 [docs/qa/legacy_react_QA_STATUS.md](../docs/qa/legacy_react_QA_STATUS.md)에 보관합니다.
 
 ## 구조
