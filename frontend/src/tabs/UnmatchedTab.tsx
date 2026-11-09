@@ -418,7 +418,7 @@ export function UnmatchedTab() {
               <thead><tr>
                 <th className="sel"><input type="checkbox" aria-label="전체 선택/해제" checked={selection.all && !Object.values(selection.ids).some(v => v === false)}
                   disabled={!rows.length} onChange={e => setSelection({ all: e.target.checked, ids: {} })} /></th>
-                <th>미매칭 표현</th><th>등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
+                <th>미매칭 표현</th><th>최근 등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
               </tr></thead>
               <tbody>
                 {rows.map(r => {
@@ -433,7 +433,7 @@ export function UnmatchedTab() {
                         setSelection({ all: selection.all, ids })
                       }} /></td>
                       <td>{surface(r)}</td>
-                      <td>{formatDatetime(r.first_seen)}</td>
+                      <td>{formatDatetime(r.last_seen)}</td>
                       <td>{STATUS_LABEL[r.review_status] ?? ''}</td>
                       <td className="num">{r.total_occurrences}</td>
                       <td className="num">{r.analysis_count}</td>

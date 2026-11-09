@@ -4903,7 +4903,7 @@ def render_unmatched_candidate_pool():
     if review_rows:
         candidate_df = pd.DataFrame([
             {'미매칭 표현': row['surface'],
-             '\uB4F1\uB85D\uC77C\uC2DC': format_datetime_display(row.get('first_seen')),
+             '\uCD5C\uADFC \uB4F1\uB85D\uC77C\uC2DC': format_datetime_display(row.get('last_seen')),
              '처리상태': row.get('status', ''),
              '검출횟수(중복포함)': int(row.get('occurrences', 0) or 0),
              **({'분석 횟수': int(row.get('analysis_count', 0) or 0)} if cloud_enabled() else {})}
