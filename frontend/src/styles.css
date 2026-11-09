@@ -263,7 +263,7 @@ body { background: #f5f6f7; color: #202020; }
 .sidebar .expander { margin: .65rem 0; }
 .sidebar-footer { margin-top: 1.25rem; color: #9ea7ad; font-size: .72rem; }
 .main { padding: 2rem 2.5rem 4rem; }
-.main-inner { width: 100%; max-width: 1170px; }
+.main-inner { width: 100%; max-width: 1400px; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; padding: 0 0 1.25rem; }
 .page-kicker { display: block; margin-bottom: .25rem; color: #9ea7ad; font-size: .68rem; font-weight: 700; letter-spacing: .12em; }
 .page-header h1 { margin: 0; color: #202020; font-size: 1.65rem; letter-spacing: -.045em; }

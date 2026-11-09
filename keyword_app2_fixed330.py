@@ -1477,7 +1477,16 @@ div.stButton > button {
 section.main > div.block-container,
 div[data-testid="stMainBlockContainer"],
 .main .block-container {
-    padding-top: 0.75rem !important;
+    max-width: none !important;
+    padding: 0.75rem 2.5rem 2rem !important;
+}
+@media (max-width: 768px) {
+    section.main > div.block-container,
+    div[data-testid="stMainBlockContainer"],
+    .main .block-container {
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
 }
 /* Make the main tab navigation easier to scan. */
 div[data-testid="stTabs"] [role="tab"],
