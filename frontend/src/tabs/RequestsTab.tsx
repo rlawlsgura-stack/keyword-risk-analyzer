@@ -91,13 +91,13 @@ export function RequestsTab() {
         <>
           <div className="caption">{isAdmin ? '행을 선택해 문의를 확인하고 상세 대화에서 답변 및 처리 상태를 관리하세요.' : '행을 선택하면 문의 내용과 관리자 답변을 확인할 수 있습니다.'}</div>
           <div className="table-wrap">
-            <table className="grid">
+            <table className={`grid request-table${isAdmin ? ' admin' : ''}`}>
               <thead><tr>{columns.map(c => <th key={c.key}>{c.label}</th>)}</tr></thead>
               <tbody>
                 {items.map(r => (
                   <tr key={r.id} className={selectedId === r.id ? 'selected' : ''} style={{ cursor: 'pointer' }} tabIndex={0}
                     onClick={() => setSelectedId(r.id)} onKeyDown={e => { if (e.key === 'Enter') setSelectedId(r.id) }}>
-                    {columns.map(c => <td key={c.key}>{c.key === 'detail'
+                    {columns.map(c => <td key={c.key} className={`request-col-${c.key}`}>{c.key === 'detail'
                       ? <Button small onClick={() => { setSelectedId(r.id); setFlash(''); setOpen(r) }}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
                       : c.render ? c.render(r) : String(r[c.key] ?? '')}</td>)}
                   </tr>
@@ -117,8 +117,8 @@ export function RequestsTab() {
           <Button small onClick={() => { setFlash(''); setOpen(selected) }}>{isAdmin ? '답변 및 처리 열기' : '대화 상세 열기'}</Button>
         </div>
         <div className="request-selected-body">
-          <div><strong>사용자 문의</strong><p>{selected.request_detail || '상세 요청 내용이 없습니다.'}</p></div>
-          <div><strong>관리자 답변</strong><p>{selected.admin_reply || '아직 관리자 답변이 없습니다.'}</p></div>
+          <div className="request-message-card user"><strong>사용자 문의</strong><p>{selected.request_detail || '상세 요청 내용이 없습니다.'}</p></div>
+          <div className="request-message-card admin"><strong>관리자 답변</strong><p>{selected.admin_reply || '아직 관리자 답변이 없습니다.'}</p></div>
         </div>
       </section>}
       {open && (
