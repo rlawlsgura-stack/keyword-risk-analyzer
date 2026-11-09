@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { ApiError, askRegulation, type RegulationConversationMessage } from '../lib/api.ts'
-import { pySorted, uniqueValues } from '../lib/catalog.ts'
+import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
 import type { RegulationResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Checkbox, DataTable, Expander, MultiSelect, Select } from '../components/ui.tsx'
@@ -19,7 +19,7 @@ function MarkdownText({ text }: { text: string }) {
 }
 
 export function ChatTab() {
-  const { catalog, dropdowns, ocr, analysisText } = useStore()
+  const { catalog, ocr, analysisText } = useStore()
   const [history, setHistory] = useState<Turn[]>([])
   const [direction, setDirection] = useState<Direction>('keyword_to_law')
   const [question, setQuestion] = useState('')
@@ -32,10 +32,7 @@ export function ChatTab() {
   const [busy, setBusy] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ocrOptions = useMemo(() => pySorted(new Set(ocr.candidates.map(c => c.term.trim()).filter(Boolean))), [ocr.candidates])
-  const categories = useMemo(() => ['', ...pySorted(new Set([
-    ...(dropdowns?.opt_categories ?? []),
-    ...uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'),
-  ].map(value => value.trim()).filter(Boolean)))], [catalog, dropdowns])
+  const categories = useMemo(() => ['', ...koSorted(uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'))], [catalog])
   const contextText = [...(includeOcr ? ocrTerms.filter(t => ocrOptions.includes(t)) : []), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
 
   const submit = async (e?: FormEvent) => {

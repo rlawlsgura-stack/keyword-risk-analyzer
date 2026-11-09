@@ -3691,13 +3691,7 @@ def render_regulation_chat_tab():
         for row in st.session_state.get("ocr_keyword_candidates", [])
         if str(row.get("term", "")).strip()
     })
-    category_options = {str(value).strip() for value in st.session_state.get("opt_categories", []) if str(value).strip()}
-    if "상품카테고리" in st.session_state.kw_df:
-        category_options.update(
-            str(value).strip() for value in st.session_state.kw_df["상품카테고리"].dropna()
-            if str(value).strip()
-        )
-    category_options = [""] + _ko_sorted(category_options)
+    category_options = [""] + unique_values_from_db("\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC")
 
     with st.expander("⚡ 검색 옵션", expanded=False):
         direction_label = st.selectbox(
