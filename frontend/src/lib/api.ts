@@ -104,8 +104,25 @@ export const resetReport = (scope: 'all' | 'last-7-days') =>
 
 /* ---------- regulation ---------- */
 export type RegulationConversationMessage = { role: 'user' | 'assistant'; content: string }
-export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
+export type RegulationScope = 'law' | 'internal' | 'keyword' | 'all'
+export type RegulationDocument = { id: string; source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string | null; status: string; original_name: string; approved_at: string | null }
+export type RegulationThread = { id: string; mode: string; created_at: string; updated_at: string }
+export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScope; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
+export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
+  request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
+export const listRegulationDocuments = () => request<{ items: RegulationDocument[] }>('/api/v1/admin/regulation/documents')
+export const previewRegulationDocument = (id: string) => request<RegulationDocument & { chunks: { id: string; ordinal: number; content: string; embedding_model: string | null }[]; content_sha256: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`)
+export const uploadRegulationDocument = (fields: { source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string; file: File }) => {
+  const form = new FormData()
+  for (const [key, value] of Object.entries(fields)) form.append(key, value)
+  return request<{ id: string; status: string }>('/api/v1/admin/regulation/documents', { method: 'POST', body: form })
+}
+export const approveRegulationDocument = (id: string) => request<{ id: string; status: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/approve`, { method: 'POST' })
+export const buildRegulationEmbeddings = (id: string) => request<{ id: string; embedded_chunks: number }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/embeddings`, { method: 'POST' })
+export const deleteRegulationDraft = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+export const listRegulationThreads = () => request<{ items: RegulationThread[] }>('/api/v1/regulation/threads')
+export const loadRegulationThread = (id: string) => request<{ id: string; messages: { role: 'user' | 'assistant'; content: string; evidence: Record<string, unknown>[] }[] }>(`/api/v1/regulation/threads/${encodeURIComponent(id)}`)
 
 /* ---------- OCR ---------- */
 export function extractOCR(files: File[]) {

@@ -3694,6 +3694,139 @@ def render_regulation_chat_tab():
     st.subheader("심의 Chat-bot")
     st.caption("공식 자료를 근거로 키워드·법령 문의를 이어서 확인합니다. 검색 결과가 법적 결론을 뜻하지는 않습니다.")
     history = st.session_state.setdefault("regulation_chat_history", [])
+    scope_labels = {
+        "통합 검색": "all", "국가법령정보센터": "law",
+        "사내 규정 문서": "internal", "키워드 DB": "keyword",
+    }
+    session = st.session_state.get("auth_session") or {}
+    access_token = session.get("access_token", "")
+    api_url = os.getenv("REGULATION_API_URL", "").strip()
+    if not api_url:
+        try:
+            api_url = str(st.secrets.get("REGULATION_API_URL", "")).strip()
+        except Exception:
+            api_url = ""
+    api_url = api_url.rstrip("/")
+    corpus_ready = False
+    if st.session_state.pop("regulation_reset_saved_thread", False):
+        st.session_state["regulation_saved_thread"] = "새 대화"
+        st.session_state["regulation_last_selected_thread_choice"] = "새 대화"
+
+    if api_url and access_token:
+        try:
+            threads_response = requests.get(
+                f"{api_url}/api/v1/regulation/threads",
+                headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+            corpus_ready = threads_response.ok
+            saved_threads = threads_response.json().get("items", []) if threads_response.ok else []
+        except requests.RequestException:
+            saved_threads = []
+        thread_options = {"새 대화": None}
+        thread_options.update({f"{row['updated_at']} · {row['mode']}": row['id'] for row in saved_threads})
+        selected_thread = st.selectbox("저장된 대화", list(thread_options), key="regulation_saved_thread")
+        selected_id = thread_options[selected_thread]
+        if selected_thread != st.session_state.get("regulation_last_selected_thread_choice", selected_thread):
+            if selected_id:
+                try:
+                    response = requests.get(f"{api_url}/api/v1/regulation/threads/{selected_id}",
+                        headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+                    response.raise_for_status()
+                    messages = response.json().get("messages", [])
+                    restored = []
+                    for index in range(0, len(messages) - 1, 2):
+                        user_message, bot_message = messages[index:index + 2]
+                        if user_message.get("role") == "user" and bot_message.get("role") == "assistant":
+                            restored.append({"question": user_message["content"],
+                                "result": {"answer": bot_message["content"],
+                                           "sources": bot_message.get("evidence") or [],
+                                           "keyword_matches": []}})
+                    st.session_state["regulation_chat_history"] = restored
+                except requests.RequestException:
+                    st.warning("저장된 대화를 불러오지 못했습니다.")
+            else:
+                st.session_state["regulation_chat_history"] = []
+            st.session_state["regulation_chat_thread_id"] = selected_id
+            history = st.session_state["regulation_chat_history"]
+        st.session_state["regulation_last_selected_thread_choice"] = selected_thread
+
+    if is_admin() and api_url and access_token and corpus_ready:
+        with st.expander("사내 규정 문서 관리 · 관리자"):
+            with st.form("regulation_document_upload"):
+                source_key = st.text_input("문서 식별자", help="영문 소문자, 숫자, _, -")
+                doc_version = st.text_input("버전")
+                doc_title = st.text_input("제목")
+                doc_category = st.text_input("상품 카테고리 (빈칸이면 공통)")
+                effective_from = st.date_input("시행일")
+                effective_to = st.text_input("종료일 (선택, YYYY-MM-DD)")
+                doc_file = st.file_uploader("문서", type=["txt", "md", "docx", "pdf"])
+                submitted = st.form_submit_button("초안 등록")
+            if submitted and doc_file:
+                try:
+                    upload_response = requests.post(
+                        f"{api_url}/api/v1/admin/regulation/documents",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        data={"source_key": source_key, "version": doc_version,
+                              "title": doc_title, "category": doc_category,
+                              "effective_from": effective_from.isoformat(),
+                              "effective_to": effective_to},
+                        files={"file": (doc_file.name, doc_file.getvalue())}, timeout=90)
+                    upload_response.raise_for_status()
+                    st.success("초안이 등록되었습니다. 본문과 시행일을 검토한 뒤 승인하세요.")
+                except requests.RequestException:
+                    st.error("문서를 등록하지 못했습니다. 입력값과 API 연결을 확인하세요.")
+            try:
+                docs_response = requests.get(f"{api_url}/api/v1/admin/regulation/documents",
+                    headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+                docs = docs_response.json().get("items", []) if docs_response.ok else []
+            except requests.RequestException:
+                docs = []
+            for doc in docs:
+                st.write(f"{doc['title']} · {doc['source_key']} v{doc['version']} · {doc['status']} · 시행 {doc['effective_from']}")
+                if st.button("본문 확인", key=f"preview_regulation_{doc['id']}"):
+                    try:
+                        preview_response = requests.get(
+                            f"{api_url}/api/v1/admin/regulation/documents/{doc['id']}",
+                            headers={"Authorization": f"Bearer {access_token}"}, timeout=20)
+                        preview_response.raise_for_status()
+                        st.session_state["regulation_document_preview"] = preview_response.json()
+                    except requests.RequestException:
+                        st.error("문서 본문을 불러오지 못했습니다.")
+                preview = st.session_state.get("regulation_document_preview") or {}
+                if preview.get("id") == doc["id"]:
+                    st.caption(f"원본 {preview.get('original_name')} · SHA-256 {preview.get('content_sha256')}")
+                    for chunk in preview.get("chunks", []):
+                        st.text(f"{chunk.get('ordinal')}. {chunk.get('content')}")
+                    if st.button("의미 검색 색인 생성", key=f"embed_regulation_{doc['id']}"):
+                        try:
+                            embedding_response = requests.post(
+                                f"{api_url}/api/v1/admin/regulation/documents/{doc['id']}/embeddings",
+                                headers={"Authorization": f"Bearer {access_token}"}, timeout=120)
+                            embedding_response.raise_for_status()
+                            st.success(f"{embedding_response.json().get('embedded_chunks', 0)}개 문단의 의미 검색 색인을 생성했습니다.")
+                        except requests.RequestException:
+                            st.error("의미 검색 색인을 생성하지 못했습니다. 서버 설정을 확인하세요.")
+                if doc["status"] == "draft" and st.button("승인", key=f"approve_regulation_{doc['id']}",
+                                                          disabled=preview.get("id") != doc["id"]):
+                    try:
+                        approval = requests.post(
+                            f"{api_url}/api/v1/admin/regulation/documents/{doc['id']}/approve",
+                            headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+                        approval.raise_for_status()
+                        st.rerun()
+                    except requests.RequestException:
+                        st.error("문서를 승인하지 못했습니다.")
+                if doc["status"] == "draft":
+                    delete_checked = st.checkbox("이 초안 삭제 확인", key=f"delete_regulation_check_{doc['id']}")
+                    if st.button("초안 삭제", key=f"delete_regulation_{doc['id']}", disabled=not delete_checked):
+                        try:
+                            delete_response = requests.delete(
+                                f"{api_url}/api/v1/admin/regulation/documents/{doc['id']}",
+                                headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+                            delete_response.raise_for_status()
+                            st.session_state.pop("regulation_document_preview", None)
+                            st.rerun()
+                        except requests.RequestException:
+                            st.error("초안을 삭제하지 못했습니다.")
 
     ocr_candidates = _ko_sorted({
         str(row.get("term", "")).strip()
@@ -3703,6 +3836,8 @@ def render_regulation_chat_tab():
     category_options = [""] + unique_values_from_db("\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC")
 
     with st.expander("⚡ 검색 옵션", expanded=False):
+        scope_label = (st.selectbox("검색 범위", list(scope_labels), key="regulation_chat_scope")
+                       if corpus_ready else "통합 검색")
         direction_label = st.selectbox(
             "질문 방향",
             ["광고 문구·키워드에서 법령 찾기", "법령·조항에서 등록 키워드 찾기"],
@@ -3713,6 +3848,13 @@ def render_regulation_chat_tab():
             format_func=lambda value: value or "전체 카테고리",
             key="regulation_chat_category",
         )
+        as_of = st.date_input("사내문서 기준일", key="regulation_chat_as_of") if corpus_ready else None
+        use_llm = (st.checkbox("검색 근거를 LLM으로 요약 (서버 설정 시)", value=False,
+                               key="regulation_chat_use_llm") if corpus_ready else False)
+        include_keyword_candidates = (st.checkbox(
+            "키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)", value=False,
+            key="regulation_chat_related_candidates",
+            disabled=scope_label in {"국가법령정보센터", "사내 규정 문서"}) if corpus_ready else False)
         selected_ocr = st.multiselect(
             "현재 OCR 분석 키워드", ocr_candidates,
             key="regulation_chat_ocr_context",
@@ -3736,6 +3878,8 @@ def render_regulation_chat_tab():
 
     if st.button("대화 지우기", key="clear_regulation_chat"):
         st.session_state["regulation_chat_history"] = []
+        st.session_state["regulation_chat_thread_id"] = None
+        st.session_state["regulation_reset_saved_thread"] = True
         st.rerun()
 
     for turn in history:
@@ -3744,18 +3888,26 @@ def render_regulation_chat_tab():
         with st.chat_message("assistant"):
             st.markdown("**AI**")
             st.markdown(turn["result"].get("answer", "검색 결과가 없습니다."))
+            method_labels = {"hybrid": "Kiwi·전문·유사 문자열·의미", "lexical_fuzzy": "Kiwi·전문·유사 문자열",
+                             "lexical_fuzzy_embedding_unavailable": "Kiwi·전문·유사 문자열 (의미 검색 장애)"}
+            for method in turn["result"].get("search_methods", []):
+                st.caption(f"사내문서 검색 방식: {method_labels.get(method, method)}")
             if turn["result"].get("administrator_review"):
                 st.warning("검색 근거가 상충하거나 설명을 검증하지 못했습니다. 세부 판단은 관리자에게 문의해 주세요.")
             matches = turn["result"].get("keyword_matches", [])
             if matches:
                 with st.expander("관련 키워드 보기"):
                     _selectable_dataframe(pd.DataFrame(matches), hide_index=True, width="stretch", alt="법령 조문에서 확인한 키워드 DB 결과")
+            related = turn["result"].get("related_candidates", [])
+            if related:
+                with st.expander("의미상 관련 후보 · 심의자 검토용"):
+                    _selectable_dataframe(pd.DataFrame(related), hide_index=True, width="stretch", alt="위험 판정에 반영되지 않은 의미 관련 키워드 후보")
             sources = turn["result"].get("sources", [])
             if sources:
-                with st.expander(f"공식 출처 및 근거 ({len(sources)})"):
+                with st.expander(f"검색 출처 및 근거 ({len(sources)})"):
                     for source in sources:
                         with st.container(border=True):
-                            st.markdown(f"**{source.get('label', '공식 출처')}**")
+                            st.markdown(f"**[{source.get('id', '')}] {source.get('label', '검색 출처')}**")
                             if source.get("url"):
                                 st.link_button("공식 자료 열기 ↗", source["url"])
                             st.text(source.get("text", ""))
@@ -3773,15 +3925,6 @@ def render_regulation_chat_tab():
 
     with st.chat_message("user"):
         st.write(question)
-    session = st.session_state.get("auth_session") or {}
-    access_token = session.get("access_token", "")
-    api_url = os.getenv("REGULATION_API_URL", "").strip()
-    if not api_url:
-        try:
-            api_url = str(st.secrets.get("REGULATION_API_URL", "")).strip()
-        except Exception:
-            api_url = ""
-    api_url = api_url.rstrip("/")
     if not api_url or not access_token:
         result = {"answer": "법령 검색 API 주소 또는 로그인 토큰이 설정되지 않았습니다. 운영자 설정을 확인해 주세요.", "sources": [], "keyword_matches": []}
         failed = True
@@ -3803,12 +3946,19 @@ def render_regulation_chat_tab():
             with st.chat_message("assistant"):
                 st.markdown("**AI**")
                 with st.spinner("공식 자료와 키워드를 확인하고 있습니다…"):
+                    payload = {"direction": direction, "query": question,
+                               "context_text": context_text, "category": category,
+                               "conversation_history": prior_messages}
+                    if corpus_ready:
+                        payload.update({"scope": scope_labels[scope_label],
+                                        "use_llm": use_llm,
+                                        "include_keyword_candidates": include_keyword_candidates,
+                                        "thread_id": st.session_state.get("regulation_chat_thread_id"),
+                                        "as_of": as_of.isoformat()})
                     response = requests.post(
                         f"{api_url}/api/v1/regulation/questions",
                         headers={"Authorization": f"Bearer {access_token}"},
-                        json={"direction": direction, "query": question,
-                              "context_text": context_text, "category": category,
-                              "conversation_history": prior_messages},
+                        json=payload,
                         timeout=90,
                     )
                     if response.status_code >= 400:
@@ -3820,6 +3970,7 @@ def render_regulation_chat_tab():
                         failed = True
                     else:
                         result = response.json()
+                        st.session_state["regulation_chat_thread_id"] = result.get("thread_id")
                         failed = False
         except requests.RequestException:
             result = {"answer": "API 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.", "sources": [], "keyword_matches": []}

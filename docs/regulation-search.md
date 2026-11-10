@@ -1,26 +1,30 @@
-# Law lookup chat
+# 심의챗봇 검색 운영 안내
 
-The optional, evidence-first legal lookup chat sends submitted questions to the authenticated FastAPI service. The service reads the current keyword database and calls the Law.go.kr Open API through `legislation_source.py`. Search and explanation orchestration live in `regulation_assistant.py`; the provider module owns HTTP requests and response formatting. This keeps the data source replaceable without changing the question flow.
+운영 React 화면과 Streamlit 보조 화면은 같은 FastAPI 심의챗봇을 사용합니다. 검색 범위는 국가법령정보센터, 사내 규정 문서, 키워드 DB, 통합 검색입니다. 질문 방향은 별도로 선택합니다. 검색 결과는 심의자의 근거 검토를 돕고, 기존 키워드 위험 판정을 변경하지 않습니다.
 
-## Configure the API service
+## 사내 문서 등록과 버전
 
-1. Request an Open API key (the `OC` identifier) from [Law.go.kr Open Data](https://open.law.go.kr/).
-2. Set `LEGISLATION_API_KEY` in the `keyword-risk-api` service environment or local API `.env`.
-3. Redeploy or restart `keyword-risk-api`.
-4. Keep `REGULATION_API_URL` in Streamlit Community Cloud Secrets pointed at the public URL of `keyword-risk-api`.
+관리자가 심의챗봇의 **사내 규정 문서 관리**에서 TXT, MD, DOCX, PDF 파일을 초안으로 등록합니다. 최대 2MB, 검색 가능한 본문 20~250,000자, 최대 300개 문단입니다. 이미지 전용 PDF는 OCR로 텍스트를 만든 뒤 등록해야 합니다. 원본 파일은 서버 전용 Supabase 테이블에 보관하고 SHA-256을 기록합니다. 브라우저는 원본 바이트에 직접 접근하지 않습니다.
 
-The Law.go.kr key belongs only on the API service. Do not put it in Streamlit Cloud Secrets or commit it. `REGULATION_MCP_URL` is no longer used. An MCP service is not required for this application's current searches.
-The API adapter sends `Referer: https://www.law.go.kr/` by default because some Law.go.kr deployments reject requests without a `Referer`. Set `LEGISLATION_REFERER` on `keyword-risk-api` only if the registered system requires a different referring domain.
+문서 식별자, 버전, 상품 카테고리, 시행일과 종료일을 입력합니다. 본문 미리보기와 시행일을 검토한 다음 승인합니다. 잘못 등록한 초안은 삭제할 수 있습니다. **초안은 검색되지 않습니다.** 같은 식별자의 새 버전을 승인하면 이전 승인본의 종료일을 새 시행일 전날로 정하고 이전 버전으로 보관합니다. 새 버전 시행일은 현재 승인본보다 뒤여야 합니다. 검색 기준일에 맞는 승인 이력이 검색됩니다. 문서 원본은 승인 후 수정하지 않고 새 버전으로 교체합니다.
 
-## Retrieved evidence and optional explanation
+신규 Supabase 설치에는 `supabase/regulation_corpus_setup.sql`을 적용합니다. 이 프로젝트에는 `regulation_corpus_setup`, `regulation_corpus_versions_fix`, `regulation_embedding_backfill`, `regulation_draft_cleanup`, `regulation_raw_search_baseline` 마이그레이션이 적용되었습니다. 테이블은 RLS와 권한 회수로 브라우저 직접 접근을 막고 FastAPI의 서버 비밀 키만 사용합니다. 관리 API는 Supabase Auth `app_metadata.role=admin`을 다시 확인합니다.
 
-- Keyword-to-law questions search laws, administrative rules, and precedents using up to three short terms from the submitted question and selected context.
-- Law-to-keywords questions locate the law and retrieve the requested article, or the full current law when no article number is supplied. The returned provision text is compared with the current keyword database using exact matching.
-- Retrieved source text includes the official record links returned by Law.go.kr when available. Search results are evidence for review; they are not a legal verdict.
-- `REGULATION_LLM_ENABLED` defaults to `false`. To enable the optional explanation stage, set it to `true` on `keyword-risk-api`, and set `OPENAI_API_KEY` and `REGULATION_LLM_MODEL` there. The LLM receives only the submitted question, opted-in context, DB matches, and retrieved source text. It does not perform a separate legal search.
-- The LLM must cite a source ID and a quote that appears verbatim in retrieved material. A conflict, insufficient evidence, or invalid quote suppresses its conclusion and asks for administrator review. A valid quote still does not establish that the interpretation is legally correct; the UI labels the result as informational.
-- Chat history remains in the active Streamlit session and is not written to Supabase.
+## 검색
 
-## Future provider changes
+- 사내 문서는 Kiwi 내용어와 원문 단어로 검색 토큰을 만들고 PostgreSQL 전문 검색을 수행합니다. `pg_trgm` 유사 문자열 검색을 보조로 사용합니다.
+- `REGULATION_EMBEDDINGS_ENABLED=true`와 `OPENAI_API_KEY`를 서버에 설정하면 `text-embedding-3-small` 임베딩을 함께 생성합니다. 어휘, 유사 문자열, 의미 검색 순위는 RRF로 합칩니다. 설정이 꺼져 있으면 어휘·유사 문자열 검색만 사용합니다. 기존 문서는 관리자의 **의미 검색 색인 생성** 버튼으로 색인을 채웁니다.
+- 사내 문서의 승인 상태, 상품 카테고리, 기준일을 먼저 적용합니다. 기준일은 사내 문서 버전에 적용되며 국가법령정보센터의 과거 법령 버전을 조회하는 옵션은 아닙니다. 답변 출처에는 문서 ID, 버전, 내용 해시와 문단 ID를 연결합니다.
+- 국가법령정보센터 범위는 기존 `legislation_source.py`를 사용합니다. 키워드 DB 범위는 현재 등록 키워드의 관련 후보를 제시합니다. 의미 검색 결과를 기존 위험 등급이나 자동 매칭에 합치지 않습니다.
 
-If another MCP-compatible client needs the same searches later, add an MCP provider that implements the same search operations in `legislation_source.py`. The request flow, DB comparison, source handling, and optional LLM explanation can remain in `regulation_assistant.py`.
+운영 문서와 검토된 질문·정답 문단이 준비되면 `scripts/compare_regulation_search.py`로 원문 PostgreSQL 전문 검색, Kiwi 토큰 전문 검색, 유사 문자열, 의미, 통합 검색을 동일한 사례에서 비교합니다. `scripts/evaluate_regulation_retrieval.py`는 Recall@5/10, MRR, 근거 없음 응답, 금지 출처 혼입과 지연시간을 채점합니다. 평가 사례에는 `case_id`, `judgment_status=approved`, `evaluation_type=relevance`, `question`, `category`, `category_filter`, `as_of`, `relevant_ids`, `forbidden_ids`를 기록합니다. `category`는 평가 분류(`cosmetics`, `food`, `health_functional_food`)이고 `category_filter`는 실제 문서 카테고리 값입니다. 정답 ID는 관리자 본문 미리보기의 문단 ID를 사용합니다. **현재 승인된 사내 문서와 검토된 평가 사례가 없으므로 품질 수치를 주장할 수 없습니다.**
+
+## 답변과 대화
+
+기본값은 검색 근거 목록입니다. **검색 근거를 LLM으로 요약**을 선택하고 서버에서 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정하면 검색된 근거만 LLM에 전달합니다. 각 주장에는 출처 ID와 실제 원문 인용이 필요합니다. 검증 실패나 근거 충돌 시 확정적 설명을 억제하고 관리자 검토를 표시합니다. 공식 출처 조회 실패 시 통합 검색의 다른 근거는 계속 제시하고 실패 사실을 표시합니다. 외부 AI API를 켜면 사내 문서의 검색 문단과 질문이 해당 제공자에게 전송됩니다.
+
+로그인한 사용자의 대화는 사용자 ID별로 저장합니다. 저장된 답변에는 사용된 문서 ID, 버전, 해시와 인용 원문을 붙여 이후 문서가 바뀌어도 당시 근거를 확인할 수 있습니다. 새 대화는 새 스레드를 만듭니다. 관리자는 자신의 대화만 조회하며 다른 사용자의 대화에는 접근할 수 없습니다. 대화 보존 기간과 삭제 정책은 별도 운영 결정을 거쳐야 합니다.
+
+## 서버 설정
+
+`LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `REGULATION_API_URL`은 Streamlit에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`입니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.

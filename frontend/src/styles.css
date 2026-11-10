@@ -409,4 +409,14 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-clear { align-self: flex-end; flex: 0 0 auto; margin: .2rem .8rem .5rem; border: 0; background: none; color: #647180; cursor: pointer; }
 .chat-clear:hover { color: #167fc6; }
 .chat-clear:disabled { opacity: .5; }
+.chat-saved-threads { padding: .45rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
+.chat-saved-threads select { margin-left: .5rem; max-width: 22rem; }
+.regulation-documents { padding: .5rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; max-height: 18rem; overflow-y: auto; }
+.regulation-documents summary { cursor: pointer; font-weight: 700; }
+.regulation-document-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.regulation-document-form label { display: flex; flex-direction: column; gap: .2rem; }
+.regulation-document-form input { width: 100%; box-sizing: border-box; }
+.regulation-document-list > div { padding: .35rem 0; border-top: 1px solid #e6e8eb; }
+.regulation-document-list button { margin-left: .5rem; }
 @media (max-width: 700px) { .chat-workspace { height: calc(100dvh - 8rem); min-height: 420px; } .chat-options-grid { grid-template-columns: 1fr; } .chat-bubble { max-width: 92%; } }
+@media (max-width: 700px) { .regulation-document-form { grid-template-columns: 1fr; } }

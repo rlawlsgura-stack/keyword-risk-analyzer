@@ -180,5 +180,10 @@ export type RegulationResult = {
   answer: string
   sources: RegulationSource[]
   keyword_matches: Record<string, unknown>[]
+  related_candidates?: { kwd_no: string; keyword: string; similarity: number }[]
+  thread_id?: string
+  administrator_review?: boolean
+  search_methods?: string[]
+  llm_used?: boolean
   [key: string]: unknown
 }

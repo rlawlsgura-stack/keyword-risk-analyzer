@@ -23,6 +23,9 @@ from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, Supabas
 from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
+from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
+                               load_document_preview, list_threads, load_thread,
+                               reindex_embeddings, save_turn)
 
 configure()
 app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.0',
@@ -103,6 +106,11 @@ class RegulationQuestionRequest(BaseModel):
     context_text: str = Field(default='', max_length=20000)
     category: str = Field(default='', max_length=100)
     conversation_history: list[RegulationConversationMessage] = Field(default_factory=list, max_length=12)
+    scope: Literal['legacy', 'law', 'internal', 'keyword', 'all'] = 'legacy'
+    use_llm: bool = False
+    include_keyword_candidates: bool = False
+    thread_id: UUID | None = None
+    as_of: date = Field(default_factory=date.today)
 
     @field_validator('conversation_history')
     @classmethod
@@ -1522,7 +1530,17 @@ def reset_report_data(scope: Literal['all', 'last-7-days'], actor=Depends(curren
 def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_actor),
                         repository=Depends(get_repository)):
     try:
-        return answer_regulation_question(body.model_dump(), repository)
+        if actor == 'integration' and body.thread_id:
+            raise HTTPException(403, 'A user session is required for conversations')
+        request_data = body.model_dump()
+        result = answer_regulation_question(request_data, repository)
+        if actor != 'integration':
+            result['thread_id'] = save_turn(repository, str(body.thread_id) if body.thread_id else None,
+                                            actor, body.scope, body.query, result['answer'],
+                                            result.get('sources', []))
+        return result
+    except HTTPException:
+        raise
     except RegulationSearchError as exc:
         raise HTTPException(502, str(exc)) from exc
     except requests.RequestException as exc:
@@ -1530,3 +1548,109 @@ def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_a
     except Exception as exc:
         logger.exception('Regulation question failed')
         raise HTTPException(502, 'Regulation search failed') from exc
+
+
+def regulation_admin(actor, credentials, repository):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    return user['id']
+
+
+@app.get('/api/v1/admin/regulation/documents')
+def regulation_documents(actor=Depends(current_actor),
+                         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                         repository=Depends(get_repository)):
+    regulation_admin(actor, credentials, repository)
+    return {'items': list_documents(repository)}
+
+
+@app.post('/api/v1/admin/regulation/documents')
+async def upload_regulation_document(
+        source_key: str = Form(..., min_length=2, max_length=80),
+        version: str = Form(..., min_length=1, max_length=80),
+        title: str = Form(..., min_length=1, max_length=200),
+        category: str = Form('', max_length=100),
+        effective_from: date = Form(...), effective_to: date | None = Form(None),
+        file: UploadFile = File(...), actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    admin_id = regulation_admin(actor, credentials, repository)
+    if not re.fullmatch(r'[a-z0-9_-]{2,80}', source_key):
+        raise HTTPException(422, '문서 식별자는 영문 소문자, 숫자, _, -만 사용할 수 있습니다.')
+    if effective_to and effective_to < effective_from:
+        raise HTTPException(422, '종료일은 시행일보다 빠를 수 없습니다.')
+    payload = await file.read(MAX_DOCUMENT_BYTES + 1)
+    try:
+        document_id = create_document(repository, source_key=source_key,
+            version=version, title=title, category=category,
+            effective_from=effective_from, effective_to=effective_to,
+            filename=file.filename or '', payload=payload, actor_id=admin_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {'id': document_id, 'status': 'draft'}
+
+
+@app.post('/api/v1/admin/regulation/documents/{document_id}/approve')
+def approve_regulation_document(document_id: UUID, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    admin_id = regulation_admin(actor, credentials, repository)
+    approved_id = repository.rpc('approve_regulation_document',
+                                 p_id=str(document_id), p_approver=admin_id)
+    return {'id': approved_id, 'status': 'approved'}
+
+
+@app.get('/api/v1/admin/regulation/documents/{document_id}')
+def preview_regulation_document(document_id: UUID, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    regulation_admin(actor, credentials, repository)
+    document = load_document_preview(repository, str(document_id))
+    if document is None:
+        raise HTTPException(404, 'Document not found')
+    return document
+
+
+@app.post('/api/v1/admin/regulation/documents/{document_id}/embeddings')
+def build_regulation_embeddings(document_id: UUID, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    regulation_admin(actor, credentials, repository)
+    try:
+        count = reindex_embeddings(repository, str(document_id))
+    except ValueError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {'id': str(document_id), 'embedded_chunks': count}
+
+
+@app.delete('/api/v1/admin/regulation/documents/{document_id}')
+def delete_regulation_draft(document_id: UUID, actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    regulation_admin(actor, credentials, repository)
+    if not repository.rpc('delete_regulation_draft', p_id=str(document_id)):
+        raise HTTPException(409, 'Only an existing draft can be deleted')
+    return {'id': str(document_id), 'deleted': True}
+
+
+@app.get('/api/v1/regulation/threads')
+def regulation_threads(actor=Depends(current_actor), repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required')
+    return {'items': list_threads(repository, actor)}
+
+
+@app.get('/api/v1/regulation/threads/{thread_id}')
+def regulation_thread(thread_id: UUID, actor=Depends(current_actor),
+                      repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required')
+    messages = load_thread(repository, actor, str(thread_id))
+    if messages is None:
+        raise HTTPException(404, 'Conversation not found')
+    return {'id': str(thread_id), 'messages': messages}

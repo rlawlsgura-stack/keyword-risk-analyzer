@@ -56,13 +56,13 @@ CSV mode is local development only and retains its session-local pool.
 [설계 문서 ZIP](docs/keyword_risk_analyzer_design_v1.zip)을 제공합니다.
 시스템, API, 화면, Supabase, 매칭 로직, 운영 배포와 검증을 현재 구현 기준으로 정리했습니다.
 
-[법령·가이드라인 RAG 도입 설계](docs/design/07_regulation_rag_design.md)는 별도 **제안 단계** 문서입니다.
-기존 키워드 검사에 공식 근거 검색을 추가하고, 검색 품질 확인 후 선택적으로 AI 검토를 도입하는 구성을 설명합니다.
-아직 운영 앱에 규정 검색·LLM 판정 기능이 연결된 것은 아닙니다.
+[법령·가이드라인 RAG 도입 설계](docs/design/07_regulation_rag_design.md)는 초기 설계 기록입니다.
+현재 구현한 사내문서 승인·버전관리, 통합 검색, 근거 인용, 대화 저장의 운영 절차는
+[심의챗봇 검색 운영 안내](docs/regulation-search.md)를 참고하세요.
 2026-10-22 확정한 1차 범위는 **국내 화장품·식품·건강기능식품**이며 **외부 AI API 전송 허용**을 반영했습니다.
 관리형 임베딩·생성 API를 우선 평가하고 BGE-M3와 검색 품질·비용을 비교하는 계획입니다.
-외부 AI API 연동은 사용자 요청에 따라 보류했습니다. [공식 원문 수집본 안내](data/regulations/README.md)에
-초기 수집 자료의 출처와 검수 상태를 기록했습니다. RAG용 DB 적재·별도 API 배포는 아직 수행하지 않았습니다.
+외부 AI API 연동은 서버 설정 후 선택적으로 사용합니다. [공식 원문 수집본 안내](data/regulations/README.md)에
+초기 수집 자료의 출처와 검수 상태를 기록했습니다. 사내 승인 문서가 아직 등록되지 않은 경우 사내문서 검색 결과는 비어 있습니다.
 
 
 운영 React 화면은 FastAPI를 통해 공통 Python 분석 엔진과 Supabase 저장소를 사용합니다. Streamlit fallback은 API를 거치지 않고 공통 모듈을 직접 호출합니다.
@@ -81,7 +81,7 @@ Streamlit fallback ────────────────────�
 - 빈 누적 조회수 21건은 숫자 `0`으로 정규화했습니다. 나머지 원장 필드는 보존합니다.
 - 로컬 CSV와 다른 앱의 데이터는 변경하지 않았습니다. 이 앱이 쓰지 않는 레거시 `public.keywords`는 RLS를 켜고 `anon`·`authenticated` 권한을 회수했습니다.
 - 서버 비밀 키와 사용할 계정의 역할 지정은 운영자가 관리합니다. 운영 화면은 Render의 React 정적 사이트를 사용합니다.
-- `render.yaml`은 React 화면과 FastAPI 서비스를 정의합니다. RAG 모델 서버와 규정 검색 API의 추가 배포는 아직 수행하지 않았습니다.
+- `render.yaml`은 React 화면과 FastAPI 서비스를 정의합니다. 사내문서 검색은 기존 API와 Supabase에서 실행됩니다.
 
 ## 설치와 실행
 

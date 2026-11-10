@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ApiError, askRegulation, type RegulationConversationMessage } from '../lib/api.ts'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { ApiError, askRegulation, askRegulationLegacy, listRegulationThreads, loadRegulationThread, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
 import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
 import type { RegulationResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Checkbox, DataTable, Expander, MultiSelect, Select } from '../components/ui.tsx'
+import { RegulationDocuments } from './RegulationDocuments.tsx'
 
 type Direction = 'keyword_to_law' | 'law_to_keywords'
 type Turn = { question: string; result: RegulationResult; failed?: boolean }
@@ -13,15 +14,25 @@ const DIRECTION_LABELS: Record<Direction, string> = {
   law_to_keywords: '법령·조항에서 등록 키워드 찾기',
 }
 const MATCH_COLUMNS = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드', '리스크 등급별 검토 의견']
+const SCOPES: RegulationScope[] = ['all', 'law', 'internal', 'keyword']
+const SCOPE_LABELS: Record<RegulationScope, string> = { all: '통합 검색', law: '국가법령정보센터', internal: '사내 규정 문서', keyword: '키워드 DB' }
+const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미' }
 
 function MarkdownText({ text }: { text: string }) {
   return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{part.slice(2, -2)}</strong> : <span key={j}>{part}</span>)}</p>)}</div>
 }
 
 export function ChatTab() {
-  const { catalog, ocr, analysisText } = useStore()
+  const { catalog, ocr, analysisText, isAdmin } = useStore()
   const [history, setHistory] = useState<Turn[]>([])
   const [direction, setDirection] = useState<Direction>('keyword_to_law')
+  const [scope, setScope] = useState<RegulationScope>('all')
+  const [useLlm, setUseLlm] = useState(false)
+  const [includeKeywordCandidates, setIncludeKeywordCandidates] = useState(false)
+  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
+  const [threadId, setThreadId] = useState<string | null>(null)
+  const [threads, setThreads] = useState<RegulationThread[]>([])
+  const [corpusReady, setCorpusReady] = useState(false)
   const [question, setQuestion] = useState('')
   const [ocrTerms, setOcrTerms] = useState<string[]>([])
   const [includeOcr, setIncludeOcr] = useState(false)
@@ -34,6 +45,22 @@ export function ChatTab() {
   const ocrOptions = useMemo(() => pySorted(new Set(ocr.candidates.map(c => c.term.trim()).filter(Boolean))), [ocr.candidates])
   const categories = useMemo(() => ['', ...koSorted(uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'))], [catalog])
   const contextText = [...(includeOcr ? ocrTerms.filter(t => ocrOptions.includes(t)) : []), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
+  useEffect(() => { void listRegulationThreads().then(data => { setThreads(data.items); setCorpusReady(true) }).catch(() => setCorpusReady(false)) }, [])
+
+  const openThread = async (id: string) => {
+    if (!id) { setThreadId(null); setHistory([]); return }
+    try {
+      const data = await loadRegulationThread(id)
+      const restored: Turn[] = []
+      for (let i = 0; i + 1 < data.messages.length; i += 2) {
+        const user = data.messages[i]
+        const assistant = data.messages[i + 1]
+        if (user.role === 'user' && assistant.role === 'assistant') restored.push({ question: user.content,
+          result: { answer: assistant.content, sources: assistant.evidence as RegulationResult['sources'], keyword_matches: [] } })
+      }
+      setThreadId(id); setHistory(restored); setWarning('')
+    } catch (cause) { setWarning(cause instanceof Error ? cause.message : '대화를 불러오지 못했습니다.') }
+  }
 
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
@@ -55,7 +82,14 @@ export function ChatTab() {
     let result: RegulationResult
     let failed = false
     try {
-      result = await askRegulation({ direction, query: q, context_text: contextText, category, conversation_history: conversation })
+      result = corpusReady
+        ? await askRegulation({ direction, scope, use_llm: useLlm,
+                                include_keyword_candidates: includeKeywordCandidates,
+                                thread_id: threadId, as_of: asOf,
+                                query: q, context_text: contextText, category, conversation_history: conversation })
+        : await askRegulationLegacy({ direction, query: q, context_text: contextText,
+                                     category, conversation_history: conversation })
+      if (result.thread_id) { setThreadId(result.thread_id); void listRegulationThreads().then(data => setThreads(data.items)).catch(() => {}) }
     } catch (error) {
       failed = true
       const answer = error instanceof ApiError && error.status === 0
@@ -78,11 +112,17 @@ export function ChatTab() {
       <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div>
         <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡</button>
       </header>
+      {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label></div>}
+      {isAdmin && corpusReady && <RegulationDocuments />}
       {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
-        <div className="chat-options-grid"><Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
+        <div className="chat-options-grid">{corpusReady && <Select label="검색 범위" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} />}
+          <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
           <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
+          {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
           {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
           <div className="chat-option-checks">
+          {corpusReady && <Checkbox label="검색 근거를 LLM으로 요약 (서버 설정 시)" checked={useLlm} onChange={setUseLlm} />}
+          {corpusReady && <Checkbox label="키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
           <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
             <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
           </div>
@@ -95,9 +135,11 @@ export function ChatTab() {
           <div className="chat-msg user"><div className="chat-bubble user">{turn.question}</div></div>
           <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className={`chat-bubble assistant${turn.failed ? ' failed' : ''}`}>
             <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'} />
+            {(turn.result.search_methods ?? []).length > 0 && <small>사내문서 검색 방식: {(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}
             {turn.result.keyword_matches?.length > 0 && <Expander title="관련 키워드 보기"><DataTable rows={turn.result.keyword_matches as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={MATCH_COLUMNS.map(c => ({ key: c }))} showIndex={false} /></Expander>}
-            {(turn.result.sources ?? []).length > 0 && <div className="chat-sources"><Expander title={`공식 출처 및 근거 (${turn.result.sources.length})`}>{(turn.result.sources ?? []).map((source, j) => <div className="chat-source" key={j}><strong>{source.label}</strong>{source.url && <a href={String(source.url)} target="_blank" rel="noreferrer">공식 자료 열기 ↗</a>}<pre>{String(source.text ?? '')}</pre></div>)}</Expander></div>}
+            {(turn.result.related_candidates ?? []).length > 0 && <Expander title="의미상 관련 후보 · 심의자 검토용"><DataTable rows={turn.result.related_candidates as unknown as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={[{ key: 'kwd_no' }, { key: 'keyword' }, { key: 'similarity' }]} showIndex={false} /></Expander>}
+            {(turn.result.sources ?? []).length > 0 && <div className="chat-sources"><Expander title={`검색 출처 및 근거 (${turn.result.sources.length})`}>{(turn.result.sources ?? []).map((source, j) => <div className="chat-source" key={j}><strong>[{String(source.id ?? j + 1)}] {source.label}</strong>{typeof source.url === 'string' && source.url && <a href={source.url} target="_blank" rel="noreferrer">원문 열기 ↗</a>}{typeof source.version === 'string' && source.version && <small> · 버전 {source.version}</small>}<pre>{String(source.text ?? '')}</pre></div>)}</Expander></div>}
           </div></div>
         </article>)}
         {busy && <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant chat-thinking">답변을 확인하고 있습니다…</div></div>}
@@ -108,7 +150,7 @@ export function ChatTab() {
         <span className={question.length > 500 ? 'over' : ''}>{question.length}/500</span>
       </div><button className="chat-send" type="submit" disabled={busy || question.trim().length < 2} aria-label="질문 전송">➤</button></form>
       {warning && <div className="chat-warning" role="alert">{warning}</div>}
-      {history.length > 0 && <button className="chat-clear" type="button" onClick={() => setHistory([])} disabled={busy}>대화 지우기</button>}
+      {history.length > 0 && <button className="chat-clear" type="button" onClick={() => { setHistory([]); setThreadId(null) }} disabled={busy}>새 대화</button>}
     </section>
   )
 }
