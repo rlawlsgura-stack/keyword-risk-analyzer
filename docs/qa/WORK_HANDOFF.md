@@ -1,6 +1,6 @@
 # React migration QA handoff
 
-Updated: 2026-11-07
+Updated: 2026-11-10
 
 Use this short status note when moving the work between PCs. It is a continuation aid, not a
 full activity transcript. Record dated verification details and evidence in
@@ -10,18 +10,19 @@ the React screens were rebuilt from FIXED329 on 2026-11-07, see `frontend/README
 
 ## Current state
 
-- React release candidate is `0.1.5` in this working change; after the push, use `git pull --ff-only` on the receiving PC. Current package/build validation is recorded below.
+- Production UI is React at `https://keyword-risk-ui.onrender.com`. Render serves this repository's `main` branch as a static site and connects it to `https://keyword-risk-api.onrender.com` and the configured Supabase project. Streamlit remains a fallback.
+- Current React package is `1.0.9` (`REACT-1.10`, FIXED330 baseline). The production build passed on 2026-11-10; deployment health, Auth health, served frontend configuration, and API CORS are recorded in the dated status entry below.
 - Local QA on 2026-11-07 used React `127.0.0.1:5173`, API `127.0.0.1:8000`, and local Supabase `127.0.0.1:54321`. API-level analysis, OCR, and one intended candidate save completed locally. Synthetic rows `LOCAL001`, `LOCAL002`, and `LOCAL003` are present; retain them and do not delete data.
 - React serializer Korean labels were repaired; frontend tests passed 17/17 and the production build passed. The local seed describes 12 report columns.
-- Still open: fresh React report-screen CSV download and Excel review; browser-based React member/admin workflow QA; React-Streamlit screen comparison. The UI automation host was unavailable, so API/test results do not count as browser QA.
+- Still open: fresh production React report-screen CSV download and Excel review; signed-in browser QA for member and administrator workflows; React-Streamlit screen comparison. The production switch does not count as completed visual or interaction parity QA. Avoid write or delete checks against production data.
 - Cross-PC startup: update with `git pull --ff-only`, inspect `git status --short --branch`, read this file and the newest dated entry in `frontend/QA_STATUS.md`, then independently verify the receiving PC's active frontend/API/Supabase targets. Do not copy `.env`, credentials, local DB state, or test users between PCs. Record each PC's evidence under its own `LOCAL`/`TEST`/`PRODUCTION` label. Never delete the dataset or local QA rows as cleanup.
 
 - Branch: `main`. The previously synced baseline was `cab245a`; this session adds Streamlit
   AppTest evidence and QA notes. Before switching PCs, pull the latest `main` and check its status.
 - React preview package version was advanced from `0.1.1` to `0.1.2` for this QA/documentation
   update. The Streamlit baseline remains FIXED329; this is not a Streamlit code release.
-- The React transition remains in QA. Streamlit remains the production UI until the remaining
-  signed-in member/admin workflows and interaction parity are complete.
+- React is now the production entrypoint. Streamlit remains a fallback while the remaining
+  signed-in member/admin workflows and interaction parity are reviewed.
 - Latest user-reported UI check: an unsaved blank recommendation row was added, the user accepted
   the **저장된 작업본 불러오기** overwrite confirmation, and the workbench returned to 0 rows / 0
   selected by loading the previously saved empty draft. The user did not report saving during this

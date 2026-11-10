@@ -50,7 +50,7 @@ npm run build   # 타입 검사 + 운영 빌드
 
 ## 배포
 
-`render.yaml`의 `keyword-risk-react-preview` 정적 사이트가 이 폴더를 빌드합니다.
+`render.yaml`의 `keyword-risk-ui` 정적 사이트가 이 폴더를 빌드합니다. 운영 주소는 [https://keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com)입니다.
 빌드 시 `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`(공개용 키), `VITE_API_BASE_URL`이 필요합니다.
 `SUPABASE_SECRET_KEY`는 절대 `VITE_` 변수에 넣지 않습니다.
 이 화면이 쓰는 API 추가분(`/api/v2/matching-rules`, `/api/v1/keyword-requests/new-keywords`,

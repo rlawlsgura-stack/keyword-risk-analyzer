@@ -1,20 +1,20 @@
 # Keyword Risk Analyzer
 
 Current local development version: **FIXED330** (`keyword_app2_fixed330.py`).
-The React screens were rebuilt on 2026-11-07 to match FIXED330 tab for tab; see [frontend/README.md](frontend/README.md). The existing Streamlit app remains the production UI until the React screens are verified against production data.
-For work across PCs, see the [QA continuation handoff](docs/qa/WORK_HANDOFF.md); QA evidence for the previous React preview is kept in [docs/qa/legacy_react_QA_STATUS.md](docs/qa/legacy_react_QA_STATUS.md).
-`run_latest.ps1` checks Supabase Auth connectivity first, then starts the same `streamlit_cloud/app.py` entrypoint used by Streamlit Cloud and Render. That shared entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
+The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings. The Streamlit implementation remains available as a fallback during the transition.
+For work across PCs, see the [QA continuation handoff](docs/qa/WORK_HANDOFF.md); it records the remaining browser-based parity checks.
+`run_latest.ps1` checks Supabase Auth connectivity first, then starts the local Streamlit fallback through `streamlit_cloud/app.py`. That entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-The Streamlit Community Cloud app file path must be `streamlit_cloud/app.py` on branch `main`; do not point it at a numbered app file. Local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
+If maintaining the Streamlit fallback on Community Cloud, its app file path must be `streamlit_cloud/app.py` on branch `main`; do not point it at a numbered app file. Local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
 
 ```powershell
 py -3.13 -m venv .venv-ocr313
 .\.venv-ocr313\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
 ```
 
-For Streamlit Community Cloud, select Python 3.13 in the app's Advanced settings because its runtime version is managed by Streamlit rather than repository files. Changing the Python version of an already deployed app requires deleting and redeploying it.
+For Streamlit Community Cloud fallback deployments, select Python 3.13 in the app's Advanced settings because its runtime version is managed by Streamlit rather than repository files.
 Cloud login survives a page refresh in the same browser tab by keeping only the Supabase refresh token in session storage. Closing the tab clears that browser storage; access tokens continue to use Supabase's default roughly one-hour lifetime and refresh five minutes before expiry.
 
 ### Shared unmatched-expression collection
@@ -65,13 +65,11 @@ CSV mode is local development only and retains its session-local pool.
 초기 수집 자료의 출처와 검수 상태를 기록했습니다. RAG용 DB 적재·별도 API 배포는 아직 수행하지 않았습니다.
 
 
-기존 Streamlit 화면과 별도 FastAPI가 같은 Python 분석 엔진과 Supabase 저장소를 사용합니다.
-Streamlit은 API 서버를 거치지 않고 공통 모듈을 직접 호출하므로 API 서버가 중단돼도 화면을 독립적으로 운영할 수 있습니다.
+운영 React 화면은 FastAPI를 통해 공통 Python 분석 엔진과 Supabase 저장소를 사용합니다. Streamlit fallback은 API를 거치지 않고 공통 모듈을 직접 호출합니다.
 
 ```text
-Streamlit ──┐
-            ├─ service.py / matching_engine.py ─ repository.py ─ Supabase
-FastAPI ────┘
+React (Render Static Site) ── FastAPI (Render Web Service) ── service.py / matching_engine.py ─ repository.py ─ Supabase
+Streamlit fallback ───────────────────────────────────────────┘
 ```
 
 ## 현재 구축 상태
@@ -82,8 +80,8 @@ FastAPI ────┘
 - 로컬 키워드 1,431개·13개 컬럼과 조회 로그 9,037건을 `kra_` 테이블에 복사했습니다.
 - 빈 누적 조회수 21건은 숫자 `0`으로 정규화했습니다. 나머지 원장 필드는 보존합니다.
 - 로컬 CSV와 다른 앱의 데이터는 변경하지 않았습니다. 이 앱이 쓰지 않는 레거시 `public.keywords`는 RLS를 켜고 `anon`·`authenticated` 권한을 회수했습니다.
-- 서버 비밀 키와 사용할 계정의 역할 지정은 운영자가 관리합니다. 화면은 Streamlit Community Cloud 사용을 기준으로 합니다.
-- `render.yaml`은 별도 서버 배포 예시입니다. RAG 모델 서버와 규정 검색 API의 추가 배포는 아직 수행하지 않았습니다.
+- 서버 비밀 키와 사용할 계정의 역할 지정은 운영자가 관리합니다. 운영 화면은 Render의 React 정적 사이트를 사용합니다.
+- `render.yaml`은 React 화면과 FastAPI 서비스를 정의합니다. RAG 모델 서버와 규정 검색 API의 추가 배포는 아직 수행하지 않았습니다.
 
 ## 설치와 실행
 
@@ -293,10 +291,9 @@ Invoke-RestMethod -Uri 'http://localhost:8000/api/v1/analyses' `
 
 ## 배포
 
-`render.yaml`은 Streamlit과 API를 별도 Render Web Service로 배포하는 설정입니다.
-상시 실행을 위해 `starter` 플랜을 명시했으며, 실제 배포 시 비용이 발생할 수 있습니다. 이 작업에서는 호스팅 서비스를 생성하지 않았습니다.
-두 서비스에 동일한 Supabase URL·서버 키를 설정하고, API 서비스에만 별도 연동 토큰을 설정합니다.
-실제 공개 접속은 HTTPS를 사용합니다. API에는 브라우저용 CORS를 열지 않았습니다.
+`render.yaml`은 `keyword-risk-ui` React 정적 사이트와 `keyword-risk-api` FastAPI 서비스를 정의합니다.
+React 빌드에는 Supabase 공개용 키와 API URL이 필요하며, 서버 비밀 키는 API 서비스에만 둡니다. React 운영 도메인은 API의 CORS 허용 목록에 포함됩니다.
+Render 서비스의 실제 환경 변수와 배포 상태는 Render 대시보드에서 확인합니다. API 서비스는 `starter` 플랜으로 설정되어 운영 비용이 발생할 수 있습니다.
 
 배포 후 `/healthz`, 인증이 필요한 `/readyz`, 일반 계정 분석, 관리자 저장, 로그아웃을 확인합니다.
 통계와 원장 원본은 Supabase에 있으므로 앱 서버의 로컬 파일 보존에 의존하지 않습니다.

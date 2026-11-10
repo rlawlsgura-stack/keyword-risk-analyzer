@@ -1,5 +1,17 @@
 # React transition QA status
 
+Entries below retain the status recorded at their original dates. The 2026-11-10
+production switch supersedes earlier statements that Streamlit is still the production
+UI; the unfinished browser and parity checks remain open.
+
+## Production UI switch (2026-11-10)
+
+- [x] Deployed React from this repository's `main` branch to `https://keyword-risk-ui.onrender.com`; the service is a Render static site. Streamlit remains available as a fallback.
+- [x] React build passed locally (`npm run build`). The production page returned HTTP 200, and its served bundle contains the configured Supabase project URL and `https://keyword-risk-api.onrender.com` API URL.
+- [x] Production API `/healthz` returned HTTP 200; Supabase Auth health returned HTTP 200 using the configured public key; API CORS preflight for the production React origin returned HTTP 200 with the matching `Access-Control-Allow-Origin`.
+- [x] Source review confirmed both role branches: member accounts receive the shared tabs; administrator accounts also receive keyword and user administration, with admin-only operations gated in the API. No credentials or role claims were changed.
+- [ ] Signed-in browser workflows for member and administrator accounts, fresh report CSV download/Excel review, and visual interaction parity against Streamlit remain unverified. No production data was written or deleted during this switch.
+
 ## 2026-11-06: environment split and cross-PC handoff
 
 - This PC's local React page returned at `http://127.0.0.1:5173/`; local FastAPI health returned
