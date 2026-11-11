@@ -32,7 +32,7 @@ export function ChatTab() {
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
   const [threadId, setThreadId] = useState<string | null>(null)
   const [threads, setThreads] = useState<RegulationThread[]>([])
-  const [corpusReady, setCorpusReady] = useState(false)
+  const [corpusReady, setCorpusReady] = useState<boolean | null>(null)
   const [question, setQuestion] = useState('')
   const [ocrTerms, setOcrTerms] = useState<string[]>([])
   const [includeOcr, setIncludeOcr] = useState(false)
@@ -110,13 +110,15 @@ export function ChatTab() {
   return (
     <section className="chat-workspace">
       <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div>
-        <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡</button>
+        <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡ 검색 옵션</button>
       </header>
       <div className="chat-controls">
         {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label></div>}
+        {corpusReady && <div className="chat-scope-bar"><Select label="검색 모드" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} /></div>}
+        {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
         {isAdmin && corpusReady && <RegulationDocuments />}
         {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
-          <div className="chat-options-grid">{corpusReady && <Select label="검색 범위" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} />}
+          <div className="chat-options-grid">
             <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
             <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
             {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
