@@ -412,10 +412,11 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-clear { align-self: flex-end; flex: 0 0 auto; margin: .2rem .8rem .5rem; border: 0; background: none; color: #647180; cursor: pointer; }
 .chat-clear:hover { color: #167fc6; }
 .chat-clear:disabled { opacity: .5; }
-.chat-saved-threads { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .45rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
-.chat-saved-threads select { margin-left: .5rem; max-width: 22rem; }
-.chat-thread-delete { border: 1px solid #d9a7a7; border-radius: 5px; padding: .4rem .65rem; background: #fff; color: #9b3030; cursor: pointer; }
-.chat-thread-delete:disabled { opacity: .5; cursor: not-allowed; }
+.chat-saved-threads { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .75rem; padding: .65rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
+.chat-saved-threads label { display: flex; flex: 0 1 24rem; flex-direction: column; gap: .25rem; min-width: 12rem; }
+.chat-saved-threads select { height: 2.4rem; margin: 0; max-width: none; }
+.chat-thread-delete { height: 2.4rem; padding: 0 .75rem; border: 1px solid #d9a7a7; border-radius: 5px; background: #fff; color: #9b3030; white-space: nowrap; cursor: pointer; }
+.chat-thread-delete:disabled { border-color: #e0e5eb; background: #f7f9fb; color: #9aa4ae; cursor: not-allowed; }
 .regulation-documents { padding: .5rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
 .regulation-documents summary { cursor: pointer; font-weight: 700; }
 .regulation-document-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
@@ -424,4 +425,5 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .regulation-document-list > div { padding: .35rem 0; border-top: 1px solid #e6e8eb; }
 .regulation-document-list button { margin-left: .5rem; }
 @media (max-width: 700px) { .chat-workspace { min-height: max(420px, calc(100dvh - 8rem)); } .chat-options-grid { grid-template-columns: 1fr; } .chat-thread { min-height: 14rem; } .chat-bubble { max-width: 92%; } }
+@media (max-width: 480px) { .chat-saved-threads label { flex-basis: 100%; } .chat-thread-delete { width: 100%; } }
 @media (max-width: 700px) { .regulation-document-form { grid-template-columns: 1fr; } }
