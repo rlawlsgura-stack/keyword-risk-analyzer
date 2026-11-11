@@ -227,11 +227,22 @@ def _llm_research_recommendation(
     known_ids = local_ids | {source["id"] for source in web_sources}
     unknown_citations = cited_ids - known_ids
     has_evidence_citation = bool(cited_ids & known_ids)
-    if not has_evidence_citation or unknown_citations:
+    # One citation somewhere in a long answer is not enough: every prose
+    # paragraph must be traceable to at least one retrieved source. Headings
+    # are excluded because they contain no factual claims.
+    prose_paragraphs = [
+        paragraph.strip() for paragraph in re.split(r"\n\s*\n", answer)
+        if paragraph.strip() and not re.fullmatch(r"\*\*[^*]+\*\*", paragraph.strip())
+    ]
+    uncited_paragraphs = [
+        paragraph for paragraph in prose_paragraphs
+        if not (set(re.findall(r"\[([A-Z]+\d+)\]", paragraph)) & known_ids)
+    ]
+    if not has_evidence_citation or unknown_citations or uncited_paragraphs:
         return {
             "status": "insufficient", "administrator_review": True,
             "recommendation_only": True,
-            "answer": "검색 자료에 연결되는 검증 가능한 인용을 확보하지 못했습니다. 출처 원문을 확인한 뒤 심의자가 판단해 주세요.",
+            "answer": "답변의 모든 설명 문단을 검색 근거에 연결하지 못했습니다. 출처 원문을 확인한 뒤 심의자가 판단해 주세요.",
             "sources": web_sources,
         }
 
