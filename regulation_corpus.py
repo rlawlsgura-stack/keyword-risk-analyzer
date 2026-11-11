@@ -222,3 +222,9 @@ def load_thread(repository, owner_id: str, thread_id: str) -> list[dict] | None:
         'select': 'id,role,content,evidence,created_at', 'thread_id': f'eq.{thread_id}',
         'order': 'id.asc', 'limit': '200'})
     return repository.request('GET', messages_path) or []
+
+
+def delete_thread(repository, owner_id: str, thread_id: str) -> bool:
+    path = '/rest/v1/kra_regulation_threads?' + urlencode({
+        'id': f'eq.{thread_id}', 'owner_id': f'eq.{owner_id}', 'select': 'id'})
+    return bool(repository.request('DELETE', path, prefer='return=representation'))

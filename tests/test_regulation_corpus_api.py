@@ -13,6 +13,8 @@ class FakeRepository:
     def __init__(self, role='member'):
         self.role = role
         self.calls = []
+        self.delete_result = True
+        self.delete_prefer = None
 
     def user(self, token):
         return {'id': '00000000-0000-0000-0000-000000000001',
@@ -37,6 +39,9 @@ class FakeRepository:
 
     def request(self, method, path, *args, **kwargs):
         self.calls.append((method, path))
+        if method == 'DELETE':
+            self.delete_prefer = kwargs.get('prefer')
+            return [{'id': 'deleted'}] if self.delete_result else []
         return []
 
 
@@ -76,6 +81,30 @@ class RegulationCorpusApiTests(unittest.TestCase):
         client = self.client(FakeRepository(), actor='integration')
         self.assertEqual(client.get('/api/v1/regulation/threads',
             headers={'Authorization': 'Bearer test'}).status_code, 403)
+
+    def test_member_deletes_only_their_own_saved_conversation(self):
+        repository = FakeRepository()
+        client = self.client(repository)
+        thread_id = '00000000-0000-0000-0000-000000000002'
+        response = client.delete(f'/api/v1/regulation/threads/{thread_id}',
+                                 headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()['deleted'])
+        path = next(path for method, path in repository.calls if method == 'DELETE')
+        self.assertIn(f'id=eq.{thread_id}', path)
+        self.assertIn('owner_id=eq.00000000-0000-0000-0000-000000000001', path)
+        self.assertEqual(repository.delete_prefer, 'return=representation')
+
+        repository.delete_result = False
+        missing = client.delete(f'/api/v1/regulation/threads/{thread_id}',
+                                headers={'Authorization': 'Bearer test'})
+        self.assertEqual(missing.status_code, 404)
+
+    def test_integration_token_cannot_delete_saved_conversation(self):
+        client = self.client(FakeRepository(), actor='integration')
+        response = client.delete('/api/v1/regulation/threads/00000000-0000-0000-0000-000000000002',
+                                 headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_uploads_draft_before_approval(self):
         repository = FakeRepository('admin')

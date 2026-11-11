@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ApiError, askRegulation, askRegulationLegacy, listRegulationThreads, loadRegulationThread, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
+import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, listRegulationThreads, loadRegulationThread, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
 import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
 import type { RegulationResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
@@ -62,6 +62,20 @@ export function ChatTab() {
     } catch (cause) { setWarning(cause instanceof Error ? cause.message : '대화를 불러오지 못했습니다.') }
   }
 
+  const removeThread = async () => {
+    if (!threadId || busy || !window.confirm('선택한 대화와 모든 메시지를 삭제할까요? 삭제 후 복구할 수 없습니다.')) return
+    setBusy(true)
+    try {
+      await deleteRegulationThread(threadId)
+      setThreads(current => current.filter(thread => thread.id !== threadId))
+      setThreadId(null)
+      setHistory([])
+      setWarning('')
+      void listRegulationThreads().then(data => setThreads(data.items)).catch(() => {})
+    } catch (cause) { setWarning(cause instanceof Error ? cause.message : '대화를 삭제하지 못했습니다.') }
+    finally { setBusy(false) }
+  }
+
   const submit = async (e?: FormEvent) => {
     e?.preventDefault()
     if (busy) return
@@ -113,7 +127,7 @@ export function ChatTab() {
         <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡ 검색 옵션</button>
       </header>
       <div className="chat-controls">
-        {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label></div>}
+        {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)} disabled={busy}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label><button type="button" className="chat-thread-delete" onClick={() => void removeThread()} disabled={!threadId || busy}>선택 대화 삭제</button></div>}
         {corpusReady && <div className="chat-scope-bar"><Select label="검색 모드" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} /></div>}
         {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
         {isAdmin && corpusReady && <RegulationDocuments />}

@@ -123,6 +123,7 @@ export const buildRegulationEmbeddings = (id: string) => request<{ id: string; e
 export const deleteRegulationDraft = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
 export const listRegulationThreads = () => request<{ items: RegulationThread[] }>('/api/v1/regulation/threads')
 export const loadRegulationThread = (id: string) => request<{ id: string; messages: { role: 'user' | 'assistant'; content: string; evidence: Record<string, unknown>[] }[] }>(`/api/v1/regulation/threads/${encodeURIComponent(id)}`)
+export const deleteRegulationThread = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/regulation/threads/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 /* ---------- OCR ---------- */
 export function extractOCR(files: File[]) {

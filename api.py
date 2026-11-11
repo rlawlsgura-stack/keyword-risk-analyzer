@@ -24,7 +24,7 @@ from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
-                               load_document_preview, list_threads, load_thread,
+                               load_document_preview, list_threads, load_thread, delete_thread,
                                reindex_embeddings, save_turn)
 
 configure()
@@ -1654,3 +1654,13 @@ def regulation_thread(thread_id: UUID, actor=Depends(current_actor),
     if messages is None:
         raise HTTPException(404, 'Conversation not found')
     return {'id': str(thread_id), 'messages': messages}
+
+
+@app.delete('/api/v1/regulation/threads/{thread_id}')
+def delete_regulation_thread(thread_id: UUID, actor=Depends(current_actor),
+                             repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user session is required')
+    if not delete_thread(repository, actor, str(thread_id)):
+        raise HTTPException(404, 'Conversation not found')
+    return {'id': str(thread_id), 'deleted': True}

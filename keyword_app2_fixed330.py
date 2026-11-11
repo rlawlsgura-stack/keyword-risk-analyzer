@@ -3748,6 +3748,24 @@ def render_regulation_chat_tab():
             st.session_state["regulation_chat_thread_id"] = selected_id
             history = st.session_state["regulation_chat_history"]
         st.session_state["regulation_last_selected_thread_choice"] = selected_thread
+        if corpus_ready and selected_id:
+            delete_confirmed = st.checkbox(
+                "선택한 대화와 모든 메시지 삭제 확인",
+                key=f"delete_regulation_thread_confirm_{selected_id}",
+            )
+            if st.button("선택 대화 삭제", key=f"delete_regulation_thread_{selected_id}",
+                         disabled=not delete_confirmed):
+                try:
+                    delete_response = requests.delete(
+                        f"{api_url}/api/v1/regulation/threads/{selected_id}",
+                        headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
+                    delete_response.raise_for_status()
+                    st.session_state["regulation_chat_history"] = []
+                    st.session_state["regulation_chat_thread_id"] = None
+                    st.session_state["regulation_reset_saved_thread"] = True
+                    st.rerun()
+                except requests.RequestException:
+                    st.error("저장된 대화를 삭제하지 못했습니다. API 연결을 확인하세요.")
 
     if is_admin() and api_url and access_token and corpus_ready:
         with st.expander("사내 규정 문서 관리 · 관리자"):

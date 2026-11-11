@@ -412,8 +412,10 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-clear { align-self: flex-end; flex: 0 0 auto; margin: .2rem .8rem .5rem; border: 0; background: none; color: #647180; cursor: pointer; }
 .chat-clear:hover { color: #167fc6; }
 .chat-clear:disabled { opacity: .5; }
-.chat-saved-threads { padding: .45rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
+.chat-saved-threads { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .45rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
 .chat-saved-threads select { margin-left: .5rem; max-width: 22rem; }
+.chat-thread-delete { border: 1px solid #d9a7a7; border-radius: 5px; padding: .4rem .65rem; background: #fff; color: #9b3030; cursor: pointer; }
+.chat-thread-delete:disabled { opacity: .5; cursor: not-allowed; }
 .regulation-documents { padding: .5rem 1rem; border-bottom: 1px solid #e6e8eb; font-size: .82rem; }
 .regulation-documents summary { cursor: pointer; font-weight: 700; }
 .regulation-document-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
