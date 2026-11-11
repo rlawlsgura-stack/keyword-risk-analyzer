@@ -112,23 +112,25 @@ export function ChatTab() {
       <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div>
         <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡</button>
       </header>
-      {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label></div>}
-      {isAdmin && corpusReady && <RegulationDocuments />}
-      {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
-        <div className="chat-options-grid">{corpusReady && <Select label="검색 범위" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} />}
-          <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
-          <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
-          {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
-          {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
-          <div className="chat-option-checks">
-          {corpusReady && <Checkbox label="검색 근거를 LLM으로 요약 (서버 설정 시)" checked={useLlm} onChange={setUseLlm} />}
-          {corpusReady && <Checkbox label="키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
-          <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
-            <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
+      <div className="chat-controls">
+        {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label></div>}
+        {isAdmin && corpusReady && <RegulationDocuments />}
+        {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
+          <div className="chat-options-grid">{corpusReady && <Select label="검색 범위" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} />}
+            <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
+            <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
+            {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
+            {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
+            <div className="chat-option-checks">
+              {corpusReady && <Checkbox label="검색 근거를 LLM으로 요약 (서버 설정 시)" checked={useLlm} onChange={setUseLlm} />}
+              {corpusReady && <Checkbox label="키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
+              <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
+              <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
+            </div>
           </div>
-        </div>
-        <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
-      </div>}
+          <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
+        </div>}
+      </div>
       <main className="chat-thread" aria-live="polite">
         {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.</div></div>}
         {history.map((turn, i) => <article className="chat-turn" key={i}>
