@@ -3867,7 +3867,7 @@ def render_regulation_chat_tab():
             key="regulation_chat_category",
         )
         as_of = st.date_input("사내문서 기준일", key="regulation_chat_as_of") if corpus_ready else None
-        use_llm = (st.checkbox("검색 근거를 LLM으로 요약 (서버 설정 시)", value=False,
+        use_llm = (st.checkbox("AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9", value=True,
                                key="regulation_chat_use_llm") if corpus_ready else False)
         include_keyword_candidates = (st.checkbox(
             "키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)", value=False,

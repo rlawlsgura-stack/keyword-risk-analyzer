@@ -16,7 +16,7 @@ const DIRECTION_LABELS: Record<Direction, string> = {
 const MATCH_COLUMNS = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드', '리스크 등급별 검토 의견']
 const SCOPES: RegulationScope[] = ['all', 'law', 'internal', 'keyword']
 const SCOPE_LABELS: Record<RegulationScope, string> = { all: '통합 검색', law: '국가법령정보센터', internal: '사내 규정 문서', keyword: '키워드 DB' }
-const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미' }
+const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미', official_web: '\uACF5\uC2DD \uC6F9 \uCD94\uAC00 \uAC80\uC0C9' }
 
 function MarkdownText({ text }: { text: string }) {
   return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{part.slice(2, -2)}</strong> : <span key={j}>{part}</span>)}</p>)}</div>
@@ -27,7 +27,7 @@ export function ChatTab() {
   const [history, setHistory] = useState<Turn[]>([])
   const [direction, setDirection] = useState<Direction>('keyword_to_law')
   const [scope, setScope] = useState<RegulationScope>('all')
-  const [useLlm, setUseLlm] = useState(false)
+  const [useLlm, setUseLlm] = useState(true)
   const [includeKeywordCandidates, setIncludeKeywordCandidates] = useState(false)
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
   const [threadId, setThreadId] = useState<string | null>(null)
@@ -138,7 +138,7 @@ export function ChatTab() {
             {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
             {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
             <div className="chat-option-checks">
-              {corpusReady && <Checkbox label="검색 근거를 LLM으로 요약 (서버 설정 시)" checked={useLlm} onChange={setUseLlm} />}
+              {corpusReady && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} checked={useLlm} onChange={setUseLlm} />}
               {corpusReady && <Checkbox label="키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
               <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
               <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
@@ -152,12 +152,13 @@ export function ChatTab() {
         {history.map((turn, i) => <article className="chat-turn" key={i}>
           <div className="chat-msg user"><div className="chat-bubble user">{turn.question}</div></div>
           <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className={`chat-bubble assistant${turn.failed ? ' failed' : ''}`}>
+            {turn.result.recommendation_only && <small className="caption">{'AI \uAD8C\uACE0\uC548 \u00B7 \uCD5C\uC885 \uD310\uC815 \uC544\uB2D8'}</small>}
             <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'} />
-            {(turn.result.search_methods ?? []).length > 0 && <small>사내문서 검색 방식: {(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
+            {(turn.result.search_methods ?? []).length > 0 && <small>{'\uAC80\uC0C9 \uBC29\uC2DD: '}{(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}
             {turn.result.keyword_matches?.length > 0 && <Expander title="관련 키워드 보기"><DataTable rows={turn.result.keyword_matches as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={MATCH_COLUMNS.map(c => ({ key: c }))} showIndex={false} /></Expander>}
             {(turn.result.related_candidates ?? []).length > 0 && <Expander title="의미상 관련 후보 · 심의자 검토용"><DataTable rows={turn.result.related_candidates as unknown as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={[{ key: 'kwd_no' }, { key: 'keyword' }, { key: 'similarity' }]} showIndex={false} /></Expander>}
-            {(turn.result.sources ?? []).length > 0 && <div className="chat-sources"><Expander title={`검색 출처 및 근거 (${turn.result.sources.length})`}>{(turn.result.sources ?? []).map((source, j) => <div className="chat-source" key={j}><strong>[{String(source.id ?? j + 1)}] {source.label}</strong>{typeof source.url === 'string' && source.url && <a href={source.url} target="_blank" rel="noreferrer">원문 열기 ↗</a>}{typeof source.version === 'string' && source.version && <small> · 버전 {source.version}</small>}<pre>{String(source.text ?? '')}</pre></div>)}</Expander></div>}
+            {(turn.result.sources ?? []).length > 0 && <div className="chat-sources"><Expander title={`${turn.result.sources.some(source => String(source.id ?? '').startsWith('WEB')) ? '\uCD94\uAC00 \uAC80\uC0C9 \uCD9C\uCC98\uC640 \uADFC\uAC70' : '\uAC80\uC0C9 \uCD9C\uCC98 \uBC0F \uADFC\uAC70'} (${turn.result.sources.length})`}>{(turn.result.sources ?? []).map((source, j) => <div className="chat-source" key={j}><strong>[{String(source.id ?? j + 1)}] {source.label}</strong>{typeof source.url === 'string' && source.url && <a href={source.url} target="_blank" rel="noreferrer">원문 열기 ↗</a>}{typeof source.version === 'string' && source.version && <small> · 버전 {source.version}</small>}<pre>{String(source.text ?? '')}</pre></div>)}</Expander></div>}
           </div></div>
         </article>)}
         {busy && <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant chat-thinking">답변을 확인하고 있습니다…</div></div>}

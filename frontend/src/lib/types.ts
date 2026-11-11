@@ -183,6 +183,7 @@ export type RegulationResult = {
   related_candidates?: { kwd_no: string; keyword: string; similarity: number }[]
   thread_id?: string
   administrator_review?: boolean
+  recommendation_only?: boolean
   search_methods?: string[]
   llm_used?: boolean
   [key: string]: unknown

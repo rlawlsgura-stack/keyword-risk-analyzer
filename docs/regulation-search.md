@@ -21,10 +21,12 @@
 
 ## 답변과 대화
 
-기본값은 검색 근거 목록입니다. **검색 근거를 LLM으로 요약**을 선택하고 서버에서 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정하면 검색된 근거만 LLM에 전달합니다. 각 주장에는 출처 ID와 실제 원문 인용이 필요합니다. 검증 실패나 근거 충돌 시 확정적 설명을 억제하고 관리자 검토를 표시합니다. 공식 출처 조회 실패 시 통합 검색의 다른 근거는 계속 제시하고 실패 사실을 표시합니다. 외부 AI API를 켜면 사내 문서의 검색 문단과 질문이 해당 제공자에게 전송됩니다.
+심의챗봇은 **AI 근거 검토 및 부족한 공식 출처 추가 검색**을 기본으로 선택합니다. 서버에서 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정하면 먼저 검색된 근거의 충분성과 충돌을 검토합니다. 중요한 사실이나 값이 빠졌거나 근거가 충돌할 때 OpenAI Responses API의 웹 검색을 사용해 법령, 정부·규제기관 등 공식 도메인에서 추가 근거를 찾습니다. 공식 출처에서 확인할 수 없는 사내 고유 정책이나 값은 추정하지 않고 미확인으로 표시합니다.
+
+AI 답변은 항상 심의 권고이며 위반·적합의 최종 판정이 아닙니다. 내부·검색 근거는 기존 출처 ID로, 웹 검색 근거는 `[WEB1]` 형식으로 답변과 출처 카드에 연결합니다. 웹 검색 인용은 허용된 공식 도메인의 URL만 표시하며, 유효한 출처 연결을 만들지 못하면 답변을 보류하고 추가 확인을 권고합니다. 사내 문서의 검색 문단과 질문은 기존과 같이 외부 AI API에 전송됩니다. AI 요약을 끄면 검색 결과만 표시합니다.
 
 로그인한 사용자의 대화는 사용자 ID별로 저장합니다. 저장된 답변에는 사용된 문서 ID, 버전, 해시와 인용 원문을 붙여 이후 문서가 바뀌어도 당시 근거를 확인할 수 있습니다. 새 대화는 새 스레드를 만듭니다. 관리자도 자신의 대화만 조회하며 다른 사용자의 대화에는 접근할 수 없습니다. 저장된 대화를 선택해 **선택 대화 삭제**를 실행하면 확인 후 그 대화와 메시지·저장 근거가 영구 삭제됩니다. 자동 삭제는 적용하지 않았으며, 드롭다운에는 최근 대화 50개까지 표시합니다.
 
 ## 서버 설정
 
-`LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `REGULATION_API_URL`은 Streamlit에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`입니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
+`LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `REGULATION_API_URL`은 Streamlit에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`이므로 AI 근거 검토·추가 검색을 운영에서 사용하려면 API 서비스에 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정해야 합니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
