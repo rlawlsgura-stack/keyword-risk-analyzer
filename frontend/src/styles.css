@@ -142,6 +142,9 @@ table.grid th::after { content: ''; position: absolute; top: 0; right: 0; width:
 table.grid th:hover::after { background: rgba(49,51,63,.12); }
 table.grid.is-column-resized th, table.grid.is-column-resized td { overflow: hidden; text-overflow: ellipsis; }
 table.grid.is-column-fitted td input, table.grid.is-column-fitted td select, table.grid.is-column-fitted td textarea { box-sizing: border-box; width: 100%; min-width: 0; }
+table.grid.normalization-grid td input:not([type=checkbox]), table.grid.normalization-grid td select, table.grid.normalization-grid td textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+table.grid.normalization-grid td .ms { width: 100%; min-width: 0; }
+table.grid.normalization-grid td .ms > input { display: block; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
 table.grid tr:hover td { background: #fafbfd; }
 table.grid tr.selected td { background: #fff1f1; }
 table.grid td.range-selected { background: #cfe2ff !important; outline: 1px solid #4a83d8; }
