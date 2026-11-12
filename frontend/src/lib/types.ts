@@ -92,6 +92,20 @@ export type RegistrationCandidate = {
 
 export type NormalizationRecommendation = RegistrationCandidate & { recommendation_id?: string }
 
+export type KeywordSuggestion = {
+  status: 'suggested' | 'insufficient'
+  term: string
+  category: string
+  risk: string
+  criteria: string
+  evidence_type: string
+  alternative: string
+  reason: string
+  source_ids: string[]
+  sources: { id: string; label: string; text: string; url?: string; document_id?: string; chunk_id?: string; version?: string }[]
+  warnings: string[]
+}
+
 export type UnmatchedRegistrationRequest = RegistrationCandidate & {
   id: string
   term_norm: string
@@ -172,6 +186,7 @@ export type OCRCandidate = {
   evidence: string
   alternative: string
   approved: boolean
+  ai_suggestion?: KeywordSuggestion
 }
 
 export type RegulationSource = { label: string; url?: string; excerpt?: string; [key: string]: unknown }

@@ -456,12 +456,13 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
         if not terms:
             terms = [query[:80]]
         calls = [(tool, {'query': term, 'search': 2, 'display': 5})
-                 for term in terms for tool in ('search_law', 'search_administrative_rule')]
+                 for term in terms for tool in ('search_law', 'search_administrative_rule', 'search_precedent')]
         try:
             results = _search_legislation_many(calls)
             for index, ((tool, args), result) in enumerate(zip(calls, results), 1):
                 if result.strip():
-                    label = '법령' if tool == 'search_law' else '행정규칙'
+                    label = {'search_law': '법령', 'search_administrative_rule': '행정규칙',
+                             'search_precedent': '판례'}[tool]
                     sources.append(_source(f'LAW{index}', f'{label} 검색: {args["query"]}', result))
                 tool_calls.append({'tool': tool, 'query': args['query']})
         except RegulationSearchError:

@@ -150,6 +150,11 @@ export const submitRegistrationRequests = (candidates: RegistrationCandidate[]) 
 export const normalizeUnmatched = (candidates: { surface: string; occurrences: number }[]) =>
   request<{ items: NormalizationRecommendation[] }>('/api/v1/unmatched-terms/normalize', { method: 'POST', body: json({ candidates }) })
 
+export const suggestKeyword = (term: string, category = '', context = '') =>
+  request<import('./types.ts').KeywordSuggestion>('/api/v1/keyword-suggestions', {
+    method: 'POST', body: json({ term, category, context }),
+  })
+
 export const loadRecommendationDraft = () =>
   request<{ payload: Record<string, unknown> | null }>('/api/v1/unmatched-terms/recommendation-draft')
 

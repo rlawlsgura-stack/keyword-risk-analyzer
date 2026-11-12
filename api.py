@@ -23,6 +23,7 @@ from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, Supabas
 from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
+from keyword_suggestion import suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
                                load_document_preview, list_threads, load_thread, delete_thread,
                                reindex_embeddings, save_turn)
@@ -220,6 +221,14 @@ class AdminCatalogRegistrationRow(BaseModel):
 class AdminCatalogRegistration(BaseModel):
     model_config = ConfigDict(extra='forbid')
     rows: list[AdminCatalogRegistrationRow] = Field(min_length=1, max_length=1000)
+
+
+class KeywordSuggestionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    term: str = Field(min_length=1, max_length=150)
+    category: str = Field(default='', max_length=100)
+    context: str = Field(default='', max_length=500)
+    as_of: date = Field(default_factory=date.today)
 
 
 class AdminRequestDelete(BaseModel):
@@ -510,9 +519,12 @@ async def extract_ocr_candidates(
 
 @app.post('/api/v1/ocr/keywords')
 def save_ocr_keywords(body: OCRKeywordSave, actor=Depends(current_actor),
+                      credentials: HTTPAuthorizationCredentials = Depends(bearer),
                       repository=Depends(get_repository)):
     if actor == 'integration':
         raise HTTPException(403, 'A user session is required to register OCR keywords')
+    if (repository.user(credentials.credentials).get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Only administrators can register OCR keywords')
     current = repository.load_keywords()
     if current.attrs.get('revision') != body.revision:
         raise HTTPException(409, 'Keyword data changed. Reload it before saving OCR candidates.')
@@ -618,6 +630,22 @@ def submit_unmatched_registration_requests(
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'items': items or []}
+
+
+@app.post('/api/v1/keyword-suggestions')
+def keyword_suggestion(body: KeywordSuggestionRequest, actor=Depends(current_actor),
+                       repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user account is required for AI suggestions')
+    if not body.term.strip():
+        raise HTTPException(422, '추천할 키워드를 입력하세요.')
+    try:
+        return suggest_keyword(repository, body.term.strip(), body.category.strip(),
+                               body.context.strip(), body.as_of)
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        raise HTTPException(502, 'AI 추천을 완료하지 못했습니다. 잠시 후 다시 시도하세요.') from None
 
 
 @app.post('/api/v1/unmatched-terms/normalize')

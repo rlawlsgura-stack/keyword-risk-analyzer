@@ -1,5 +1,7 @@
 import { sha256Hex } from './sha256.ts'
 
+import type { KeywordSuggestion } from './types.ts'
+
 /** Recommendation workspace model shared with Streamlit's draft payload (version 1). */
 export const WS_COLUMNS = ['term', 'source_terms', 'occurrences', '상품카테고리', '리스크 등급', '리스크 등급별 세부 심의기준', '증빙자료유형', '대체키워드'] as const
 
@@ -30,10 +32,11 @@ export type Draft = {
   manual_rows: WsRow[]
   manual_placements: Record<string, Placement>
   recommendation_version: number
+  ai_suggestions: Record<string, KeywordSuggestion>
 }
 
 export const emptyDraft = (): Draft => ({
-  version: 1, recommendations: [], edits: {}, selected_ids: [], hidden_ids: [], manual_rows: [], manual_placements: {}, recommendation_version: 0,
+  version: 1, recommendations: [], edits: {}, selected_ids: [], hidden_ids: [], manual_rows: [], manual_placements: {}, recommendation_version: 0, ai_suggestions: {},
 })
 
 const str = (v: unknown) => (v === null || v === undefined || (typeof v === 'number' && Number.isNaN(v)) ? '' : String(v).trim())

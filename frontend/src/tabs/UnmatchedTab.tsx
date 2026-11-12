@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteRegistrationRequests, deleteUnmatchedTerms, exportUnmatchedTerms, loadRecommendationDraft, loadRegistrationQueue,
-  loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests, saveRecommendationDraft,
+  loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests, saveRecommendationDraft, suggestKeyword,
   submitRegistrationRequests,
 } from '../lib/api.ts'
 import { CRITERIA_COL, formatDatetime, koSorted } from '../lib/catalog.ts'
@@ -155,7 +155,7 @@ export function UnmatchedTab() {
       .then(({ payload }) => {
         if (payload && (payload as { version?: number }).version === 1) {
           const p = payload as unknown as Draft
-          setDraftState({ ...emptyDraft(), ...p, manual_rows: (p.manual_rows ?? []).map(r => toWsRow(r)) })
+          setDraftState({ ...emptyDraft(), ...p, ai_suggestions: p.ai_suggestions ?? {}, manual_rows: (p.manual_rows ?? []).map(r => toWsRow(r)) })
         }
       })
       .catch(() => setDraftError(true))
@@ -209,14 +209,40 @@ export function UnmatchedTab() {
 
   const editCell = (id: string, column: string, value: unknown) => {
     setDraft(d => {
+      const ai_suggestions = { ...d.ai_suggestions }
+      delete ai_suggestions[id]
       const manual = d.manual_rows.some(r => r.recommendation_id === id)
-      if (manual) return { ...d, manual_rows: d.manual_rows.map(r => (r.recommendation_id === id ? { ...r, [column]: value } : r)) }
-      return { ...d, edits: { ...d.edits, [id]: { ...(d.edits[id] ?? {}), [column]: value } } }
+      if (manual) return { ...d, ai_suggestions, manual_rows: d.manual_rows.map(r => (r.recommendation_id === id ? { ...r, [column]: value } : r)) }
+      return { ...d, ai_suggestions, edits: { ...d.edits, [id]: { ...(d.edits[id] ?? {}), [column]: value } } }
     })
   }
   const toggleRow = (id: string, on: boolean) => setDraft(d => ({
     ...d, selected_ids: on ? [...new Set([...d.selected_ids, id])] : d.selected_ids.filter(x => x !== id),
   }))
+
+  const recommendSelected = async () => {
+    if (selectedRows.length !== 1 || !selectedRows[0].term.trim()) {
+      setWsMsg({ kind: 'warning', text: 'AI 추천을 받을 키워드 한 행을 선택하세요.' }); return
+    }
+    const row = selectedRows[0]
+    setBusy(true); setWsMsg(null)
+    try {
+      const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms)
+      setDraft(d => {
+        const ai_suggestions = { ...d.ai_suggestions, [row.recommendation_id]: suggestion }
+        if (suggestion.status !== 'suggested') return { ...d, ai_suggestions }
+        const fields = { 상품카테고리: suggestion.category, '리스크 등급': suggestion.risk,
+          '리스크 등급별 세부 심의기준': suggestion.criteria, 증빙자료유형: suggestion.evidence_type,
+          대체키워드: suggestion.alternative || '-' }
+        if (d.manual_rows.some(item => item.recommendation_id === row.recommendation_id))
+          return { ...d, ai_suggestions, manual_rows: d.manual_rows.map(item => item.recommendation_id === row.recommendation_id ? { ...item, ...fields } : item) }
+        return { ...d, ai_suggestions, edits: { ...d.edits, [row.recommendation_id]: { ...(d.edits[row.recommendation_id] ?? {}), ...fields } } }
+      }, true)
+      setWsMsg({ kind: suggestion.status === 'suggested' ? 'success' : 'warning', text: suggestion.status === 'suggested'
+        ? 'AI 추천 초안을 채웠습니다. 근거를 확인하고 승인하세요.' : suggestion.reason })
+    } catch (e) { setWsMsg({ kind: 'error', text: `AI 추천에 실패했습니다: ${errorText(e)}` }) }
+    finally { setBusy(false) }
+  }
 
   const normalize = async () => {
     setWsMsg(null)
@@ -228,7 +254,7 @@ export function UnmatchedTab() {
       const { items } = await normalizeUnmatched(selected.slice(0, 1000).map(r => ({ surface: surface(r), occurrences: r.total_occurrences })))
       setDraft(d => ({
         ...d, recommendations: items.map(r => ({ term: r.term, occurrences: r.occurrences, source_terms: r.source_terms })),
-        edits: {}, selected_ids: [], hidden_ids: [], recommendation_version: d.recommendation_version + 1,
+        edits: {}, selected_ids: [], hidden_ids: [], ai_suggestions: {}, recommendation_version: d.recommendation_version + 1,
       }), true)
       setWsMsg({ kind: 'success', text: `정규화 추천 ${items.length}건을 만들었습니다. 검토 후 승인하세요.` })
     } catch (e) { setWsMsg({ kind: 'error', text: `미매칭 후보군 분석에 실패했습니다: ${errorText(e)}` }) }
@@ -506,6 +532,7 @@ export function UnmatchedTab() {
             <Button onClick={removeRows}>선택 항목 삭제</Button>
           </div>
           <div className="row tight mt">
+            <Button onClick={recommendSelected} disabled={busy}>선택 키워드 AI 추천 초안</Button>
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
@@ -517,6 +544,17 @@ export function UnmatchedTab() {
             )}
             <Help text="선택한 행만 처리합니다. 셀 편집 내용은 작업본으로 자동 저장되어 다시 로그인해도 유지됩니다." />
           </div>
+          {selectedRows.length === 1 && draft.ai_suggestions?.[selectedRows[0].recommendation_id] && (
+            <div className="mt">
+              <strong>AI 추천 근거 · {selectedRows[0].term}</strong>
+              <p>{draft.ai_suggestions[selectedRows[0].recommendation_id].reason}</p>
+              {draft.ai_suggestions[selectedRows[0].recommendation_id].warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
+              {draft.ai_suggestions[selectedRows[0].recommendation_id].source_ids.map(id => {
+                const source = draft.ai_suggestions[selectedRows[0].recommendation_id].sources.find(item => item.id === id)
+                return source && <details key={id}><summary>[{id}] {source.label}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{source.text}</pre></details>
+              })}
+            </div>
+          )}
           {wsMsg && (
             <>
               <Alert kind={wsMsg.kind}>{wsMsg.text}</Alert>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { extractOCR, saveOCRKeywords } from '../lib/api.ts'
+import { extractOCR, saveOCRKeywords, suggestKeyword } from '../lib/api.ts'
 import { pySorted } from '../lib/catalog.ts'
 import type { OCRCandidate, OCRFileResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
@@ -25,7 +25,7 @@ function optionsFor(catalogValues: string[], configured: string[]): string[] {
 }
 
 export function OcrTab() {
-  const { catalog, dropdowns, ocr, setOcr, analysisText, setAnalysisText, setAutoRun, setTab, reloadCatalog } = useStore()
+  const { catalog, dropdowns, ocr, setOcr, analysisText, setAnalysisText, setAutoRun, setTab, reloadCatalog, isAdmin } = useStore()
   const [busy, setBusy] = useState(false)
   const [engineError, setEngineError] = useState('')
   const [notice, setNotice] = useState<{ kind: 'success' | 'warning' | 'error'; text: string } | null>(null)
@@ -87,7 +87,25 @@ export function OcrTab() {
   }
 
   const update = (i: number, patch: Partial<OCRCandidate>) =>
-    setOcr(s => ({ ...s, candidates: s.candidates.map((c, j) => (j === i ? { ...c, ...patch } : c)) }))
+    setOcr(s => ({ ...s, candidates: s.candidates.map((c, j) => (j === i ? {
+      ...c, ...(Object.keys(patch).some(key => key !== 'approved' && key !== 'ai_suggestion') ? { ai_suggestion: undefined } : {}), ...patch,
+    } : c)) }))
+
+  const recommend = async (i: number) => {
+    const candidate = ocr.candidates[i]
+    if (!candidate?.term.trim()) return
+    setBusy(true); setNotice(null)
+    try {
+      const suggestion = await suggestKeyword(candidate.term.trim(), candidate.category)
+      update(i, suggestion.status === 'suggested'
+        ? { category: suggestion.category, risk: suggestion.risk, detail: suggestion.criteria,
+            evidence: suggestion.evidence_type, alternative: suggestion.alternative || '-', ai_suggestion: suggestion }
+        : { ai_suggestion: suggestion })
+      setNotice({ kind: suggestion.status === 'suggested' ? 'success' : 'warning', text: suggestion.status === 'suggested'
+        ? 'AI 추천 초안을 채웠습니다. 근거를 확인한 뒤 승인하세요.' : suggestion.reason })
+    } catch (error) { setNotice({ kind: 'error', text: `AI 추천에 실패했습니다: ${errorText(error)}` }) }
+    finally { setBusy(false) }
+  }
 
   const allApproved = ocr.candidates.length > 0 && ocr.candidates.every(c => c.approved)
 
@@ -211,7 +229,7 @@ export function OcrTab() {
                   <th className="sel"><input type="checkbox" aria-label="OCR 후보 전체 선택/해제" checked={allApproved}
                     onChange={e => setOcr(s => ({ ...s, candidates: s.candidates.map(c => ({ ...c, approved: e.target.checked })) }))} /></th>
                   <th>키워드명</th><th className="num">OCR 신뢰도(%)</th><th>상품 카테고리</th><th>리스크 등급</th>
-                  <th>심의기준</th><th>증빙자료 유형</th><th>대체키워드</th>
+                   <th>심의기준</th><th>증빙자료 유형</th><th>대체키워드</th><th>AI 추천</th>
                 </tr>
               </thead>
               <tbody>
@@ -227,16 +245,27 @@ export function OcrTab() {
                         </select>
                       </td>
                     ))}
+                    <td><Button small onClick={() => void recommend(i)} disabled={busy || !c.term.trim()}>근거 찾기</Button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {ocr.candidates.map((candidate, index) => candidate.ai_suggestion && (
+            <details key={index} className="mt"><summary>{candidate.term} · AI 추천 근거</summary>
+              <p>{candidate.ai_suggestion.reason}</p>
+              {candidate.ai_suggestion.warnings.map((warning, i) => <div className="caption" key={i}>{warning}</div>)}
+              {candidate.ai_suggestion.source_ids.map(id => {
+                const source = candidate.ai_suggestion?.sources.find(item => item.id === id)
+                return source && <details key={id}><summary>[{id}] {source.label}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{source.text}</pre></details>
+              })}
+            </details>
+          ))}
           {duplicates.length > 0 && <Alert kind="warning">{`기존 DB 또는 후보끼리 중복된 항목: ${duplicates.join(', ')}`}</Alert>}
           <div className="caption">신뢰도가 60% 미만인 후보는 기본 선택 해제 상태입니다. 모든 후보를 직접 검토하세요.</div>
           <div className="row tight mt">
             <Button onClick={sendToAnalysis} title="승인 체크된 OCR 후보만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.">OCR 후보 텍스트 분석 및 하이라이트 미리보기</Button>
-            <Button primary onClick={save} disabled={busy}>선택 후보 승인 및 DB 저장</Button>
+            {isAdmin && <Button primary onClick={save} disabled={busy}>선택 후보 승인 및 DB 저장</Button>}
           </div>
         </div>
       )}
