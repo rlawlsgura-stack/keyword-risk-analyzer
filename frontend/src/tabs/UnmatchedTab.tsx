@@ -417,7 +417,7 @@ export function UnmatchedTab() {
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
     if (column === CRITERIA_COL) {
       const searchableOptions = direct ? [DIRECT, ...list] : list
-      return <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택"
+      return <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택" listClassName="criteria-options"
         onChange={next => {
           if (next === DIRECT) setDirectCells(current => new Set(current).add(key))
           else {

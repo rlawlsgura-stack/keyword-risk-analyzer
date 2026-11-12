@@ -3,9 +3,9 @@ import { createPortal } from 'react-dom'
 import { FieldLabel } from './ui.tsx'
 
 /** Streamlit selectbox with type-to-filter ("contains") and an optional empty state. */
-export function SearchSelect({ label, value, options, onChange, placeholder, disabled, help, maxShown = 200 }: {
+export function SearchSelect({ label, value, options, onChange, placeholder, disabled, help, maxShown = 200, listClassName }: {
   label?: ReactNode; value: string | null; options: readonly string[]; onChange: (v: string | null) => void
-  placeholder?: string; disabled?: boolean; help?: string; maxShown?: number
+  placeholder?: string; disabled?: boolean; help?: string; maxShown?: number; listClassName?: string
 }) {
   const id = useId()
   const [open, setOpen] = useState(false)
@@ -52,7 +52,7 @@ export function SearchSelect({ label, value, options, onChange, placeholder, dis
             if (e.key === 'Escape') setOpen(false)
           }} />
         {open && !disabled && listRect && createPortal(
-          <div ref={listRef} className="ms-list" style={{ position: 'fixed', left: Math.max(8, Math.min(listRect.left, window.innerWidth - Math.max(listRect.width, 520) - 8)), top: listRect.bottom + 4,
+          <div ref={listRef} className={`ms-list ${listClassName ?? ''}`} style={{ position: 'fixed', left: Math.max(8, Math.min(listRect.left, window.innerWidth - Math.max(listRect.width, 520) - 8)), top: listRect.bottom + 4,
             width: `min(${Math.max(listRect.width, 520)}px, calc(100vw - 16px))`, maxHeight: `min(260px, calc(100vh - ${listRect.bottom + 12}px))`, zIndex: 1000 }}>
             {filtered.length ? filtered.map(o => (
               <div key={o} className={o === value ? 'on' : undefined}

@@ -106,6 +106,7 @@ input:disabled, textarea:disabled, select:disabled { opacity: .6; cursor: not-al
 .ms-box input:focus { border: 0; }
 .ms-list { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); max-height: 260px; overflow-y: auto; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,.12); }
 .ms-list div { padding: .4rem .75rem; cursor: pointer; }
+.ms-list.criteria-options > div:not(.ms-placeholder) + div:not(.ms-placeholder) { border-top: 1px solid var(--border); }
 .ms-list div:hover, .ms-list div.on { background: var(--input-bg); }
 .ms-placeholder { color: var(--muted); font-size: .95rem; }
 
