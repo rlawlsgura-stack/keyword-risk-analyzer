@@ -14,6 +14,12 @@ py -3.13 -m venv .venv-ocr313
 .\.venv-ocr313\Scripts\python.exe -m pip install -r requirements.txt -r requirements-ocr.txt
 ```
 
+Start the local API with that OCR environment when using the React OCR screen:
+
+```powershell
+.\.venv-ocr313\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8002
+```
+
 For Streamlit Community Cloud fallback deployments, select Python 3.13 in the app's Advanced settings because its runtime version is managed by Streamlit rather than repository files.
 Cloud login survives a page refresh in the same browser tab by keeping only the Supabase refresh token in session storage. Closing the tab clears that browser storage; access tokens continue to use Supabase's default roughly one-hour lifetime and refresh five minutes before expiry.
 

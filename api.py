@@ -444,7 +444,7 @@ def _process_ocr_images(images):
     except ImportError as exc:
         logger.exception('PaddleOCR dependencies could not be imported')
         raise HTTPException(503,
-            '\ud55c\uad6d\uc5b4 OCR \ud328\ud0a4\uc9c0\ub97c \ubd88\ub7ec\uc624\uc9c0 \ubabb\ud588\uc2b5\ub2c8\ub2e4. Render \ube4c\ub4dc \ub85c\uadf8\uc5d0\uc11c requirements-ocr.txt \uc124\uce58 \uc5ec\ubd80\ub97c \ud655\uc778\ud558\uc138\uc694.') from exc
+            '한국어 OCR 의존성을 불러오지 못했습니다. API 실행 환경의 Python 3.13, requirements-ocr.txt 설치 상태와 서버 로그를 확인하세요.') from exc
     except (OSError, RuntimeError) as exc:
         logger.exception('PaddleOCR engine initialization failed')
         raise HTTPException(503,
