@@ -1,3 +1,9 @@
+## FIXED332 - Batch AI keyword suggestions
+
+- Allow up to five unmatched keywords per recommendation request, with at most two requests in parallel.
+- Show completion progress and allow retrying only failed keywords. Limit uncategorized recommendations to three relevant categories.
+- Update the React package version to 1.0.11.
+
 ## FIXED331 - Show keyword names in deletion choices
 
 - Display each keyword number with its keyword name in the React and Streamlit delete selectors.
