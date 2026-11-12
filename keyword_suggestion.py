@@ -93,6 +93,15 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     ]
     options = _category_options(ranked) if direct else []
     if not category and len(options) > 1:
+        for option in options:
+            try:
+                candidate = suggest_keyword(repository, term, option["category"], context, as_of)
+                if candidate["status"] == "suggested":
+                    option.update({key: candidate[key] for key in
+                                   ("risk", "criteria", "evidence_type", "alternative", "reason", "source_ids")})
+                    option["sources"] = candidate["sources"]
+            except (RuntimeError, requests.RequestException, ValueError):
+                option["reason"] = "관련 DB 사례를 바탕으로 제시한 초안입니다. 상품과 광고 문맥을 확인하세요."
         return {"status": "needs_category", "term": term, "category": "", "risk": "",
                 "criteria": "", "evidence_type": "", "alternative": "",
                 "reason": "같은 표현이 여러 상품 카테고리에서 다르게 심의됩니다. 상품에 맞는 DB 사례를 선택하면 행의 빈칸에 추천값을 채웁니다.",

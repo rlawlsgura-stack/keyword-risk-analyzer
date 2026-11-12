@@ -6,6 +6,7 @@ import {
 } from '../lib/api.ts'
 import { CRITERIA_COL, formatDatetime, koSorted } from '../lib/catalog.ts'
 import { downloadCsv } from '../lib/csv.ts'
+import { SearchSelect } from '../components/SearchSelect.tsx'
 import type { KeywordSuggestion, UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
 import { blankRow, emptyDraft, orderRows, sourceKeys, toWsRow, type Draft, type WsRow } from '../lib/workspace.ts'
 import { useStore } from '../store.tsx'
@@ -414,6 +415,17 @@ export function UnmatchedTab() {
     const directEnabled = column !== '상품카테고리' && column !== '리스크 등급'
     const direct = directEnabled && (directCells.has(key) || (value !== '' && !options[column].includes(value)))
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
+    if (column === CRITERIA_COL) {
+      const searchableOptions = direct ? [DIRECT, ...list] : list
+      return <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택"
+        onChange={next => {
+          if (next === DIRECT) setDirectCells(current => new Set(current).add(key))
+          else {
+            setDirectCells(current => { const copy = new Set(current); copy.delete(key); return copy })
+            editCell(row.recommendation_id, column, next ?? '')
+          }
+        }} />
+    }
     return (
       <div className={direct ? 'cell-direct-entry' : undefined}>
         <select value={direct ? DIRECT : value} onChange={e => {
