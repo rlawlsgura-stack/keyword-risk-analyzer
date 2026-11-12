@@ -1692,6 +1692,19 @@ def build_regulation_embeddings(document_id: UUID, actor=Depends(current_actor),
         raise HTTPException(404, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
+    except requests.HTTPError as exc:
+        upstream_status = exc.response.status_code if exc.response is not None else 502
+        if upstream_status == 429:
+            raise HTTPException(
+                429,
+                'OpenAI 임베딩 요청 한도에 도달했습니다. 잠시 후 다시 시도하거나 '
+                'OpenAI 프로젝트의 사용 한도와 크레딧을 확인하세요.',
+            ) from exc
+        raise HTTPException(
+            502, f'OpenAI 임베딩 요청이 실패했습니다 (HTTP {upstream_status}).'
+        ) from exc
+    except requests.RequestException as exc:
+        raise HTTPException(502, 'OpenAI 임베딩 API에 연결하지 못했습니다.') from exc
     return {'id': str(document_id), 'embedded_chunks': count}
 
 
