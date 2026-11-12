@@ -415,6 +415,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-send:hover:not(:disabled) { background: #167fc6; }
 .chat-send:disabled { opacity: .45; cursor: not-allowed; }
 .chat-warning { flex: 0 0 auto; padding: .55rem 1rem; color: #8a2f2f; background: #fff1f1; border-top: 1px solid #f0d1d1; }
+.chat-usage-caption { flex: 0 0 auto; padding: .35rem 1rem .5rem; color: #77818c; font-size: .72rem; line-height: 1.45; text-align: right; }
 .chat-clear { align-self: flex-end; flex: 0 0 auto; margin: .2rem .8rem .5rem; border: 0; background: none; color: #647180; cursor: pointer; }
 .chat-clear:hover { color: #167fc6; }
 .chat-clear:disabled { opacity: .5; }

@@ -3707,6 +3707,16 @@ def render_regulation_chat_tab():
         except Exception:
             api_url = ""
     api_url = api_url.rstrip("/")
+    usage_summary = None
+    if api_url and access_token:
+        try:
+            usage_response = requests.get(
+                f"{api_url}/api/v1/regulation/usage",
+                headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+            if usage_response.ok:
+                usage_summary = usage_response.json()
+        except requests.RequestException:
+            pass
     corpus_ready = False
     if st.session_state.pop("regulation_reset_saved_thread", False):
         st.session_state["regulation_saved_thread"] = "새 대화"
@@ -3937,6 +3947,28 @@ def render_regulation_chat_tab():
                             if source.get("url"):
                                 st.link_button("공식 자료 열기 ↗", source["url"])
                             st.text(source.get("text", ""))
+
+    if usage_summary:
+        if not usage_summary.get("available"):
+            st.caption("OpenAI 사용량을 읽을 수 없습니다. 서버 DB 마이그레이션 적용을 확인해 주세요.")
+        else:
+            tokens = int(usage_summary.get("total_tokens") or 0)
+            details = [f"심의챗봇 이번 달 OpenAI 누적 {tokens:,} tokens"]
+            cost = usage_summary.get("estimated_cost_usd")
+            if cost is None:
+                details.append("비용 요율 설정 필요")
+            else:
+                details.append(f"예상 비용 ${float(cost):.4f}")
+            budget = usage_summary.get("budget_usd")
+            remaining = usage_summary.get("remaining_budget_usd")
+            if budget is None:
+                details.append("월 예산 미설정")
+            elif remaining is None:
+                details.append("예상 비용을 계산할 수 없음")
+            else:
+                details.append(f"남은 예산 ${float(remaining):.2f} / ${float(budget):.2f}")
+            details.append("토큰 요금 추정치이며 웹 검색 도구 요금은 제외")
+            st.caption(" · ".join(details))
 
     question = st.chat_input("메시지를 입력하세요…", max_chars=500, key="regulation_chat_input")
     if question is None:

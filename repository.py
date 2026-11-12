@@ -85,6 +85,28 @@ class SupabaseRepository:
     def rpc(self, name, **params):
         return self.request('POST', '/rest/v1/rpc/kra_' + name, params)
 
+    def record_openai_usage(self, month_start, usage):
+        return self.rpc(
+            'record_openai_usage', p_month_start=month_start,
+            p_request_count=int(usage['request_count']),
+            p_input_tokens=int(usage['input_tokens']),
+            p_output_tokens=int(usage['output_tokens']),
+            p_cached_input_tokens=int(usage['cached_input_tokens']),
+            p_estimated_cost_usd=usage.get('estimated_cost_usd'),
+            p_cost_complete=bool(usage['cost_complete']),
+        )
+
+    def load_openai_usage(self, month_start):
+        rows = self.request(
+            'GET', '/rest/v1/kra_openai_usage_monthly?'
+            f'month_start=eq.{month_start}&select=request_count,input_tokens,'
+            'output_tokens,cached_input_tokens,estimated_cost_usd,cost_complete&limit=1',
+        )
+        return rows[0] if rows else {
+            'request_count': 0, 'input_tokens': 0, 'output_tokens': 0,
+            'cached_input_tokens': 0, 'estimated_cost_usd': 0, 'cost_complete': True,
+        }
+
     def load_keywords(self):
         # One JSON snapshot avoids the Data API's default 1,000-row limit and
         # keeps rows, column order and revision from the same DB statement.

@@ -12,6 +12,7 @@ import requests
 from legislation_source import LegislationApiError, search_many as _law_api_search_many
 from regulation_corpus import search_documents
 from auxiliary_analysis import AuxiliaryUnavailable, semantic_candidates
+from openai_usage import usage_event
 
 
 class RegulationSearchError(RuntimeError):
@@ -93,7 +94,9 @@ def _llm_explanation(question: str, sources: list[dict[str, str]], conversation_
         }, timeout=45,
     )
     response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
+    response_data = response.json()
+    usage = usage_event(model, response_data.get("usage") or {})
+    content = response_data["choices"][0]["message"]["content"]
     result = json.loads(content)
     claims = result.get("claims") or []
     source_by_id = {source["id"]: source["text"] for source in sources}
@@ -106,10 +109,12 @@ def _llm_explanation(question: str, sources: list[dict[str, str]], conversation_
     if (result.get("status") != "supported" or result.get("administrator_review")
             or not citations_valid):
         return {"status": "conflict", "administrator_review": True,
+                "openai_usage": usage,
                 "answer": "검색 자료 사이의 관계를 명확히 확정하지 못했습니다. 아래 자료와 차이를 그대로 표시합니다. "
                           "이 결과만으로 적법 여부를 판단하지 말고 세부 판단은 관리자에게 문의해 주세요."}
     citations = ', '.join(f"[{claim['source_id']}]" for claim in claims)
     return {"status": "supported", "administrator_review": False,
+            "openai_usage": usage,
             "answer": str(result.get("answer", ""))[:3800] + f"\n\n근거: {citations}"}
 
 
@@ -183,6 +188,7 @@ def _llm_research_recommendation(
     )
     response.raise_for_status()
     result = response.json()
+    usage = usage_event(model, result.get("usage") or {})
 
     answer = ""
     annotations: list[dict[str, Any]] = []
@@ -194,7 +200,9 @@ def _llm_research_recommendation(
                 answer += str(content.get("text", ""))
                 annotations.extend(content.get("annotations", []))
     if not answer.strip():
-        return None
+        return {"status": "insufficient", "administrator_review": True,
+                "recommendation_only": True, "answer": "", "sources": [],
+                "openai_usage": usage}
 
     local_ids = {str(source.get("id", "")) for source in sources}
     web_sources: list[dict[str, Any]] = []
@@ -244,6 +252,7 @@ def _llm_research_recommendation(
             "recommendation_only": True,
             "answer": "답변의 모든 설명 문단을 검색 근거에 연결하지 못했습니다. 출처 원문을 확인한 뒤 심의자가 판단해 주세요.",
             "sources": web_sources,
+            "openai_usage": usage,
         }
 
     return {
@@ -251,6 +260,7 @@ def _llm_research_recommendation(
         "recommendation_only": True,
         "answer": "**AI 권고 의견 · 최종 판정이 아닙니다**\n\n" + answer[:6000],
         "sources": web_sources,
+        "openai_usage": usage,
     }
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, listRegulationThreads, loadRegulationThread, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
+import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, listRegulationThreads, loadRegulationThread, loadRegulationUsage, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
 import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
-import type { RegulationResult } from '../lib/types.ts'
+import type { RegulationResult, RegulationUsageSummary } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Checkbox, DataTable, Expander, MultiSelect, Select } from '../components/ui.tsx'
 import { RegulationDocuments } from './RegulationDocuments.tsx'
@@ -41,11 +41,15 @@ export function ChatTab() {
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [warning, setWarning] = useState('')
   const [busy, setBusy] = useState(false)
+  const [usageSummary, setUsageSummary] = useState<RegulationUsageSummary | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const ocrOptions = useMemo(() => pySorted(new Set(ocr.candidates.map(c => c.term.trim()).filter(Boolean))), [ocr.candidates])
   const categories = useMemo(() => ['', ...koSorted(uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'))], [catalog])
   const contextText = [...(includeOcr ? ocrTerms.filter(t => ocrOptions.includes(t)) : []), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
-  useEffect(() => { void listRegulationThreads().then(data => { setThreads(data.items); setCorpusReady(true) }).catch(() => setCorpusReady(false)) }, [])
+  useEffect(() => {
+    void listRegulationThreads().then(data => { setThreads(data.items); setCorpusReady(true) }).catch(() => setCorpusReady(false))
+    void loadRegulationUsage().then(setUsageSummary).catch(() => setUsageSummary({ available: false }))
+  }, [])
 
   const openThread = async (id: string) => {
     if (!id) { setThreadId(null); setHistory([]); return }
@@ -103,6 +107,7 @@ export function ChatTab() {
                                 query: q, context_text: contextText, category, conversation_history: conversation })
         : await askRegulationLegacy({ direction, query: q, context_text: contextText,
                                      category, conversation_history: conversation })
+      if (result.usage_summary) setUsageSummary(result.usage_summary)
       if (result.thread_id) { setThreadId(result.thread_id); void listRegulationThreads().then(data => setThreads(data.items)).catch(() => {}) }
     } catch (error) {
       failed = true
@@ -168,6 +173,22 @@ export function ChatTab() {
         <textarea value={question} onChange={e => setQuestion(e.target.value.slice(0, 500))} onKeyDown={onKeyDown} maxLength={500} rows={1} disabled={busy} placeholder="메시지를 입력하세요…" aria-label="질문 입력" />
         <span className={question.length > 500 ? 'over' : ''}>{question.length}/500</span>
       </div><button className="chat-send" type="submit" disabled={busy || question.trim().length < 2} aria-label="질문 전송">➤</button></form>
+      {usageSummary && <div className="chat-usage-caption" aria-live="polite">
+        {usageSummary.available
+          ? <>
+              심의챗봇 이번 달 OpenAI 누적 {Number(usageSummary.total_tokens ?? 0).toLocaleString()} tokens
+              {usageSummary.estimated_cost_usd == null
+                ? ' · 비용 요율 설정 필요'
+                : ` · 예상 비용 $${usageSummary.estimated_cost_usd.toFixed(4)}`}
+              {usageSummary.budget_usd == null
+                ? ' · 월 예산 미설정'
+                : usageSummary.remaining_budget_usd == null
+                  ? ' · 예상 비용을 계산할 수 없음'
+                  : ` · 남은 예산 $${usageSummary.remaining_budget_usd.toFixed(2)} / $${usageSummary.budget_usd.toFixed(2)}`}
+              <span> · 토큰 요금 추정치이며 웹 검색 도구 요금은 제외</span>
+            </>
+          : 'OpenAI 사용량을 읽을 수 없습니다. 서버 DB 마이그레이션 적용을 확인해 주세요.'}
+      </div>}
       {warning && <div className="chat-warning" role="alert">{warning}</div>}
       {history.length > 0 && <button className="chat-clear" type="button" onClick={() => { setHistory([]); setThreadId(null) }} disabled={busy}>새 대화</button>}
     </section>

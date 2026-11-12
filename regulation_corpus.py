@@ -14,6 +14,7 @@ from zipfile import BadZipFile, ZipFile
 import requests
 
 from kiwi_runtime import get_kiwi, tokenization_lock
+from openai_usage import record_usage, usage_event
 
 
 MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
@@ -94,7 +95,7 @@ def search_tokens(text: str) -> str:
     return ' '.join(dict.fromkeys(word.casefold() for word in words))
 
 
-def _embed(texts: list[str]) -> list[list[float]] | None:
+def _embed(texts: list[str], repository=None) -> list[list[float]] | None:
     if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
         return None
     key = os.getenv('OPENAI_API_KEY', '').strip()
@@ -107,7 +108,9 @@ def _embed(texts: list[str]) -> list[list[float]] | None:
                                  json={'model': EMBEDDING_MODEL, 'input': texts[start:start + 50]},
                                  timeout=60)
         response.raise_for_status()
-        batch = sorted(response.json()['data'], key=lambda item: item['index'])
+        result = response.json()
+        record_usage(repository, usage_event(EMBEDDING_MODEL, result.get('usage') or {}, embedding=True))
+        batch = sorted(result['data'], key=lambda item: item['index'])
         if len(batch) != len(texts[start:start + 50]):
             raise RuntimeError('임베딩 응답 개수가 일치하지 않습니다.')
         vectors.extend(item['embedding'] for item in batch)
@@ -119,7 +122,7 @@ def create_document(repository, *, source_key: str, version: str, title: str,
                     filename: str, payload: bytes, actor_id: str) -> dict:
     text = extract_text(filename, payload)
     chunks = split_chunks(text)
-    vectors = _embed(chunks)
+    vectors = _embed(chunks, repository)
     mime = {'txt': 'text/plain', 'md': 'text/markdown',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'pdf': 'application/pdf'}[filename.lower().rsplit('.', 1)[-1]]
@@ -161,7 +164,7 @@ def reindex_embeddings(repository, document_id: str) -> int:
     document = load_document_preview(repository, document_id)
     if document is None:
         raise ValueError('문서를 찾을 수 없습니다.')
-    vectors = _embed([chunk['content'] for chunk in document['chunks']])
+    vectors = _embed([chunk['content'] for chunk in document['chunks']], repository)
     if vectors is None:
         raise RuntimeError('임베딩을 사용하려면 서버에서 REGULATION_EMBEDDINGS_ENABLED=true를 설정하세요.')
     return repository.rpc('set_regulation_embeddings', p_document_id=document_id,
@@ -177,7 +180,7 @@ def search_documents(repository, query: str, category: str, as_of: date,
         return [], 'none'
     embedding_unavailable = False
     try:
-        vectors = _embed([query]) if strategy in {'hybrid', 'semantic'} else None
+        vectors = _embed([query], repository) if strategy in {'hybrid', 'semantic'} else None
     except (requests.RequestException, RuntimeError, ValueError, KeyError):
         if strategy != 'hybrid':
             raise

@@ -3,7 +3,7 @@ import type {
   AdminUser, AnalysisFilters, AnalysisInput, AnalysisResult, ApprovedPartialRules, DropdownSettings,
   KeywordPage, KeywordRequestMessage, MatchingRules, KeywordRequestRecord, KeywordRequestType, KeywordRow,
   NormalizationRecommendation, NormalizationSettings, OCRCandidate, OCRFileResult,
-  RegistrationCandidate, RegulationResult, Role, TopKeyword, UnmatchedPage, UnmatchedRegistrationRequest,
+  RegistrationCandidate, RegulationResult, RegulationUsageSummary, Role, TopKeyword, UnmatchedPage, UnmatchedRegistrationRequest,
   UnmatchedSort, UnmatchedTerm,
 } from './types.ts'
 
@@ -111,6 +111,7 @@ export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keyw
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
 export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
+export const loadRegulationUsage = () => request<RegulationUsageSummary>('/api/v1/regulation/usage')
 export const listRegulationDocuments = () => request<{ items: RegulationDocument[] }>('/api/v1/admin/regulation/documents')
 export const previewRegulationDocument = (id: string) => request<RegulationDocument & { chunks: { id: string; ordinal: number; content: string; embedding_model: string | null }[]; content_sha256: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`)
 export const uploadRegulationDocument = (fields: { source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string; file: File }) => {

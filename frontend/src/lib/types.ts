@@ -215,5 +215,19 @@ export type RegulationResult = {
   recommendation_only?: boolean
   search_methods?: string[]
   llm_used?: boolean
+  usage_summary?: RegulationUsageSummary
   [key: string]: unknown
+}
+
+export type RegulationUsageSummary = {
+  available: boolean
+  month_start?: string
+  request_count?: number
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  estimated_cost_usd?: number | null
+  budget_usd?: number | null
+  remaining_budget_usd?: number | null
+  cost_complete?: boolean
 }

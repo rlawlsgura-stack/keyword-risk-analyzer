@@ -46,3 +46,7 @@ API 서비스의 비밀 환경변수로 `OPENAI_API_KEY`와 `REGULATION_LLM_MODE
 ## 서버 설정
 
 `LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `REGULATION_API_URL`은 Streamlit에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`이므로 AI 근거 검토·추가 검색을 운영에서 사용하려면 API 서비스에 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정해야 합니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
+
+심의챗봇 아래의 월간 OpenAI 사용량 표시에는 `supabase/migrations/20261112112545_openai_usage_meter.sql`과 `supabase/migrations/20261112112622_openai_usage_service_role_policy.sql`을 적용해야 합니다. 이 집계는 심의챗봇의 LLM 및 사내 문서 임베딩 호출만 포함합니다. 요금 추정에는 설정된 모델의 1M 토큰당 입력·출력 가격을 `REGULATION_LLM_INPUT_USD_PER_1M`, `REGULATION_LLM_OUTPUT_USD_PER_1M`에 입력하고, 선택적으로 캐시 입력 가격을 `REGULATION_LLM_CACHED_INPUT_USD_PER_1M`에 입력합니다. 월 예산을 표시하려면 `REGULATION_CHAT_MONTHLY_BUDGET_USD`를 설정합니다. 사내 문서 임베딩은 고정 모델 `text-embedding-3-small`을 사용하며, `OPENAI_EMBEDDING_INPUT_USD_PER_1M`에 가격을 설정합니다.
+
+표시 비용은 응답의 토큰 수와 위 단가로 계산한 예상치입니다. OpenAI 웹 검색 도구 요금은 합산하지 않습니다. 단가를 설정하지 않으면 토큰 누계만 표시하고 비용 및 잔여 예산은 계산하지 않습니다. OpenAI API 키는 API 서버에만 보관합니다.

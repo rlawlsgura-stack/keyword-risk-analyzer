@@ -23,6 +23,7 @@ from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, Supabas
 from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
+from openai_usage import current_month_start, monthly_budget, record_usage
 from keyword_suggestion import suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
                                load_document_preview, list_threads, load_thread, delete_thread,
@@ -1562,10 +1563,16 @@ def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_a
             raise HTTPException(403, 'A user session is required for conversations')
         request_data = body.model_dump()
         result = answer_regulation_question(request_data, repository)
+        record_usage(repository, result.pop('openai_usage', None))
         if actor != 'integration':
             result['thread_id'] = save_turn(repository, str(body.thread_id) if body.thread_id else None,
                                             actor, body.scope, body.query, result['answer'],
                                             result.get('sources', []))
+        try:
+            result['usage_summary'] = _openai_usage_summary(repository)
+        except Exception:
+            logger.exception('OpenAI usage summary unavailable')
+            result['usage_summary'] = {'available': False}
         return result
     except HTTPException:
         raise
@@ -1576,6 +1583,38 @@ def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_a
     except Exception as exc:
         logger.exception('Regulation question failed')
         raise HTTPException(502, 'Regulation search failed') from exc
+
+
+def _openai_usage_summary(repository):
+    from decimal import Decimal
+
+    month_start = current_month_start()
+    row = repository.load_openai_usage(month_start)
+    budget = monthly_budget()
+    cost_complete = bool(row.get('cost_complete', True))
+    estimated_cost = Decimal(str(row.get('estimated_cost_usd') or 0)) if cost_complete else None
+    remaining = max(Decimal(0), budget - estimated_cost) if budget is not None and estimated_cost is not None else None
+    return {
+        'available': True,
+        'month_start': month_start,
+        'request_count': int(row.get('request_count') or 0),
+        'input_tokens': int(row.get('input_tokens') or 0),
+        'output_tokens': int(row.get('output_tokens') or 0),
+        'total_tokens': int(row.get('input_tokens') or 0) + int(row.get('output_tokens') or 0),
+        'estimated_cost_usd': float(estimated_cost) if estimated_cost is not None else None,
+        'budget_usd': float(budget) if budget is not None else None,
+        'remaining_budget_usd': float(remaining) if remaining is not None else None,
+        'cost_complete': cost_complete,
+    }
+
+
+@app.get('/api/v1/regulation/usage')
+def regulation_usage(actor=Depends(current_actor), repository=Depends(get_repository)):
+    try:
+        return _openai_usage_summary(repository)
+    except Exception as exc:
+        logger.exception('OpenAI usage summary unavailable')
+        return {'available': False}
 
 
 def regulation_admin(actor, credentials, repository):
