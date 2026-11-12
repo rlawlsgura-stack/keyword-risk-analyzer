@@ -69,7 +69,6 @@ export function UnmatchedTab() {
   const [busy, setBusy] = useState(false)
   const [recommendProgress, setRecommendProgress] = useState<{ done: number; total: number; failed: string[] } | null>(null)
   const [failedRecommendationIds, setFailedRecommendationIds] = useState<string[]>([])
-  const [includeLegislation, setIncludeLegislation] = useState(false)
   const [directCells, setDirectCells] = useState<Set<string>>(() => new Set())
 
   const selection = selections[search] ?? { all: false, ids: {} }
@@ -303,7 +302,7 @@ export function UnmatchedTab() {
       while (cursor < targets.length) {
         const row = targets[cursor++]
         try {
-          const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms, includeLegislation)
+          const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms)
           if (suggestion.status === 'suggested') applySuggestedFields(row, suggestion)
           else setDraft(d => ({ ...d, ai_suggestions: { ...d.ai_suggestions, [row.recommendation_id]: suggestion } }), true)
         } catch (e) {
@@ -629,7 +628,6 @@ export function UnmatchedTab() {
           </div>
           <div className="row tight mt">
             <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
-            <Checkbox label="국가법령정보센터 검색 포함 (관련성 낮은 결과가 포함될 수 있음)" checked={includeLegislation} onChange={setIncludeLegislation} disabled={busy} />
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
