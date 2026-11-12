@@ -52,8 +52,8 @@ export function SearchSelect({ label, value, options, onChange, placeholder, dis
             if (e.key === 'Escape') setOpen(false)
           }} />
         {open && !disabled && listRect && createPortal(
-          <div ref={listRef} className="ms-list" style={{ position: 'fixed', left: listRect.left, top: listRect.bottom + 4,
-            width: listRect.width, maxHeight: `min(260px, calc(100vh - ${listRect.bottom + 12}px))`, zIndex: 1000 }}>
+          <div ref={listRef} className="ms-list" style={{ position: 'fixed', left: Math.max(8, Math.min(listRect.left, window.innerWidth - Math.max(listRect.width, 520) - 8)), top: listRect.bottom + 4,
+            width: `min(${Math.max(listRect.width, 520)}px, calc(100vw - 16px))`, maxHeight: `min(260px, calc(100vh - ${listRect.bottom + 12}px))`, zIndex: 1000 }}>
             {filtered.length ? filtered.map(o => (
               <div key={o} className={o === value ? 'on' : undefined}
                 onMouseDown={e => { e.preventDefault(); onChange(o); setOpen(false) }}>{o}</div>
