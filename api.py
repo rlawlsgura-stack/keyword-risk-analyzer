@@ -1657,12 +1657,12 @@ def build_regulation_embeddings(document_id: UUID, actor=Depends(current_actor),
 
 
 @app.delete('/api/v1/admin/regulation/documents/{document_id}')
-def delete_regulation_draft(document_id: UUID, actor=Depends(current_actor),
+def delete_regulation_document(document_id: UUID, actor=Depends(current_actor),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         repository=Depends(get_repository)):
     regulation_admin(actor, credentials, repository)
-    if not repository.rpc('delete_regulation_draft', p_id=str(document_id)):
-        raise HTTPException(409, 'Only an existing draft can be deleted')
+    if not repository.rpc('delete_regulation_document', p_id=str(document_id)):
+        raise HTTPException(404, 'Document not found')
     return {'id': str(document_id), 'deleted': True}
 
 

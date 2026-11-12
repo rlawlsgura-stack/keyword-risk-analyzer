@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDraft, listRegulationDocuments, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
+import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDocument, listRegulationDocuments, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
 
 export function RegulationDocuments() {
   const [documents, setDocuments] = useState<RegulationDocument[]>([])
@@ -48,11 +48,11 @@ export function RegulationDocuments() {
     catch (cause) { setError(cause instanceof Error ? cause.message : '임베딩을 만들지 못했습니다.') }
     finally { setBusy(false) }
   }
-  const removeDraft = async (id: string) => {
-    if (!window.confirm('이 초안과 첨부 원본을 삭제할까요?')) return
+  const removeDocument = async (doc: RegulationDocument) => {
+    if (!window.confirm(`'${doc.title}' 문서와 첨부 원본, 검색 인덱스를 영구 삭제할까요? 이 문서는 검색에 더 이상 사용되지 않습니다.`)) return
     setBusy(true)
-    try { await deleteRegulationDraft(id); setPreview(null); await refresh() }
-    catch (cause) { setError(cause instanceof Error ? cause.message : '초안을 삭제하지 못했습니다.') }
+    try { await deleteRegulationDocument(doc.id); setPreview(null); await refresh() }
+    catch (cause) { setError(cause instanceof Error ? cause.message : '문서를 삭제하지 못했습니다.') }
     finally { setBusy(false) }
   }
   return <details className="regulation-documents"><summary>사내 규정 문서 관리 · 관리자</summary>
@@ -67,13 +67,14 @@ export function RegulationDocuments() {
       <label>문서 파일<input required type="file" accept=".txt,.md,.docx,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
       <button type="submit" disabled={busy || !file}>초안 등록</button>
     </form>
+    <p className="caption">한 번에 파일 1개를 등록합니다. 파일당 최대 2MB이며, PDF는 200페이지 이하, 추출 본문은 250,000자, 검색 조각은 300개까지 가능합니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.</p>
     {error && <div role="alert" className="chat-warning">{error}</div>}
     <div className="regulation-document-list">{documents.map(doc => <div key={doc.id}>
       <strong>{doc.title}</strong> · {doc.source_key} · v{doc.version} · {doc.status === 'approved' ? '승인' : doc.status === 'draft' ? '초안' : '이전 버전'} · 시행 {doc.effective_from}
       <button type="button" onClick={() => void showPreview(doc.id)}>본문 확인</button>
       <button type="button" disabled={busy || preview?.id !== doc.id} onClick={() => void buildEmbeddings(doc.id)}>의미 검색 색인 생성</button>
       {doc.status === 'draft' && <button type="button" disabled={busy || preview?.id !== doc.id} onClick={() => void approve(doc.id)}>승인</button>}
-      {doc.status === 'draft' && <button type="button" disabled={busy} onClick={() => void removeDraft(doc.id)}>초안 삭제</button>}
+      <button type="button" disabled={busy} onClick={() => void removeDocument(doc)}>문서 삭제</button>
     </div>)}</div>
     {preview && <div className="regulation-document-preview"><strong>{preview.title} · v{preview.version} · 시행 {preview.effective_from} · {preview.category || '공통'}</strong>
       <p>원본: {preview.original_name} · SHA-256: {preview.content_sha256}</p>

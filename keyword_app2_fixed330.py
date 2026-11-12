@@ -3778,6 +3778,7 @@ def render_regulation_chat_tab():
                 effective_to = st.text_input("종료일 (선택, YYYY-MM-DD)")
                 doc_file = st.file_uploader("문서", type=["txt", "md", "docx", "pdf"])
                 submitted = st.form_submit_button("초안 등록")
+            st.caption("한 번에 파일 1개를 등록합니다. 파일당 최대 2MB, PDF 200페이지, 추출 본문 250,000자, 검색 조각 300개까지입니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.")
             if submitted and doc_file:
                 try:
                     upload_response = requests.post(
@@ -3833,18 +3834,25 @@ def render_regulation_chat_tab():
                         st.rerun()
                     except requests.RequestException:
                         st.error("문서를 승인하지 못했습니다.")
-                if doc["status"] == "draft":
-                    delete_checked = st.checkbox("이 초안 삭제 확인", key=f"delete_regulation_check_{doc['id']}")
-                    if st.button("초안 삭제", key=f"delete_regulation_{doc['id']}", disabled=not delete_checked):
+                if st.button("문서 삭제", key=f"delete_regulation_{doc['id']}"):
+                    st.session_state["pending_regulation_delete"] = doc["id"]
+                if st.session_state.get("pending_regulation_delete") == doc["id"]:
+                    st.warning("첨부 원본과 검색 인덱스도 함께 영구 삭제됩니다.")
+                    delete_col, cancel_col = st.columns(2)
+                    if delete_col.button("영구 삭제 확인", key=f"confirm_delete_regulation_{doc['id']}"):
                         try:
                             delete_response = requests.delete(
                                 f"{api_url}/api/v1/admin/regulation/documents/{doc['id']}",
                                 headers={"Authorization": f"Bearer {access_token}"}, timeout=30)
                             delete_response.raise_for_status()
                             st.session_state.pop("regulation_document_preview", None)
+                            st.session_state.pop("pending_regulation_delete", None)
                             st.rerun()
                         except requests.RequestException:
-                            st.error("초안을 삭제하지 못했습니다.")
+                            st.error("문서를 삭제하지 못했습니다.")
+                    if cancel_col.button("취소", key=f"cancel_delete_regulation_{doc['id']}"):
+                        st.session_state.pop("pending_regulation_delete", None)
+                        st.rerun()
 
     ocr_candidates = _ko_sorted({
         str(row.get("term", "")).strip()

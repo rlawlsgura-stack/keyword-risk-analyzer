@@ -4,11 +4,11 @@
 
 ## 사내 문서 등록과 버전
 
-관리자가 심의챗봇의 **사내 규정 문서 관리**에서 TXT, MD, DOCX, PDF 파일을 초안으로 등록합니다. 최대 2MB, 검색 가능한 본문 20~250,000자, 최대 300개 문단입니다. 이미지 전용 PDF는 OCR로 텍스트를 만든 뒤 등록해야 합니다. 원본 파일은 서버 전용 Supabase 테이블에 보관하고 SHA-256을 기록합니다. 브라우저는 원본 바이트에 직접 접근하지 않습니다.
+관리자가 심의챗봇의 **사내 규정 문서 관리**에서 TXT, MD, DOCX, PDF 파일을 초안으로 등록합니다. 한 번에 파일 1개를 등록하며 파일당 최대 2MB, PDF 200페이지 이하, 검색 가능한 본문 20~250,000자, 최대 300개 문단입니다. 앱에서 전체 등록 문서 수를 제한하지는 않지만 문서 목록은 최신 200건까지만 표시합니다. 이미지 전용 PDF는 OCR로 텍스트를 만든 뒤 등록해야 합니다. 원본 파일은 서버 전용 Supabase 테이블에 보관하고 SHA-256을 기록합니다. 브라우저는 원본 바이트에 직접 접근하지 않습니다.
 
-문서 식별자, 버전, 상품 카테고리, 시행일과 종료일을 입력합니다. 본문 미리보기와 시행일을 검토한 다음 승인합니다. 잘못 등록한 초안은 삭제할 수 있습니다. **초안은 검색되지 않습니다.** 같은 식별자의 새 버전을 승인하면 이전 승인본의 종료일을 새 시행일 전날로 정하고 이전 버전으로 보관합니다. 새 버전 시행일은 현재 승인본보다 뒤여야 합니다. 검색 기준일에 맞는 승인 이력이 검색됩니다. 문서 원본은 승인 후 수정하지 않고 새 버전으로 교체합니다.
+문서 식별자, 버전, 상품 카테고리, 시행일과 종료일을 입력합니다. 본문 미리보기와 시행일을 검토한 다음 승인합니다. 관리자는 문서 목록에서 초안, 승인본, 이전 버전을 삭제할 수 있습니다. 삭제 시 첨부 원본과 검색 문단도 함께 영구 삭제되며, 삭제한 승인 문서는 검색되지 않습니다. **초안은 검색되지 않습니다.** 같은 식별자의 새 버전을 승인하면 이전 승인본의 종료일을 새 시행일 전날로 정하고 이전 버전으로 보관합니다. 새 버전 시행일은 현재 승인본보다 뒤여야 합니다. 검색 기준일에 맞는 승인 이력이 검색됩니다. 문서 원본은 승인 후 수정하지 않고 새 버전으로 교체합니다.
 
-신규 Supabase 설치에는 `supabase/regulation_corpus_setup.sql`을 적용합니다. 이 프로젝트에는 `regulation_corpus_setup`, `regulation_corpus_versions_fix`, `regulation_embedding_backfill`, `regulation_draft_cleanup`, `regulation_raw_search_baseline` 마이그레이션이 적용되었습니다. 테이블은 RLS와 권한 회수로 브라우저 직접 접근을 막고 FastAPI의 서버 비밀 키만 사용합니다. 관리 API는 Supabase Auth `app_metadata.role=admin`을 다시 확인합니다.
+신규 Supabase 설치에는 `supabase/regulation_corpus_setup.sql`을 적용합니다. 기존 설치에는 `supabase/regulation_document_delete_setup.sql`을 적용해 문서 전체 삭제 RPC를 추가합니다. 이 프로젝트에는 `regulation_corpus_setup`, `regulation_corpus_versions_fix`, `regulation_embedding_backfill`, `regulation_draft_cleanup`, `regulation_raw_search_baseline`, `regulation_document_delete` 마이그레이션이 적용되었습니다. 테이블은 RLS와 권한 회수로 브라우저 직접 접근을 막고 FastAPI의 서버 비밀 키만 사용합니다. 관리 API는 Supabase Auth `app_metadata.role=admin`을 다시 확인합니다.
 
 ## 검색
 

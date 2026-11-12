@@ -120,7 +120,7 @@ export const uploadRegulationDocument = (fields: { source_key: string; version: 
 }
 export const approveRegulationDocument = (id: string) => request<{ id: string; status: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/approve`, { method: 'POST' })
 export const buildRegulationEmbeddings = (id: string) => request<{ id: string; embedded_chunks: number }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/embeddings`, { method: 'POST' })
-export const deleteRegulationDraft = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+export const deleteRegulationDocument = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`, { method: 'DELETE' })
 export const listRegulationThreads = () => request<{ items: RegulationThread[] }>('/api/v1/regulation/threads')
 export const loadRegulationThread = (id: string) => request<{ id: string; messages: { role: 'user' | 'assistant'; content: string; evidence: Record<string, unknown>[] }[] }>(`/api/v1/regulation/threads/${encodeURIComponent(id)}`)
 export const deleteRegulationThread = (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/regulation/threads/${encodeURIComponent(id)}`, { method: 'DELETE' })
