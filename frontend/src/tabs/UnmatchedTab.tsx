@@ -20,6 +20,34 @@ const EXPORT_STATUS: Record<string, string> = { registration_requested: '신규�
 type Selection = { all: boolean; ids: Record<string, boolean> }
 type Msg = { kind: 'success' | 'info' | 'warning' | 'error'; text: string; caption?: string }
 
+const DB_FIELD_LABELS: Record<string, string> = {
+  keyword: '키워드', category: '상품 카테고리', risk: '리스크 등급',
+  alternative: '대체키워드', criteria: '심의기준', evidence_type: '증빙자료 유형',
+}
+
+function HighlightedText({ text, term }: { text: string; term: string }) {
+  if (!term.trim()) return <>{text}</>
+  const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return <>{text.split(new RegExp(`(${escaped})`, 'ig')).map((part, index) =>
+    part.toLocaleLowerCase() === term.trim().toLocaleLowerCase()
+      ? <mark className="recommendation-highlight" key={index}>{part}</mark>
+      : <span key={index}>{part}</span>)}</>
+}
+
+function RecommendationSource({ source, term }: { source: KeywordSuggestion['sources'][number]; term: string }) {
+  let record: Record<string, unknown> | null = null
+  try {
+    const parsed: unknown = JSON.parse(source.text)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) record = parsed as Record<string, unknown>
+  } catch { /* Non-JSON evidence is shown as highlighted text. */ }
+  return <details key={source.id}>
+    <summary>[{source.id}] {source.label}</summary>
+    {record
+      ? <div className="table-wrap"><table className="recommendation-db-table"><thead><tr>{Object.keys(DB_FIELD_LABELS).map(key => <th key={key}>{DB_FIELD_LABELS[key]}</th>)}</tr></thead><tbody><tr>{Object.keys(DB_FIELD_LABELS).map(key => <td key={key}><HighlightedText text={String(record?.[key] ?? '')} term={term} /></td>)}</tr></tbody></table></div>
+      : <pre style={{ whiteSpace: 'pre-wrap' }}><HighlightedText text={source.text || '검색 결과 내용이 비어 있습니다.'} term={term} /></pre>}
+  </details>
+}
+
 export function UnmatchedTab() {
   const { user, isAdmin, catalog, dropdowns, reloadCatalog } = useStore()
 
@@ -41,6 +69,7 @@ export function UnmatchedTab() {
   const [busy, setBusy] = useState(false)
   const [recommendProgress, setRecommendProgress] = useState<{ done: number; total: number; failed: string[] } | null>(null)
   const [failedRecommendationIds, setFailedRecommendationIds] = useState<string[]>([])
+  const [includeLegislation, setIncludeLegislation] = useState(false)
   const [directCells, setDirectCells] = useState<Set<string>>(() => new Set())
 
   const selection = selections[search] ?? { all: false, ids: {} }
@@ -274,7 +303,7 @@ export function UnmatchedTab() {
       while (cursor < targets.length) {
         const row = targets[cursor++]
         try {
-          const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms)
+          const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms, includeLegislation)
           if (suggestion.status === 'suggested') applySuggestedFields(row, suggestion)
           else setDraft(d => ({ ...d, ai_suggestions: { ...d.ai_suggestions, [row.recommendation_id]: suggestion } }), true)
         } catch (e) {
@@ -600,6 +629,7 @@ export function UnmatchedTab() {
           </div>
           <div className="row tight mt">
             <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
+            <Checkbox label="국가법령정보센터 검색 포함 (관련성 낮은 결과가 포함될 수 있음)" checked={includeLegislation} onChange={setIncludeLegislation} disabled={busy} />
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
@@ -625,16 +655,13 @@ export function UnmatchedTab() {
                     <Button small disabled={busy} onClick={() => applyCategoryOption(selectedRows[0], draft.ai_suggestions[selectedRows[0].recommendation_id], option)}>
                       {option.category} · {option.risk} 적용
                     </Button>
-                    <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
+                    <span className={`caption${option.keyword === selectedRows[0].term ? ' recommendation-target' : ''}`}>DB 사례: {option.keyword} / {option.criteria}{option.keyword === selectedRows[0].term && <strong> · 분류 대상</strong>}</span>
                   </div>
                 ))}
               {draft.ai_suggestions[selectedRows[0].recommendation_id].status === 'needs_category' && draft.ai_suggestions[selectedRows[0].recommendation_id].category_options.map(option =>
                 option.review_stages?.map((stage, index) => <div className="caption" key={`${option.category}-${stage.name}-${index}`}>{option.category} · {stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>))}
               {draft.ai_suggestions[selectedRows[0].recommendation_id].warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
-              {draft.ai_suggestions[selectedRows[0].recommendation_id].source_ids.map(id => {
-                const source = draft.ai_suggestions[selectedRows[0].recommendation_id].sources.find(item => item.id === id)
-                return source && <details key={id}><summary>[{id}] {source.label}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{source.text}</pre></details>
-              })}
+              {draft.ai_suggestions[selectedRows[0].recommendation_id].sources.map((source, index) => <RecommendationSource key={source.id || index} source={source} term={selectedRows[0].term} />)}
             </div>
           )}
           {selectedRows.length > 1 && selectedRows.map(row => {
@@ -650,12 +677,13 @@ export function UnmatchedTab() {
                   <Button small disabled={busy} onClick={() => applyCategoryOption(row, suggestion, option)}>
                     {option.category} · {option.risk} 적용
                   </Button>
-                  <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
+                  <span className={`caption${option.keyword === row.term ? ' recommendation-target' : ''}`}>DB 사례: {option.keyword} / {option.criteria}{option.keyword === row.term && <strong> · 분류 대상</strong>}</span>
                 </div>
               ))}
               {suggestion.status === 'needs_category' && suggestion.category_options.map(option =>
                 option.review_stages?.map((stage, index) => <div className="caption" key={`${option.category}-${stage.name}-${index}`}>{option.category} · {stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>))}
               {suggestion.warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
+              {suggestion.sources.map((source, index) => <RecommendationSource key={source.id || index} source={source} term={row.term} />)}
             </div>
           })}
           {wsMsg && (

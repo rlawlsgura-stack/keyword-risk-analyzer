@@ -228,6 +228,7 @@ class KeywordSuggestionRequest(BaseModel):
     term: str = Field(min_length=1, max_length=150)
     category: str = Field(default='', max_length=100)
     context: str = Field(default='', max_length=500)
+    include_legislation: bool = False
     as_of: date = Field(default_factory=date.today)
 
 
@@ -641,7 +642,7 @@ def keyword_suggestion(body: KeywordSuggestionRequest, actor=Depends(current_act
         raise HTTPException(422, '추천할 키워드를 입력하세요.')
     try:
         return suggest_keyword(repository, body.term.strip(), body.category.strip(),
-                               body.context.strip(), body.as_of)
+                               body.context.strip(), body.as_of, body.include_legislation)
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
     except (requests.RequestException, ValueError, KeyError, TypeError):

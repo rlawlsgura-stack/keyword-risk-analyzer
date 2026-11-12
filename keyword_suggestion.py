@@ -62,7 +62,8 @@ def _category_options(rows: list[dict]) -> list[dict]:
     return options
 
 
-def suggest_keyword(repository, term: str, category: str, context: str, as_of: date) -> dict:
+def suggest_keyword(repository, term: str, category: str, context: str, as_of: date,
+                   include_legislation: bool = False) -> dict:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     model = os.getenv("REGULATION_LLM_MODEL", "").strip()
     if os.getenv("REGULATION_LLM_ENABLED", "false").lower() != "true" or not api_key or not model:
@@ -99,7 +100,7 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     if not category and len(options) > 1:
         for option in options:
             try:
-                candidate = suggest_keyword(repository, term, option["category"], context, as_of)
+                candidate = suggest_keyword(repository, term, option["category"], context, as_of, include_legislation)
                 if candidate["status"] == "suggested":
                     option.update({key: candidate[key] for key in
                                    ("risk", "criteria", "evidence_type", "alternative", "reason", "source_ids")})
@@ -127,11 +128,13 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     else:
         stages.append({"name": "사내 규정 문서", "status": "completed", "result_count": len(documents),
                        "detail": "검색 완료" if documents else "검색 완료, 관련 문서 없음"})
-    stages.append({"name": "국가법령정보센터", "status": "not_configured", "result_count": 0,
-                   "detail": "API 키가 없어 검색하지 않음"})
-    if os.getenv("LEGISLATION_API_KEY", "").strip():
+    if include_legislation:
+      stages.append({"name": "국가법령정보센터", "status": "not_configured", "result_count": 0,
+                     "detail": "API 키가 없어 검색하지 않음"})
+    if include_legislation and os.getenv("LEGISLATION_API_KEY", "").strip():
         try:
-            law_results = search_many([(tool, {"query": term, "search": 2, "display": 3})
+            law_query = " ".join(part for part in (term, category, context) if part).strip()
+            law_results = search_many([(tool, {"query": law_query, "search": 2, "display": 3})
                                        for tool in ("search_law", "search_administrative_rule")])
             for index, result in enumerate(law_results, 1):
                 if result.strip():
@@ -143,7 +146,7 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
         except (LegislationApiError, requests.RequestException, ValueError):
             stages[-1] = {"name": "국가법령정보센터", "status": "error", "result_count": 0, "detail": "법령 검색 오류"}
             warnings.append("국가법령정보센터 검색을 완료하지 못했습니다.")
-    else:
+    elif include_legislation:
         warnings.append("국가법령정보센터 API 키가 없어 법령 검색을 건너뛰었습니다.")
 
     empty = {"status": "insufficient", "term": term, "category": "", "risk": "", "criteria": "",
