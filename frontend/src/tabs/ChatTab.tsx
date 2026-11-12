@@ -18,8 +18,27 @@ const SCOPES: RegulationScope[] = ['all', 'law', 'internal', 'keyword']
 const SCOPE_LABELS: Record<RegulationScope, string> = { all: '통합 검색', law: '국가법령정보센터', internal: '사내 규정 문서', keyword: '키워드 DB' }
 const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미', official_web: '\uACF5\uC2DD \uC6F9 \uCD94\uAC00 \uAC80\uC0C9' }
 
-function MarkdownText({ text }: { text: string }) {
-  return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{part.slice(2, -2)}</strong> : <span key={j}>{part}</span>)}</p>)}</div>
+function matchedQuestionTerms(question: string, matches: Record<string, unknown>[], catalogTerms: string[]) {
+  const foldedQuestion = question.toLocaleLowerCase()
+  const candidates = [
+    ...matches.map(row => String(row[MATCH_COLUMNS[1]] ?? row.keyword ?? row.term ?? '').trim()),
+    ...catalogTerms,
+  ]
+  return [...new Set(candidates.filter(term => term.length > 1 && foldedQuestion.includes(term.toLocaleLowerCase())))].sort((a, b) => b.length - a.length)
+}
+
+function MarkdownText({ text, highlightTerms = [] }: { text: string; highlightTerms?: string[] }) {
+  const matcher = highlightTerms.length
+    ? new RegExp(`(${highlightTerms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'giu')
+    : null
+  const termSet = new Set(highlightTerms.map(term => term.toLocaleLowerCase()))
+  const highlight = (value: string) => matcher
+    ? value.split(matcher).map((part, index) => termSet.has(part.toLocaleLowerCase())
+      ? <mark className="chat-keyword-highlight" key={index}>{part}</mark>
+      : part)
+    : value
+
+  return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{highlight(part.slice(2, -2))}</strong> : <span key={j}>{highlight(part)}</span>)}</p>)}</div>
 }
 
 export function ChatTab() {
@@ -158,7 +177,8 @@ export function ChatTab() {
           <div className="chat-msg user"><div className="chat-bubble user">{turn.question}</div></div>
           <div className="chat-msg assistant"><div className="chat-bot-avatar">AI</div><div className={`chat-bubble assistant${turn.failed ? ' failed' : ''}`}>
             {turn.result.recommendation_only && <small className="caption">{'AI \uAD8C\uACE0\uC548 \u00B7 \uCD5C\uC885 \uD310\uC815 \uC544\uB2D8'}</small>}
-            <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'} />
+            <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'}
+              highlightTerms={matchedQuestionTerms(turn.question, turn.result.keyword_matches ?? [], (catalog?.rows ?? []).map(row => String(row[MATCH_COLUMNS[1]] ?? '')))} />
             {(turn.result.search_methods ?? []).length > 0 && <small>{'\uAC80\uC0C9 \uBC29\uC2DD: '}{(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}
             {turn.result.keyword_matches?.length > 0 && <Expander title="관련 키워드 보기"><DataTable rows={turn.result.keyword_matches as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={MATCH_COLUMNS.map(c => ({ key: c }))} showIndex={false} /></Expander>}

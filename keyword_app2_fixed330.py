@@ -3690,6 +3690,30 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                     st.rerun()
 
 
+def _regulation_question_keywords(question, result):
+    folded_question = str(question).casefold()
+    candidates = [
+        str(row.get(DB_COLS[1]) or row.get("keyword") or row.get("term") or "").strip()
+        for row in result.get("keyword_matches", [])
+    ]
+    keyword_frame = st.session_state.get("kw_df")
+    if isinstance(keyword_frame, pd.DataFrame) and DB_COLS[1] in keyword_frame:
+        candidates.extend(keyword_frame[DB_COLS[1]].fillna("").astype(str).tolist())
+    terms = {
+        term for term in candidates
+        if len(term) > 1 and "[" not in term and "]" not in term
+        and term.casefold() in folded_question
+    }
+    return sorted(terms, key=len, reverse=True)
+
+
+def _highlight_regulation_answer(answer, terms):
+    if not terms:
+        return answer
+    pattern = re.compile("(" + "|".join(re.escape(term) for term in terms) + ")", re.IGNORECASE)
+    return pattern.sub(lambda match: f":yellow-background[{match.group(0)}]", answer)
+
+
 def render_regulation_chat_tab():
     st.subheader("심의 Chat-bot")
     st.caption("공식 자료를 근거로 키워드·법령 문의를 이어서 확인합니다. 검색 결과가 법적 결론을 뜻하지는 않습니다.")
@@ -3780,14 +3804,20 @@ def render_regulation_chat_tab():
     if is_admin() and api_url and access_token and corpus_ready:
         with st.expander("사내 규정 문서 관리 · 관리자"):
             with st.form("regulation_document_upload"):
-                source_key = st.text_input("문서 식별자", help="영문 소문자, 숫자, _, -")
-                doc_version = st.text_input("버전")
-                doc_title = st.text_input("제목")
-                doc_category = st.text_input("상품 카테고리 (빈칸이면 공통)")
-                effective_from = st.date_input("시행일")
-                effective_to = st.text_input("종료일 (선택, YYYY-MM-DD)")
-                doc_file = st.file_uploader("문서", type=["txt", "md", "docx", "pdf"])
-                submitted = st.form_submit_button("초안 등록")
+                source_row = st.columns(3)
+                source_key = source_row[0].text_input("문서 식별자", help="영문 소문자, 숫자, _, -")
+                doc_version = source_row[1].text_input("버전")
+                doc_title = source_row[2].text_input("제목")
+                details_row = st.columns(3)
+                doc_category = details_row[0].text_input("상품 카테고리 (빈칸이면 공통)")
+                effective_from = details_row[1].date_input("시행일")
+                effective_to = details_row[2].date_input(
+                    "종료일", value=None, min_value=effective_from)
+                upload_row = st.columns(3)
+                doc_file = upload_row[0].file_uploader("문서", type=["txt", "md", "docx", "pdf"])
+                submitted = upload_row[1].form_submit_button(
+                    "초안 등록", width="stretch")
+            st.caption("의미 검색 색인 생성은 관리자 기능입니다. 먼저 문서의 본문 확인을 누르면 해당 문서의 버튼이 활성화됩니다. API 서버에 REGULATION_EMBEDDINGS_ENABLED=true와 OPENAI_API_KEY가 설정되어 있어야 색인을 생성할 수 있습니다. 승인된 문서의 색인은 질문과 의미가 비슷한 문단도 찾아줍니다.")
             st.caption("한 번에 파일 1개를 등록합니다. 파일당 최대 2MB, PDF 200페이지, 추출 본문 250,000자, 검색 조각 300개까지입니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.")
             if submitted and doc_file:
                 try:
@@ -3797,7 +3827,7 @@ def render_regulation_chat_tab():
                         data={"source_key": source_key, "version": doc_version,
                               "title": doc_title, "category": doc_category,
                               "effective_from": effective_from.isoformat(),
-                              "effective_to": effective_to},
+                              "effective_to": effective_to.isoformat() if effective_to else ""},
                         files={"file": (doc_file.name, doc_file.getvalue())}, timeout=90)
                     upload_response.raise_for_status()
                     st.success("초안이 등록되었습니다. 본문과 시행일을 검토한 뒤 승인하세요.")
@@ -3923,7 +3953,9 @@ def render_regulation_chat_tab():
             st.write(turn["question"])
         with st.chat_message("assistant"):
             st.markdown("**AI**")
-            st.markdown(turn["result"].get("answer", "검색 결과가 없습니다."))
+            answer = turn["result"].get("answer", "검색 결과가 없습니다.")
+            terms = _regulation_question_keywords(turn["question"], turn["result"])
+            st.markdown(_highlight_regulation_answer(answer, terms))
             method_labels = {"hybrid": "Kiwi·전문·유사 문자열·의미", "lexical_fuzzy": "Kiwi·전문·유사 문자열",
                              "lexical_fuzzy_embedding_unavailable": "Kiwi·전문·유사 문자열 (의미 검색 장애)"}
             for method in turn["result"].get("search_methods", []):

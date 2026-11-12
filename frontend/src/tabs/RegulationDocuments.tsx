@@ -67,6 +67,7 @@ export function RegulationDocuments() {
       <label>문서 파일<input required type="file" accept=".txt,.md,.docx,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
       <button type="submit" disabled={busy || !file}>초안 등록</button>
     </form>
+    <p className="caption regulation-document-help">의미 검색 색인은 관리자 기능입니다. 문서의 <strong>본문 확인</strong>을 누르면 해당 문서의 색인 버튼이 활성화됩니다. 생성하려면 API 서버에 <code>REGULATION_EMBEDDINGS_ENABLED=true</code>와 <code>OPENAI_API_KEY</code>가 설정되어 있어야 합니다. 승인된 문서의 색인은 질문과 의미가 비슷한 문단도 찾아줍니다.</p>
     <p className="caption">한 번에 파일 1개를 등록합니다. 파일당 최대 2MB이며, PDF는 200페이지 이하, 추출 본문은 250,000자, 검색 조각은 300개까지 가능합니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.</p>
     {error && <div role="alert" className="chat-warning">{error}</div>}
     <div className="regulation-document-list">{documents.map(doc => <div key={doc.id}>
