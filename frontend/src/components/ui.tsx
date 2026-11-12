@@ -142,8 +142,8 @@ export function Radio<T extends string>({ label, value, options, onChange, help,
   )
 }
 
-export function MultiSelect({ label, value, options, onChange, help, placeholder = 'Choose options', disabled }: {
-  label?: ReactNode; value: string[]; options: readonly string[]; onChange: (v: string[]) => void; help?: string
+export function MultiSelect({ label, value, options, optionLabels, onChange, help, placeholder = 'Choose options', disabled }: {
+  label?: ReactNode; value: string[]; options: readonly string[]; optionLabels?: Readonly<Record<string, string>>; onChange: (v: string[]) => void; help?: string
   placeholder?: string; disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -161,7 +161,7 @@ export function MultiSelect({ label, value, options, onChange, help, placeholder
       <div className="ms">
         <div className={`ms-box${open ? ' focus' : ''}`} onClick={() => !disabled && setOpen(true)}>
           {value.map(v => (
-            <span key={v} className="ms-chip">{v}
+            <span key={v} className="ms-chip">{optionLabels?.[v] ?? v}
               <button type="button" aria-label={`${v} 제거`} disabled={disabled}
                 onClick={e => { e.stopPropagation(); onChange(value.filter(x => x !== v)) }}>×</button>
             </span>
@@ -181,7 +181,7 @@ export function MultiSelect({ label, value, options, onChange, help, placeholder
         {open && !disabled && (
           <div className="ms-list">
             {remaining.length ? remaining.map(o => (
-              <div key={o} onMouseDown={e => { e.preventDefault(); onChange([...value, o]); setQuery('') }}>{o}</div>
+              <div key={o} onMouseDown={e => { e.preventDefault(); onChange([...value, o]); setQuery('') }}>{optionLabels?.[o] ?? o}</div>
             )) : <div className="ms-placeholder">No results</div>}
           </div>
         )}

@@ -5712,6 +5712,7 @@ if is_admin():
             del_targets = st.multiselect(
                 "삭제할 항목 선택 (kwd_no 기준)",
                 options=sorted(st.session_state.kw_df["kwd_no"].tolist(), key=lambda value: str(value).casefold()),
+                format_func=lambda value: f"{value} · {st.session_state.kw_df.loc[st.session_state.kw_df['kwd_no'] == value, '키워드'].iloc[0]}",
                 key="del_targets", on_change="ignore"
             )
             if st.button("선택 삭제", type="secondary", key="btn_delete_rows"):

@@ -188,7 +188,13 @@ function DeleteSection() {
   const [codes, setCodes] = useState<string[]>([])
   const [confirming, setConfirming] = useState(false)
   const [msg, setMsg] = useState<Msg>(null)
-  const options = useMemo(() => (catalog?.rows ?? []).map(r => String(r.kwd_no)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), [catalog])
+  const { options, labels } = useMemo(() => {
+    const rows = catalog?.rows ?? []
+    return {
+      options: rows.map(r => String(r.kwd_no)).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())),
+      labels: Object.fromEntries(rows.map(r => [String(r.kwd_no), `${r.kwd_no} · ${r.keyword}`])),
+    }
+  }, [catalog])
   const run = async () => {
     setMsg(null)
     try {
@@ -202,7 +208,7 @@ function DeleteSection() {
   return (
     <div>
       <h4>키워드 삭제</h4>
-      <MultiSelect label="삭제할 항목 선택 (kwd_no 기준)" value={codes} options={options} onChange={v => { setCodes(v); setConfirming(false) }} />
+      <MultiSelect label="삭제할 항목 선택 (kwd_no 기준)" value={codes} options={options} optionLabels={labels} onChange={v => { setCodes(v); setConfirming(false) }} />
       <div className="mt">
         {!confirming ? (
           <Button onClick={() => { if (!codes.length) { setMsg({ kind: 'warning', text: '삭제할 항목을 선택하세요.' }); return } setMsg(null); setConfirming(true) }}>선택 삭제</Button>
