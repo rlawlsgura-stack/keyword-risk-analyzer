@@ -599,7 +599,7 @@ export function UnmatchedTab() {
             <Button onClick={removeRows}>선택 항목 삭제</Button>
           </div>
           <div className="row tight mt">
-            <Button onClick={recommendSelected} disabled={busy}>선택 키워드 AI 추천 초안</Button>
+            <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
             {recommendProgress && <span className="caption">AI 추천 {recommendProgress.done}/{recommendProgress.total} 처리 완료</span>}
             {failedRecommendationIds.length > 0 && <Button small disabled={busy} onClick={() => recommendSelected(true)}>실패 키워드만 재시도 ({failedRecommendationIds.length})</Button>}
             {isAdmin ? (
