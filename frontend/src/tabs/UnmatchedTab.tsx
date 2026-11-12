@@ -416,15 +416,19 @@ export function UnmatchedTab() {
     const direct = directEnabled && (directCells.has(key) || (value !== '' && !options[column].includes(value)))
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
     if (column === CRITERIA_COL) {
-      const searchableOptions = direct ? [DIRECT, ...list] : list
-      return <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택" listClassName="criteria-options"
-        onChange={next => {
-          if (next === DIRECT) setDirectCells(current => new Set(current).add(key))
-          else {
-            setDirectCells(current => { const copy = new Set(current); copy.delete(key); return copy })
-            editCell(row.recommendation_id, column, next ?? '')
-          }
-        }} />
+      const searchableOptions = [DIRECT, ...list]
+      return <div className={direct ? 'cell-direct-entry' : undefined}>
+        <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택" listClassName="criteria-options"
+          onChange={next => {
+            if (next === DIRECT) setDirectCells(current => new Set(current).add(key))
+            else {
+              setDirectCells(current => { const copy = new Set(current); copy.delete(key); return copy })
+              editCell(row.recommendation_id, column, next ?? '')
+            }
+          }} />
+        {direct && <textarea rows={2} value={value} placeholder={`${column} 직접 입력`}
+          onChange={e => editCell(row.recommendation_id, column, e.target.value)} aria-label={`${column} 직접 입력`} />}
+      </div>
     }
     return (
       <div className={direct ? 'cell-direct-entry' : undefined}>
