@@ -72,6 +72,9 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     rows = catalog.to_dict("records")
     warnings: list[str] = []
     ranked, direct = _catalog_matches(rows, term, category)
+    stages = [{"name": "키워드 DB", "status": "completed", "result_count": len(ranked),
+               "detail": "직접 일치 항목을 찾았습니다." if direct and ranked else
+                         "유사 후보를 찾았습니다." if ranked else "검색을 완료했지만 관련 항목이 없습니다."}]
     if (not direct and os.getenv("REGULATION_EMBEDDINGS_ENABLED", "false").lower() == "true"
             and rows):
         try:
@@ -101,12 +104,15 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
                     option.update({key: candidate[key] for key in
                                    ("risk", "criteria", "evidence_type", "alternative", "reason", "source_ids")})
                     option["sources"] = candidate["sources"]
+                option["review_stages"] = candidate.get("review_stages", [])
             except (RuntimeError, requests.RequestException, ValueError):
                 option["reason"] = "관련 DB 사례를 바탕으로 제시한 초안입니다. 상품과 광고 문맥을 확인하세요."
         return {"status": "needs_category", "term": term, "category": "", "risk": "",
                 "criteria": "", "evidence_type": "", "alternative": "",
                 "reason": "같은 표현이 여러 상품 카테고리에서 다르게 심의됩니다. 상품에 맞는 DB 사례를 선택하면 행의 빈칸에 추천값을 채웁니다.",
                 "source_ids": [], "sources": sources,
+                "review_stages": stages + [{"name": "카테고리별 상세 검토", "status": "completed",
+                                             "result_count": len(options), "detail": "후보별 사내 문서·법령·LLM 검토를 진행했습니다."}],
                 "warnings": ["관련 DB 사례가 있는 카테고리 중 최대 3개만 분석했습니다."] if len(all_options) > 3 else [],
                 "category_options": options}
     try:
@@ -116,7 +122,13 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
                             "text": str(row["content"])[:1800], "document_id": row["document_id"],
                             "chunk_id": row["chunk_id"], "version": row["version"]})
     except (requests.RequestException, RuntimeError, ValueError, KeyError):
+        stages.append({"name": "사내 규정 문서", "status": "error", "result_count": 0, "detail": "문서 검색 오류"})
         warnings.append("사내 규정 검색을 완료하지 못했습니다.")
+    else:
+        stages.append({"name": "사내 규정 문서", "status": "completed", "result_count": len(documents),
+                       "detail": "검색 완료" if documents else "검색 완료, 관련 문서 없음"})
+    stages.append({"name": "국가법령정보센터", "status": "not_configured", "result_count": 0,
+                   "detail": "API 키가 없어 검색하지 않음"})
     if os.getenv("LEGISLATION_API_KEY", "").strip():
         try:
             law_results = search_many([(tool, {"query": term, "search": 2, "display": 3})
@@ -125,7 +137,11 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
                 if result.strip():
                     sources.append({"id": f"LAW{index}", "label": f"국가법령정보센터 {term} 검색 결과",
                                     "text": result[:1800], "url": "https://www.law.go.kr/"})
+            law_count = sum(bool(result.strip()) for result in law_results)
+            stages[-1] = {"name": "국가법령정보센터", "status": "completed", "result_count": law_count,
+                          "detail": "검색 완료" if law_count else "검색 완료, 관련 결과 없음"}
         except (LegislationApiError, requests.RequestException, ValueError):
+            stages[-1] = {"name": "국가법령정보센터", "status": "error", "result_count": 0, "detail": "법령 검색 오류"}
             warnings.append("국가법령정보센터 검색을 완료하지 못했습니다.")
     else:
         warnings.append("국가법령정보센터 API 키가 없어 법령 검색을 건너뛰었습니다.")
@@ -133,8 +149,9 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     empty = {"status": "insufficient", "term": term, "category": "", "risk": "", "criteria": "",
              "evidence_type": "", "alternative": "", "reason": "검증할 수 있는 근거가 없습니다.",
              "source_ids": [], "sources": sources, "warnings": warnings,
-             "category_options": options}
+             "category_options": options, "review_stages": stages}
     if not sources:
+        stages.append({"name": "LLM 종합 추천", "status": "skipped", "result_count": 0, "detail": "근거가 없어 호출하지 않음"})
         return empty
 
     categories = ([category] if category else sorted({str(row.get(DB_COLS[2], "")).strip()
@@ -179,6 +196,7 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     response = requests.post("https://api.openai.com/v1/responses",
                              headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=60)
     response.raise_for_status()
+    stages.append({"name": "LLM 종합 추천", "status": "completed", "result_count": 1, "detail": "근거 기반 초안을 생성했습니다."})
     suggestion = json.loads(_response_text(response.json()))
     cited = suggestion.get("source_ids", [])
     known_ids = {source["id"] for source in sources}
@@ -186,9 +204,10 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
              and suggestion.get("category") in categories and suggestion.get("risk") in risks
              and bool(str(suggestion.get("criteria", "")).strip()))
     if not valid:
+        stages[-1] = {"name": "LLM 종합 추천", "status": "unverified", "result_count": 0, "detail": "응답 검증에 통과하지 못했습니다."}
         return {**empty, "reason": "카테고리·리스크 등급·심의기준의 근거를 검증하지 못했습니다. 상품 카테고리를 지정하거나 관련 DB·규정 자료를 확인하세요."}
     return {"status": "suggested", "term": term,
             **{key: str(suggestion[key]).strip() for key in
                ("category", "risk", "criteria", "evidence_type", "alternative", "reason")},
-            "source_ids": cited, "sources": sources, "warnings": warnings,
+            "source_ids": cited, "sources": sources, "warnings": warnings, "review_stages": stages,
             "category_options": options}

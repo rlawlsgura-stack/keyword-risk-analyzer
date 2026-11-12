@@ -104,6 +104,7 @@ export type KeywordSuggestion = {
   source_ids: string[]
   sources: { id: string; label: string; text: string; url?: string; document_id?: string; chunk_id?: string; version?: string }[]
   warnings: string[]
+  review_stages?: { name: string; status: string; result_count: number; detail: string }[]
   category_options: {
     category: string
     risk: string
@@ -115,6 +116,7 @@ export type KeywordSuggestion = {
     source_ids?: string[]
     reason?: string
     sources?: { id: string; label: string; text: string; url?: string; document_id?: string; chunk_id?: string; version?: string }[]
+    review_stages?: { name: string; status: string; result_count: number; detail: string }[]
   }[]
 }
 

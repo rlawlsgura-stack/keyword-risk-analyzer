@@ -287,6 +287,8 @@ export function OcrTab() {
           {ocr.candidates.map((candidate, index) => candidate.ai_suggestion && (
             <details key={index} className="mt"><summary>{candidate.term} · AI 추천 근거</summary>
               <p>{candidate.ai_suggestion.reason}</p>
+              {candidate.ai_suggestion.review_stages?.map((stage, i) =>
+                <div className="caption" key={`${stage.name}-${i}`}>{stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>)}
               {candidate.ai_suggestion.status === 'needs_category' &&
                 candidate.ai_suggestion.category_options.map(option => (
                   <div className="row tight mt" key={option.category}>
@@ -297,6 +299,8 @@ export function OcrTab() {
                   </div>
                 ))}
               {candidate.ai_suggestion.warnings.map((warning, i) => <div className="caption" key={i}>{warning}</div>)}
+              {candidate.ai_suggestion.status === 'needs_category' && candidate.ai_suggestion.category_options.map(option =>
+                option.review_stages?.map((stage, i) => <div className="caption" key={`${option.category}-${stage.name}-${i}`}>{option.category} · {stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>))}
               {candidate.ai_suggestion.source_ids.map(id => {
                 const source = candidate.ai_suggestion?.sources.find(item => item.id === id)
                 return source && <details key={id}><summary>[{id}] {source.label}</summary><pre style={{ whiteSpace: 'pre-wrap' }}>{source.text}</pre></details>

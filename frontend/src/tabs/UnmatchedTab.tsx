@@ -600,8 +600,6 @@ export function UnmatchedTab() {
           </div>
           <div className="row tight mt">
             <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
-            {recommendProgress && <span className="caption">AI 추천 {recommendProgress.done}/{recommendProgress.total} 처리 완료</span>}
-            {failedRecommendationIds.length > 0 && <Button small disabled={busy} onClick={() => recommendSelected(true)}>실패 키워드만 재시도 ({failedRecommendationIds.length})</Button>}
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
@@ -613,10 +611,14 @@ export function UnmatchedTab() {
             )}
             <Help text="선택한 행만 처리합니다. 셀 편집 내용은 작업본으로 자동 저장되어 다시 로그인해도 유지됩니다." />
           </div>
+          {recommendProgress && <div className="caption mt">AI 추천 {recommendProgress.done}/{recommendProgress.total} 처리 완료</div>}
+          {failedRecommendationIds.length > 0 && <div className="mt"><Button small disabled={busy} onClick={() => recommendSelected(true)}>실패 키워드만 재시도 ({failedRecommendationIds.length})</Button></div>}
           {selectedRows.length === 1 && draft.ai_suggestions?.[selectedRows[0].recommendation_id] && (
             <div className="mt">
               <strong>분류 추천 · {selectedRows[0].term}</strong>
               <p>{draft.ai_suggestions[selectedRows[0].recommendation_id].reason}</p>
+              {draft.ai_suggestions[selectedRows[0].recommendation_id].review_stages?.map((stage, index) =>
+                <div className="caption" key={`${stage.name}-${index}`}>{stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>)}
               {draft.ai_suggestions[selectedRows[0].recommendation_id].status === 'needs_category' &&
                 draft.ai_suggestions[selectedRows[0].recommendation_id].category_options.map(option => (
                   <div className="row tight mt" key={option.category}>
@@ -626,6 +628,8 @@ export function UnmatchedTab() {
                     <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
                   </div>
                 ))}
+              {draft.ai_suggestions[selectedRows[0].recommendation_id].status === 'needs_category' && draft.ai_suggestions[selectedRows[0].recommendation_id].category_options.map(option =>
+                option.review_stages?.map((stage, index) => <div className="caption" key={`${option.category}-${stage.name}-${index}`}>{option.category} · {stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>))}
               {draft.ai_suggestions[selectedRows[0].recommendation_id].warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
               {draft.ai_suggestions[selectedRows[0].recommendation_id].source_ids.map(id => {
                 const source = draft.ai_suggestions[selectedRows[0].recommendation_id].sources.find(item => item.id === id)
@@ -639,6 +643,8 @@ export function UnmatchedTab() {
             return <div className="mt" key={row.recommendation_id}>
               <strong>분류 추천 · {row.term}</strong>
               <p>{suggestion.reason}</p>
+              {suggestion.review_stages?.map((stage, index) =>
+                <div className="caption" key={`${stage.name}-${index}`}>{stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>)}
               {suggestion.status === 'needs_category' && suggestion.category_options.map(option => (
                 <div className="row tight mt" key={option.category}>
                   <Button small disabled={busy} onClick={() => applyCategoryOption(row, suggestion, option)}>
@@ -647,6 +653,8 @@ export function UnmatchedTab() {
                   <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
                 </div>
               ))}
+              {suggestion.status === 'needs_category' && suggestion.category_options.map(option =>
+                option.review_stages?.map((stage, index) => <div className="caption" key={`${option.category}-${stage.name}-${index}`}>{option.category} · {stage.name}: {stage.detail} (결과 {stage.result_count}건)</div>))}
               {suggestion.warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
             </div>
           })}
