@@ -112,6 +112,9 @@ export type KeywordSuggestion = {
     alternative: string
     keyword: string
     source_id: string
+    source_ids?: string[]
+    reason?: string
+    sources?: { id: string; label: string; text: string; url?: string; document_id?: string; chunk_id?: string; version?: string }[]
   }[]
 }
 

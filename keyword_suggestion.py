@@ -91,7 +91,8 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
                              "criteria": row.get(DB_COLS[5], ""), "evidence_type": row.get(DB_COLS[6], "")}, ensure_ascii=False)}
         for index, row in enumerate(ranked, 1)
     ]
-    options = _category_options(ranked) if direct else []
+    all_options = _category_options(ranked) if direct else []
+    options = all_options[:3]
     if not category and len(options) > 1:
         for option in options:
             try:
@@ -105,7 +106,9 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
         return {"status": "needs_category", "term": term, "category": "", "risk": "",
                 "criteria": "", "evidence_type": "", "alternative": "",
                 "reason": "같은 표현이 여러 상품 카테고리에서 다르게 심의됩니다. 상품에 맞는 DB 사례를 선택하면 행의 빈칸에 추천값을 채웁니다.",
-                "source_ids": [], "sources": sources, "warnings": [], "category_options": options}
+                "source_ids": [], "sources": sources,
+                "warnings": ["관련 DB 사례가 있는 카테고리 중 최대 3개만 분석했습니다."] if len(all_options) > 3 else [],
+                "category_options": options}
     try:
         documents, _ = search_documents(repository, f"{term} {context}".strip(), category, as_of)
         for index, row in enumerate(documents[:4], 1):

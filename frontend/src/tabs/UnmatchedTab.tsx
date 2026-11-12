@@ -39,6 +39,8 @@ export function UnmatchedTab() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [listMsg, setListMsg] = useState<Msg | null>(null)
   const [busy, setBusy] = useState(false)
+  const [recommendProgress, setRecommendProgress] = useState<{ done: number; total: number; failed: string[] } | null>(null)
+  const [failedRecommendationIds, setFailedRecommendationIds] = useState<string[]>([])
   const [directCells, setDirectCells] = useState<Set<string>>(() => new Set())
 
   const selection = selections[search] ?? { all: false, ids: {} }
@@ -241,41 +243,52 @@ export function UnmatchedTab() {
     }, true)
   }
 
-  const applyCategoryOption = async (row: WsRow, suggestion: KeywordSuggestion,
+  const applyCategoryOption = (row: WsRow, suggestion: KeywordSuggestion,
                                      option: KeywordSuggestion['category_options'][number]) => {
-    const dbSuggestion: KeywordSuggestion = {
+    const categorySuggestion: KeywordSuggestion = {
       ...suggestion, status: 'suggested', category: option.category, risk: option.risk,
       criteria: option.criteria, evidence_type: option.evidence_type, alternative: option.alternative,
-      reason: `기존 DB 사례 '${option.keyword}'의 분류값을 적용했습니다. 상품과 광고 전체 맥락을 확인하세요.`,
-      source_ids: [option.source_id],
+      reason: option.reason ?? `기존 DB 사례 '${option.keyword}'에 기반한 추천 초안입니다. 상품과 광고 전체 맥락을 확인하세요.`,
+      source_ids: option.source_ids ?? [option.source_id], sources: option.sources ?? suggestion.sources,
     }
-    setBusy(true); setWsMsg(null)
-    try {
-      const detailed = await suggestKeyword(row.term.trim(), option.category, row.source_terms)
-      applySuggestedFields(row, detailed.status === 'suggested' ? detailed : dbSuggestion)
-      setWsMsg({ kind: detailed.status === 'suggested' ? 'success' : 'warning', text: detailed.status === 'suggested'
-        ? '상품군에 맞는 추천값으로 빈 셀을 채웠습니다. 근거를 확인하고 승인하세요.'
-        : 'AI가 세부 기준을 검증하지 못해 선택한 DB 사례값만 적용했습니다. 검토 후 승인하세요.' })
-    } catch (e) {
-      applySuggestedFields(row, dbSuggestion)
-      setWsMsg({ kind: 'warning', text: `AI 상세 분석에 실패해 선택한 DB 사례값만 적용했습니다: ${errorText(e)}` })
-    } finally { setBusy(false) }
+    applySuggestedFields(row, categorySuggestion)
+    setWsMsg({ kind: 'success', text: '선택한 카테고리의 추천 초안을 빈 셀에 적용했습니다. 근거를 확인한 뒤 승인하세요.' })
   }
 
-  const recommendSelected = async () => {
-    if (selectedRows.length !== 1 || !selectedRows[0].term.trim()) {
-      setWsMsg({ kind: 'warning', text: 'AI 추천을 받을 키워드 한 행을 선택하세요.' }); return
-    }
-    const row = selectedRows[0]
+  const recommendSelected = async (retryOnly = false) => {
+    const targets = (retryOnly ? wsRows.filter(row => failedRecommendationIds.includes(row.recommendation_id)) : selectedRows)
+      .filter(row => row.term.trim())
+    if (!targets.length) { setWsMsg({ kind: 'warning', text: 'AI 추천을 받을 키워드를 선택하세요.' }); return }
+    if (!retryOnly && targets.length > 5) { setWsMsg({ kind: 'warning', text: '한 번에 최대 5개 키워드까지 추천할 수 있습니다.' }); return }
     setBusy(true); setWsMsg(null)
-    try {
-      const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms)
-      if (suggestion.status === 'suggested') applySuggestedFields(row, suggestion)
-      else setDraft(d => ({ ...d, ai_suggestions: { ...d.ai_suggestions, [row.recommendation_id]: suggestion } }), true)
-      setWsMsg(suggestion.status === 'suggested'
-        ? { kind: 'success', text: '추천값으로 빈 셀을 채웠습니다. 근거를 확인하고 승인하세요.' } : null)
-    } catch (e) { setWsMsg({ kind: 'error', text: `AI 추천에 실패했습니다: ${errorText(e)}` }) }
-    finally { setBusy(false) }
+    setRecommendProgress({ done: 0, total: targets.length, failed: [] })
+    setFailedRecommendationIds([])
+    const failed: string[] = []
+    let cursor = 0
+    const worker = async () => {
+      while (cursor < targets.length) {
+        const row = targets[cursor++]
+        try {
+          const suggestion = await suggestKeyword(row.term.trim(), row.상품카테고리, row.source_terms)
+          if (suggestion.status === 'suggested') applySuggestedFields(row, suggestion)
+          else setDraft(d => ({ ...d, ai_suggestions: { ...d.ai_suggestions, [row.recommendation_id]: suggestion } }), true)
+        } catch (e) {
+          failed.push(row.recommendation_id)
+          setDraft(d => ({ ...d, ai_suggestions: { ...d.ai_suggestions, [row.recommendation_id]: {
+            status: 'insufficient', term: row.term, category: '', risk: '', criteria: '', evidence_type: '', alternative: '',
+            reason: `AI 추천에 실패했습니다: ${errorText(e)}`, source_ids: [], sources: [], warnings: [], category_options: [],
+          } } }), true)
+        } finally {
+          setRecommendProgress(p => p ? { ...p, done: p.done + 1, failed: [...failed] } : p)
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(2, targets.length) }, worker))
+    setFailedRecommendationIds(failed)
+    setWsMsg(failed.length
+      ? { kind: 'warning', text: `${targets.length - failed.length}/${targets.length}개 추천 완료. 실패 키워드: ${failed.map(id => targets.find(row => row.recommendation_id === id)?.term).join(', ')}` }
+      : { kind: 'success', text: `${targets.length}개 키워드 추천을 완료했습니다. 근거를 확인하고 승인하세요.` })
+    setBusy(false)
   }
 
   const normalize = async () => {
@@ -582,6 +595,8 @@ export function UnmatchedTab() {
           </div>
           <div className="row tight mt">
             <Button onClick={recommendSelected} disabled={busy}>선택 키워드 AI 추천 초안</Button>
+            {recommendProgress && <span className="caption">AI 추천 {recommendProgress.done}/{recommendProgress.total} 처리 완료</span>}
+            {failedRecommendationIds.length > 0 && <Button small disabled={busy} onClick={() => recommendSelected(true)}>실패 키워드만 재시도 ({failedRecommendationIds.length})</Button>}
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
@@ -613,6 +628,23 @@ export function UnmatchedTab() {
               })}
             </div>
           )}
+          {selectedRows.length > 1 && selectedRows.map(row => {
+            const suggestion = draft.ai_suggestions?.[row.recommendation_id]
+            if (!suggestion) return null
+            return <div className="mt" key={row.recommendation_id}>
+              <strong>분류 추천 · {row.term}</strong>
+              <p>{suggestion.reason}</p>
+              {suggestion.status === 'needs_category' && suggestion.category_options.map(option => (
+                <div className="row tight mt" key={option.category}>
+                  <Button small disabled={busy} onClick={() => applyCategoryOption(row, suggestion, option)}>
+                    {option.category} · {option.risk} 적용
+                  </Button>
+                  <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
+                </div>
+              ))}
+              {suggestion.warnings.map((warning, index) => <div className="caption" key={index}>{warning}</div>)}
+            </div>
+          })}
           {wsMsg && (
             <>
               <Alert kind={wsMsg.kind}>{wsMsg.text}</Alert>
