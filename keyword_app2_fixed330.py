@@ -5220,9 +5220,6 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                         review['edits'][selected_row['surface_key']] = edited_surface.strip()
                         st.success('선택한 표현을 수정했습니다.')
         if cloud_enabled() and is_admin():
-            confirm_selected_delete = st.checkbox(
-                '현재 누적 통계와 관측 기록을 삭제합니다. 이후 새 분석에서는 다시 수집될 수 있습니다.',
-                key='confirm_selected_unmatched_delete', on_change='ignore')
             if st.button('\uc120\ud0dd \ud45c\ud604 \uc601\uad6c \uc0ad\uc81c', key='delete_selected_unmatched_review_rows'):
                 try:
                     action_rows = _load_unmatched_selection_rows(
@@ -5234,15 +5231,12 @@ div.st-key-{table_key} div.st-key-{select_all_key} {{
                     selected_ids = []
                 if not selected_ids:
                     st.warning('\uc0ad\uc81c\ud560 \ubbf8\ub9e4\uce6d \ud45c\ud604\uc744 \uc120\ud0dd\ud558\uc138\uc694.')
-                elif not st.session_state.get('confirm_selected_unmatched_delete', False):
-                    st.warning('\uc0ad\uc81c \ud655\uc778\ub780\uc744 \uba3c\uc800 \uc120\ud0dd\ud558\uc138\uc694.')
                 else:
                     try:
                         SupabaseRepository().delete_unmatched_terms(
                             selected_ids, st.session_state['auth_session']['access_token'])
                         _clear_unmatched_review()
                         st.session_state['unmatched_page'] = 0
-                        st.session_state.pop('confirm_selected_unmatched_delete', None)
                         st.rerun()
                     except (StorageError, PermissionError):
                         st.error('\uc601\uad6c \uc0ad\uc81c\uc5d0 \uc2e4\ud328\ud588\uc2b5\ub2c8\ub2e4. \uad00\ub9ac\uc790 \uad8c\ud55c\uacfc \uc5f0\uacb0 \uc0c1\ud0dc\ub97c \ud655\uc778\ud558\uc138\uc694.')

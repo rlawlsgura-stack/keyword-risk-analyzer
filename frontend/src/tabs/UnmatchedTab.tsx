@@ -10,7 +10,7 @@ import { SearchSelect } from '../components/SearchSelect.tsx'
 import type { KeywordSuggestion, UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
 import { blankRow, emptyDraft, orderRows, sourceKeys, toWsRow, type Draft, type WsRow } from '../lib/workspace.ts'
 import { useStore } from '../store.tsx'
-import { Alert, Button, Checkbox, Help, Spinner, TextInput, errorText } from '../components/ui.tsx'
+import { Alert, Button, Help, Spinner, TextInput, errorText } from '../components/ui.tsx'
 
 const PAGE = 1000
 const DIRECT = '(직접 입력)'
@@ -64,7 +64,6 @@ export function UnmatchedTab() {
   const [surfaceEdits, setSurfaceEdits] = useState<Record<string, string>>({})
   const [editText, setEditText] = useState('')
   const [csvRows, setCsvRows] = useState<Record<string, unknown>[] | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [listMsg, setListMsg] = useState<Msg | null>(null)
   const [busy, setBusy] = useState(false)
   const [recommendProgress, setRecommendProgress] = useState<{ done: number; total: number; failed: string[] } | null>(null)
@@ -144,12 +143,12 @@ export function UnmatchedTab() {
     let selected: UnmatchedTerm[]
     try { selected = await resolveSelection() } catch { setListMsg({ kind: 'error', text: '선택한 표현을 불러오지 못했습니다.' }); return }
     if (!selected.length) { setListMsg({ kind: 'warning', text: '삭제할 미매칭 표현을 선택하세요.' }); return }
-    if (!confirmDelete) { setListMsg({ kind: 'warning', text: '삭제 확인란을 먼저 선택하세요.' }); return }
+    if (!window.confirm(`\uC120\uD0DD\uD55C ${selected.length}\uAC1C \uD45C\uD604\uACFC \uB204\uC801 \uD1B5\uACC4 \uBC0F \uAD00\uCE21 \uAE30\uB85D\uC744 \uC601\uAD6C \uC0AD\uC81C\uD560\uAE4C\uC694? \uC0AD\uC81C \uD6C4 \uBCF5\uAD6C\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.`)) return
     setBusy(true)
     try {
       const keys = selected.map(r => r.term_norm)
       for (let i = 0; i < keys.length; i += 1000) await deleteUnmatchedTerms(keys.slice(i, i + 1000))
-      resetReview(); setPage(0); setConfirmDelete(false); setRefreshKey(k => k + 1)
+      resetReview(); setPage(0); setRefreshKey(k => k + 1)
     } catch { setListMsg({ kind: 'error', text: '영구 삭제에 실패했습니다. 관리자 권한과 연결 상태를 확인하세요.' }) }
     finally { setBusy(false) }
   }
@@ -578,7 +577,6 @@ export function UnmatchedTab() {
           )}
           {isAdmin && (
             <div className="mt">
-              <Checkbox label="현재 누적 통계와 관측 기록을 삭제합니다. 이후 새 분석에서는 다시 수집될 수 있습니다." checked={confirmDelete} onChange={setConfirmDelete} />
               <Button onClick={removeSelected} disabled={busy}>선택 표현 영구 삭제</Button>
             </div>
           )}
