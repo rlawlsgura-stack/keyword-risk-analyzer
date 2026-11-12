@@ -1,3 +1,8 @@
+## FIXED331 - Show keyword names in deletion choices
+
+- Display each keyword number with its keyword name in the React and Streamlit delete selectors.
+- Update the React package version to 1.0.10.
+
 ## FIXED330 - Align shared analysis and regulation chat screens
 
 - Match the script input label typography to the analysis heading and rename the label to Script input.

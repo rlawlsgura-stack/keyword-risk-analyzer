@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Keyword Risk Analyzer (FIXED330 - React analysis connected)
+Keyword Risk Analyzer (FIXED331 - React analysis connected)
 - Based on v97
 - NEW: 드롭다운 목록을 JSON 파일로 영구 저장하여 재부팅 후에도 유지
 - KEEP: 모든 기존 기능 유지 (조회 수 카운팅, 리포트, 최근 7일 초기화 등)
@@ -114,7 +114,7 @@ from urllib.parse import parse_qs, urlsplit, urlunsplit
 from dataclasses import asdict
 from xml.etree import ElementTree as ET
 from pathlib import Path
-APP_VERSION = "FIXED330"
+APP_VERSION = "FIXED331"
 from app_config import configure, cloud_enabled
 # Local Streamlit runs execute this file directly, so invalidate a stale
 # repository module retained by an already-running Streamlit process.

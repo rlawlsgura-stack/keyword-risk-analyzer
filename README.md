@@ -1,6 +1,6 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED330** (`keyword_app2_fixed330.py`).
+Current local development version: **FIXED331** (`keyword_app2_fixed330.py`).
 The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings. The Streamlit implementation remains available as a fallback during the transition.
 For work across PCs, see the [QA continuation handoff](docs/qa/WORK_HANDOFF.md); it records the remaining browser-based parity checks.
 `run_latest.ps1` checks Supabase Auth connectivity first, then starts the local Streamlit fallback through `streamlit_cloud/app.py`. That entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
