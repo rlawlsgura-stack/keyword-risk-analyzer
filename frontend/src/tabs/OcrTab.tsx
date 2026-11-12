@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { extractOCR, saveOCRKeywords, suggestKeyword } from '../lib/api.ts'
 import { pySorted } from '../lib/catalog.ts'
-import type { OCRCandidate, OCRFileResult } from '../lib/types.ts'
+import type { KeywordSuggestion, OCRCandidate, OCRFileResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Button, Expander, Spinner, errorText } from '../components/ui.tsx'
 
@@ -91,18 +91,51 @@ export function OcrTab() {
       ...c, ...(Object.keys(patch).some(key => key !== 'approved' && key !== 'ai_suggestion') ? { ai_suggestion: undefined } : {}), ...patch,
     } : c)) }))
 
+  const applySuggestedFields = (i: number, suggestion: KeywordSuggestion) => {
+    const current = ocr.candidates[i]
+    if (!current) return
+    const blank = (value: string) => !value.trim() || value.trim() === '-'
+    update(i, {
+      ...(blank(current.category) && suggestion.category ? { category: suggestion.category } : {}),
+      ...(blank(current.risk) && suggestion.risk ? { risk: suggestion.risk } : {}),
+      ...(blank(current.detail) && suggestion.criteria ? { detail: suggestion.criteria } : {}),
+      ...(blank(current.evidence) && suggestion.evidence_type ? { evidence: suggestion.evidence_type } : {}),
+      ...(blank(current.alternative) && suggestion.alternative ? { alternative: suggestion.alternative } : {}),
+      ai_suggestion: suggestion,
+    })
+  }
+
+  const applyCategoryOption = async (i: number, suggestion: KeywordSuggestion,
+                                     option: KeywordSuggestion['category_options'][number]) => {
+    const dbSuggestion: KeywordSuggestion = {
+      ...suggestion, status: 'suggested', category: option.category, risk: option.risk,
+      criteria: option.criteria, evidence_type: option.evidence_type, alternative: option.alternative,
+      reason: `기존 DB 사례 '${option.keyword}'의 분류값을 적용했습니다. 상품과 광고 전체 맥락을 확인하세요.`,
+      source_ids: [option.source_id],
+    }
+    setBusy(true); setNotice(null)
+    try {
+      const detailed = await suggestKeyword(ocr.candidates[i].term.trim(), option.category)
+      applySuggestedFields(i, detailed.status === 'suggested' ? detailed : dbSuggestion)
+      setNotice({ kind: detailed.status === 'suggested' ? 'success' : 'warning', text: detailed.status === 'suggested'
+        ? '상품군에 맞는 추천값으로 빈 셀을 채웠습니다. 근거를 확인한 뒤 승인하세요.'
+        : 'AI가 세부 기준을 검증하지 못해 선택한 DB 사례값만 적용했습니다. 검토 후 승인하세요.' })
+    } catch (error) {
+      applySuggestedFields(i, dbSuggestion)
+      setNotice({ kind: 'warning', text: `AI 상세 분석에 실패해 선택한 DB 사례값만 적용했습니다: ${errorText(error)}` })
+    } finally { setBusy(false) }
+  }
+
   const recommend = async (i: number) => {
     const candidate = ocr.candidates[i]
     if (!candidate?.term.trim()) return
     setBusy(true); setNotice(null)
     try {
       const suggestion = await suggestKeyword(candidate.term.trim(), candidate.category)
-      update(i, suggestion.status === 'suggested'
-        ? { category: suggestion.category, risk: suggestion.risk, detail: suggestion.criteria,
-            evidence: suggestion.evidence_type, alternative: suggestion.alternative || '-', ai_suggestion: suggestion }
-        : { ai_suggestion: suggestion })
-      setNotice({ kind: suggestion.status === 'suggested' ? 'success' : 'warning', text: suggestion.status === 'suggested'
-        ? 'AI 추천 초안을 채웠습니다. 근거를 확인한 뒤 승인하세요.' : suggestion.reason })
+      if (suggestion.status === 'suggested') applySuggestedFields(i, suggestion)
+      else update(i, { ai_suggestion: suggestion })
+      setNotice(suggestion.status === 'suggested'
+        ? { kind: 'success', text: '추천값으로 빈 셀을 채웠습니다. 근거를 확인한 뒤 승인하세요.' } : null)
     } catch (error) { setNotice({ kind: 'error', text: `AI 추천에 실패했습니다: ${errorText(error)}` }) }
     finally { setBusy(false) }
   }
@@ -254,6 +287,15 @@ export function OcrTab() {
           {ocr.candidates.map((candidate, index) => candidate.ai_suggestion && (
             <details key={index} className="mt"><summary>{candidate.term} · AI 추천 근거</summary>
               <p>{candidate.ai_suggestion.reason}</p>
+              {candidate.ai_suggestion.status === 'needs_category' &&
+                candidate.ai_suggestion.category_options.map(option => (
+                  <div className="row tight mt" key={option.category}>
+                    <Button small disabled={busy} onClick={() => applyCategoryOption(index, candidate.ai_suggestion!, option)}>
+                      {option.category} · {option.risk} 적용
+                    </Button>
+                    <span className="caption">DB 사례: {option.keyword} / {option.criteria}</span>
+                  </div>
+                ))}
               {candidate.ai_suggestion.warnings.map((warning, i) => <div className="caption" key={i}>{warning}</div>)}
               {candidate.ai_suggestion.source_ids.map(id => {
                 const source = candidate.ai_suggestion?.sources.find(item => item.id === id)

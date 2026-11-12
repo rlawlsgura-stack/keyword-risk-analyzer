@@ -21,6 +21,18 @@ class Repository:
         }])
 
 
+class HospitalRepository:
+    def load_keywords(self):
+        return pd.DataFrame([
+            {DB_COLS[0]: 'B048', DB_COLS[1]: '병균', DB_COLS[2]: '화장품',
+             DB_COLS[3]: '1등급(사용금지)', DB_COLS[4]: '-', DB_COLS[5]: '(사용금지)', DB_COLS[6]: '-'},
+            {DB_COLS[0]: 'B007', DB_COLS[1]: 'OO 병원에서 추천하는 안전한 화장품', DB_COLS[2]: '화장품',
+             DB_COLS[3]: '1등급(사용금지)', DB_COLS[4]: '-', DB_COLS[5]: '(사용금지)', DB_COLS[6]: '-'},
+            {DB_COLS[0]: 'G068', DB_COLS[1]: '병원/약국판매 건강기능식품', DB_COLS[2]: '건강기능식품',
+             DB_COLS[3]: '3등급(조건부사용)', DB_COLS[4]: '-', DB_COLS[5]: '판매 장소에 따른 표현 검토', DB_COLS[6]: ''},
+        ])
+
+
 class Response:
     def __init__(self, suggestion):
         self.suggestion = suggestion
@@ -61,6 +73,68 @@ class KeywordSuggestionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'insufficient')
         self.assertEqual(result['category'], '')
         self.assertEqual(result['source_ids'], [])
+
+    def test_short_ambiguous_term_offers_relevant_db_categories(self):
+        with patch.dict('os.environ', {
+            'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+            'OPENAI_API_KEY': 'test-key', 'LEGISLATION_API_KEY': '',
+            'REGULATION_EMBEDDINGS_ENABLED': 'false',
+        }), patch('keyword_suggestion.requests.post') as model_call, \
+                patch('keyword_suggestion.search_documents') as document_search:
+            result = suggest_keyword(HospitalRepository(), '병원', '', '', date(2026, 11, 12))
+        self.assertEqual(result['status'], 'needs_category')
+        self.assertEqual({option['category'] for option in result['category_options']},
+                         {'화장품', '건강기능식품'})
+        self.assertEqual({source['label'].split()[-1] for source in result['sources']},
+                         {'B007', 'G068'})
+        model_call.assert_not_called()
+        document_search.assert_not_called()
+
+    def test_selected_category_uses_applicable_db_row(self):
+        suggestion = {'status': 'suggested', 'category': '화장품', 'risk': '1등급(사용금지)',
+                      'criteria': '병원 추천을 암시하는 광고 표현 검토', 'evidence_type': '',
+                      'alternative': '', 'reason': '기존 화장품 DB 사례', 'source_ids': ['DB1']}
+        with patch.dict('os.environ', {
+            'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+            'OPENAI_API_KEY': 'test-key', 'LEGISLATION_API_KEY': '',
+            'REGULATION_EMBEDDINGS_ENABLED': 'false',
+        }), patch('keyword_suggestion.search_documents', return_value=([], 'none')), \
+                patch('keyword_suggestion.requests.post', return_value=Response(suggestion)):
+            result = suggest_keyword(HospitalRepository(), '병원', '화장품', '', date(2026, 11, 12))
+        self.assertEqual(result['status'], 'suggested')
+        self.assertEqual(result['risk'], '1등급(사용금지)')
+        self.assertEqual(len(result['sources']), 1)
+        self.assertIn('B007', result['sources'][0]['label'])
+
+    def test_selected_category_rejects_risk_not_supported_by_matching_db_row(self):
+        suggestion = {'status': 'suggested', 'category': '화장품', 'risk': '3등급(조건부사용)',
+                      'criteria': '조건부 검토', 'evidence_type': '', 'alternative': '',
+                      'reason': '모델 추정', 'source_ids': ['DB1']}
+        with patch.dict('os.environ', {
+            'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+            'OPENAI_API_KEY': 'test-key', 'LEGISLATION_API_KEY': '',
+            'REGULATION_EMBEDDINGS_ENABLED': 'false',
+        }), patch('keyword_suggestion.search_documents', return_value=([], 'none')), \
+                patch('keyword_suggestion.requests.post', return_value=Response(suggestion)) as model_call:
+            result = suggest_keyword(HospitalRepository(), '병원', '화장품', '', date(2026, 11, 12))
+        self.assertEqual(result['status'], 'insufficient')
+        prompt = json.loads(model_call.call_args.kwargs['json']['input'][1]['content'])
+        self.assertEqual(prompt['allowed_categories'], ['화장품'])
+        self.assertEqual(prompt['allowed_risks'], ['1등급(사용금지)'])
+
+    def test_short_term_does_not_fuzzy_match_unrelated_word(self):
+        repository = HospitalRepository()
+        repository.load_keywords = lambda: pd.DataFrame([HospitalRepository().load_keywords().iloc[0]])
+        with patch.dict('os.environ', {
+            'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+            'OPENAI_API_KEY': 'test-key', 'LEGISLATION_API_KEY': '',
+            'REGULATION_EMBEDDINGS_ENABLED': 'false',
+        }), patch('keyword_suggestion.search_documents', return_value=([], 'none')), \
+                patch('keyword_suggestion.requests.post') as model_call:
+            result = suggest_keyword(repository, '병원', '', '', date(2026, 11, 12))
+        self.assertEqual(result['status'], 'insufficient')
+        self.assertEqual(result['sources'], [])
+        model_call.assert_not_called()
 
     def test_member_cannot_register_ocr_keywords(self):
         repository = Repository()
