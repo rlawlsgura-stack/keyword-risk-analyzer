@@ -415,7 +415,7 @@ export function UnmatchedTab() {
     const directEnabled = column !== '상품카테고리' && column !== '리스크 등급'
     const direct = directEnabled && (directCells.has(key) || (value !== '' && !options[column].includes(value)))
     const list = direct || options[column].includes(value) ? options[column] : [...options[column], value]
-    if (column === CRITERIA_COL) {
+    if (column === CRITERIA_COL || column === '대체키워드') {
       const searchableOptions = [DIRECT, ...list]
       return <div className={direct ? 'cell-direct-entry' : undefined}>
         <SearchSelect value={direct ? DIRECT : value} options={searchableOptions} placeholder="검색하거나 목록에서 선택" listClassName="criteria-options"
