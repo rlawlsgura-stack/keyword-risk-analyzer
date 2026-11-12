@@ -116,8 +116,8 @@ Streamlit Community Cloud에서는 `.streamlit/secrets.toml.example` 내용을 �
 ```
 
 ```powershell
-# API: http://localhost:8000
-.\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000
+# API: http://localhost:8002 (docs: http://localhost:8002/docs)
+.\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8002
 ```
 
 `STORAGE_BACKEND=csv`는 기존 CSV를 사용하는 로컬 개발 모드입니다.
@@ -239,7 +239,7 @@ $body = @{
     record = $true
     analysis_id = 'b96293da-c6fc-44f8-8c1b-ebee5ee89f21'
 } | ConvertTo-Json
-Invoke-RestMethod -Uri 'http://localhost:8000/api/v1/analyses' `
+Invoke-RestMethod -Uri 'http://localhost:8002/api/v1/analyses' `
     -Method Post -Headers $headers -ContentType 'application/json; charset=utf-8' `
     -Body ([System.Text.Encoding]::UTF8.GetBytes($body))
 ```
