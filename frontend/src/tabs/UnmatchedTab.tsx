@@ -221,7 +221,7 @@ export function UnmatchedTab() {
   }
   const toggleRow = (id: string, on: boolean) => setDraft(d => ({
     ...d, selected_ids: on ? [...new Set([...d.selected_ids, id])] : d.selected_ids.filter(x => x !== id),
-  }))
+  }), true)
 
   const applySuggestedFields = (row: WsRow, suggestion: KeywordSuggestion) => {
     const values: Record<string, string> = {
@@ -256,7 +256,12 @@ export function UnmatchedTab() {
   }
 
   const recommendSelected = async (retryOnly = false) => {
-    const targets = (retryOnly ? wsRows.filter(row => failedRecommendationIds.includes(row.recommendation_id)) : selectedRows)
+    const currentDraft = draftRef.current
+    const currentRows = orderRows(baseRows, currentDraft.manual_rows, currentDraft.manual_placements)
+      .filter(row => !currentDraft.hidden_ids.includes(row.recommendation_id))
+      .map(row => ({ ...row, ...(currentDraft.edits[row.recommendation_id] ?? {}) }) as WsRow)
+    const checkedRows = currentRows.filter(row => currentDraft.selected_ids.includes(row.recommendation_id))
+    const targets = (retryOnly ? currentRows.filter(row => failedRecommendationIds.includes(row.recommendation_id)) : checkedRows)
       .filter(row => row.term.trim())
     if (!targets.length) { setWsMsg({ kind: 'warning', text: 'AI 추천을 받을 키워드를 선택하세요.' }); return }
     if (!retryOnly && targets.length > 5) { setWsMsg({ kind: 'warning', text: '한 번에 최대 5개 키워드까지 추천할 수 있습니다.' }); return }
