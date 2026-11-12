@@ -23,7 +23,7 @@ export function SearchSelect({ label, value, options, onChange, placeholder, dis
     <div ref={ref}>
       <FieldLabel label={label} help={help} htmlFor={id} />
       <div className="ms">
-        <input id={id} disabled={disabled} placeholder={value ?? placeholder} value={open ? query : value ?? ''}
+        <input id={id} type="text" disabled={disabled} placeholder={value ?? placeholder} value={open ? query : value ?? ''}
           onFocus={() => { setOpen(true); setQuery('') }}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onKeyDown={e => {
