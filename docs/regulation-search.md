@@ -15,7 +15,7 @@
 - 사내 문서는 Kiwi 내용어와 원문 단어로 검색 토큰을 만들고 PostgreSQL 전문 검색을 수행합니다. `pg_trgm` 유사 문자열 검색을 보조로 사용합니다.
 - `REGULATION_EMBEDDINGS_ENABLED=true`와 `OPENAI_API_KEY`를 서버에 설정하면 `text-embedding-3-small` 임베딩을 함께 생성합니다. 어휘, 유사 문자열, 의미 검색 순위는 RRF로 합칩니다. 설정이 꺼져 있으면 어휘·유사 문자열 검색만 사용합니다. 기존 문서는 관리자의 **의미 검색 색인 생성** 버튼으로 색인을 채웁니다.
 - 사내 문서의 승인 상태, 상품 카테고리, 기준일을 먼저 적용합니다. 기준일은 사내 문서 버전에 적용되며 국가법령정보센터의 과거 법령 버전을 조회하는 옵션은 아닙니다. 답변 출처에는 문서 ID, 버전, 내용 해시와 문단 ID를 연결합니다.
-- 국가법령정보센터 범위는 기존 `legislation_source.py`를 사용합니다. 키워드 DB 범위는 현재 등록 키워드의 관련 후보를 제시합니다. 의미 검색 결과를 기존 위험 등급이나 자동 매칭에 합치지 않습니다.
+- 국가법령정보센터 범위는 기존 `legislation_source.py`를 사용합니다. 키워드 DB 범위의 **임베딩 기반 의미 유사도 검색**은 현재 등록 키워드 중 문맥상 가까운 후보를 제시합니다. 이 결과를 기존 위험 등급이나 자동 매칭에 합치지 않습니다.
 
 운영 문서와 검토된 질문·정답 문단이 준비되면 `scripts/compare_regulation_search.py`로 원문 PostgreSQL 전문 검색, Kiwi 토큰 전문 검색, 유사 문자열, 의미, 통합 검색을 동일한 사례에서 비교합니다. `scripts/evaluate_regulation_retrieval.py`는 Recall@5/10, MRR, 근거 없음 응답, 금지 출처 혼입과 지연시간을 채점합니다. 평가 사례에는 `case_id`, `judgment_status=approved`, `evaluation_type=relevance`, `question`, `category`, `category_filter`, `as_of`, `relevant_ids`, `forbidden_ids`를 기록합니다. `category`는 평가 분류(`cosmetics`, `food`, `health_functional_food`)이고 `category_filter`는 실제 문서 카테고리 값입니다. 정답 ID는 관리자 본문 미리보기의 문단 ID를 사용합니다. **현재 승인된 사내 문서와 검토된 평가 사례가 없으므로 품질 수치를 주장할 수 없습니다.**
 

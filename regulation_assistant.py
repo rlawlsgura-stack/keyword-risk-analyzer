@@ -415,7 +415,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
         tool_calls.extend(legacy['tool_calls'])
         if request.get('include_keyword_candidates'):
             if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
-                warnings.append('키워드 의미 관련 후보는 서버 임베딩 설정 후 사용할 수 있습니다.')
+                warnings.append('임베딩 기반 의미 유사도 검색은 서버 임베딩 설정 후 사용할 수 있습니다.')
             else:
                 records = repository.load_keywords().fillna('').to_dict('records')
                 if category:
@@ -424,7 +424,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
                     related_candidates = (semantic_candidates(sources[-1]['text'][:2000], records, 10)
                                           if records else [])
                 except (AuxiliaryUnavailable, ValueError) as exc:
-                    warnings.append(f'키워드 의미 관련 후보를 만들지 못했습니다: {exc}')
+                    warnings.append(f'임베딩 기반 의미 유사도 후보를 만들지 못했습니다: {exc}')
 
     if scope in {'keyword', 'all'} and not law_to_keywords:
         keywords = repository.load_keywords()
@@ -435,7 +435,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
         tool_calls.append({'tool': 'keyword_db', 'query': query})
         if request.get('include_keyword_candidates'):
             if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
-                warnings.append('키워드 의미 관련 후보는 서버 임베딩 설정 후 사용할 수 있습니다.')
+                warnings.append('임베딩 기반 의미 유사도 검색은 서버 임베딩 설정 후 사용할 수 있습니다.')
             else:
                 records = keywords.fillna('').to_dict('records')
                 if category:
@@ -444,7 +444,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
                     related_candidates = (semantic_candidates((context or query)[:2000], records, 10)
                                           if records else [])
                 except (AuxiliaryUnavailable, ValueError) as exc:
-                    warnings.append(f'키워드 의미 관련 후보를 만들지 못했습니다: {exc}')
+                    warnings.append(f'임베딩 기반 의미 유사도 후보를 만들지 못했습니다: {exc}')
 
     if scope in {'internal', 'all'}:
         rows, method = search_documents(repository, f'{query}\n{context}'[:2000],

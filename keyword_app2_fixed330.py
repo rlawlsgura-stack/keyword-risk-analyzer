@@ -3918,7 +3918,7 @@ def render_regulation_chat_tab():
         use_llm = (st.checkbox("AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9", value=True,
                                key="regulation_chat_use_llm") if corpus_ready else False)
         include_keyword_candidates = (st.checkbox(
-            "키워드 의미 관련 후보 표시 (위험 판정에 반영하지 않음)", value=False,
+            "임베딩 기반 의미 유사도 검색 (위험 판정에 반영하지 않음)", value=False,
             key="regulation_chat_related_candidates",
             disabled=scope_label in {"국가법령정보센터", "사내 규정 문서"}) if corpus_ready else False)
         selected_ocr = st.multiselect(
@@ -3968,7 +3968,7 @@ def render_regulation_chat_tab():
                     _selectable_dataframe(pd.DataFrame(matches), hide_index=True, width="stretch", alt="법령 조문에서 확인한 키워드 DB 결과")
             related = turn["result"].get("related_candidates", [])
             if related:
-                with st.expander("의미상 관련 후보 · 심의자 검토용"):
+                with st.expander("임베딩 기반 의미 유사 후보 · 심의자 검토용"):
                     _selectable_dataframe(pd.DataFrame(related), hide_index=True, width="stretch", alt="위험 판정에 반영되지 않은 의미 관련 키워드 후보")
             sources = turn["result"].get("sources", [])
             if sources:
