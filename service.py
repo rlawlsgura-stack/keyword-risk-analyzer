@@ -1,4 +1,4 @@
-"""The same matching and post-match filters for Streamlit and FastAPI."""
+"""Matching and post-match filters for the API."""
 from dataclasses import asdict, replace
 import hashlib
 import json
@@ -128,7 +128,7 @@ def analyze(repository, request, actor):
 
 
 def analyze_current(repository, request, actor):
-    """Current Streamlit text rules with independent history and candidate writes."""
+    """Current text rules with independent history and candidate writes."""
     from approved_matching import SETTING_NAME, match_text as match_approved
     from auxiliary_analysis import extract_unmatched_term_surfaces
 
@@ -156,7 +156,7 @@ def analyze_current(repository, request, actor):
     try:
         repository.collect_unmatched_terms(analysis_id, candidates)
     except Exception:
-        # Streamlit keeps this collection pending but still displays the analysis.
+        # Keep this collection pending while still displaying the analysis.
         # React retries the same request ID and recomputes the same candidates.
         logger.exception('Could not persist unmatched candidates for analysis %s', analysis_id)
         collection_pending = True

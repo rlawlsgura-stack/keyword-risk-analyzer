@@ -1,6 +1,6 @@
 # 심의챗봇 검색 운영 안내
 
-운영 React 화면과 Streamlit 보조 화면은 같은 FastAPI 심의챗봇을 사용합니다. 검색 범위는 국가법령정보센터, 사내 규정 문서, 키워드 DB, 통합 검색입니다. 질문 방향은 별도로 선택합니다. 검색 결과는 심의자의 근거 검토를 돕고, 기존 키워드 위험 판정을 변경하지 않습니다.
+운영 React 화면은 FastAPI 심의챗봇을 사용합니다. 검색 범위는 국가법령정보센터, 사내 규정 문서, 키워드 DB, 통합 검색입니다. 질문 방향은 별도로 선택합니다. 검색 결과는 심의자의 근거 검토를 돕고, 기존 키워드 위험 판정을 변경하지 않습니다.
 
 ## 사내 문서 등록과 버전
 
@@ -45,7 +45,7 @@ API 서비스의 비밀 환경변수로 `OPENAI_API_KEY`와 `REGULATION_LLM_MODE
 
 ## 서버 설정
 
-`LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `REGULATION_API_URL`은 Streamlit에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`이므로 AI 근거 검토·추가 검색을 운영에서 사용하려면 API 서비스에 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정해야 합니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
+`LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `VITE_API_BASE_URL`은 React에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`이므로 AI 근거 검토·추가 검색을 운영에서 사용하려면 API 서비스에 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정해야 합니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
 
 심의챗봇 아래의 월간 OpenAI 사용량 표시에는 `supabase/migrations/20261112112545_openai_usage_meter.sql`과 `supabase/migrations/20261112112622_openai_usage_service_role_policy.sql`을 적용해야 합니다. 이 집계는 심의챗봇의 LLM 및 사내 문서 임베딩 호출만 포함합니다. 요금 추정에는 설정된 모델의 1M 토큰당 입력·출력 가격을 `REGULATION_LLM_INPUT_USD_PER_1M`, `REGULATION_LLM_OUTPUT_USD_PER_1M`에 입력하고, 선택적으로 캐시 입력 가격을 `REGULATION_LLM_CACHED_INPUT_USD_PER_1M`에 입력합니다. 월 예산을 표시하려면 `REGULATION_CHAT_MONTHLY_BUDGET_USD`를 설정합니다. 사내 문서 임베딩은 고정 모델 `text-embedding-3-small`을 사용하며, `OPENAI_EMBEDDING_INPUT_USD_PER_1M`에 가격을 설정합니다.
 

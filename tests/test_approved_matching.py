@@ -72,49 +72,5 @@ class ApprovedMatchingTests(unittest.TestCase):
         repeated = match_text('노화와 노화', df, config=self.config)
         self.assertEqual(len(repeated), len(terms) * 2)
 
-    def test_admin_approval_ui_and_existing_result_contract(self):
-        from streamlit.testing.v1 import AppTest
-        from test_integration import MemoryRepository
-        from matching_engine import MATCH_MODES
-        from approved_matching import SETTING_NAME
-        repository = MemoryRepository()
-        repository.df.loc[0, ['kwd_no', '키워드명']] = ['A', '안티에이징']
-        settings = {}
-        actor = {'id': str(uuid4()), 'email': 'admin@example.test', 'app_metadata': {'role': 'admin'}}
-        with patch.dict(os.environ, {'STORAGE_BACKEND': 'supabase',
-                                     'SUPABASE_URL': 'https://example.supabase.co',
-                                     'SUPABASE_SECRET_KEY': 'test-only'}), \
-             patch('repository.SupabaseRepository.user', return_value=actor), \
-             patch('repository.SupabaseRepository.load_keywords', side_effect=repository.load_keywords), \
-             patch('repository.SupabaseRepository.load_setting', side_effect=lambda k, default: settings.get(k, default)), \
-             patch('repository.SupabaseRepository.save_setting', side_effect=settings.__setitem__), \
-             patch('repository.SupabaseRepository.load_hits', side_effect=repository.load_hits), \
-             patch('repository.SupabaseRepository.collect_unmatched_terms'), \
-             patch('repository.SupabaseRepository.record_analysis') as record:
-            app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'keyword_app2_fixed329.py'))
-            app.session_state['auth_session'] = {'access_token': 'test-token', 'expires_at': 9999999999}
-            app.session_state['match_mode'] = MATCH_MODES['similar']
-            app.run(timeout=30)
-            self.assertFalse(app.exception)
-            app.text_area[0].input('에이징 관리와 에이징 관리. 티에이')
-            app.button(key='btn_analyze').click().run(timeout=30)
-            record.assert_not_called()
-            editor = next(area for area in app.text_area if (area.key or '').startswith('approved_partial_text_'))
-            editor.input('에이징')
-            next(button for button in app.button if button.label == '승인 표현 저장').click().run(timeout=30)
-            self.assertEqual(settings[SETTING_NAME]['A']['expressions'], ['에이징'])
-            app.button(key='btn_analyze').click().run(timeout=30)
-            self.assertFalse(app.exception)
-            self.assertEqual(app.session_state['analysis_count'], 1)
-            self.assertEqual(len(app.session_state['analysis_df_full']), 2)
-            self.assertIn("data-kwd='A'", app.session_state['analysis_highlight_html'])
-            self.assertNotIn('실제 일치 문구', app.session_state['analysis_df_display_unique'].columns)
-            self.assertEqual(record.call_args.args[-1]['unique_keywords'], ['A'])
-            actor['app_metadata']['role'] = 'member'
-            app.run(timeout=30)
-            self.assertFalse(app.exception)
-            self.assertFalse(any(button.label == '승인 표현 저장' for button in app.button))
-
-
 if __name__ == '__main__':
     unittest.main()

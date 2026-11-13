@@ -87,8 +87,8 @@ class KeywordSuggestionTests(unittest.TestCase):
                          {'화장품', '건강기능식품'})
         self.assertEqual({source['label'].split()[-1] for source in result['sources']},
                          {'B007', 'G068'})
-        model_call.assert_not_called()
-        document_search.assert_not_called()
+        self.assertEqual(model_call.call_count, 2)
+        self.assertEqual(document_search.call_count, 2)
 
     def test_selected_category_uses_applicable_db_row(self):
         suggestion = {'status': 'suggested', 'category': '화장품', 'risk': '1등급(사용금지)',

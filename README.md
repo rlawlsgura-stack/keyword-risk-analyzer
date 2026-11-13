@@ -1,13 +1,10 @@
 # Keyword Risk Analyzer
 
-Current local development version: **FIXED332** (`keyword_app2_fixed330.py`).
-The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings. The Streamlit implementation remains available as a fallback during the transition.
-For work across PCs, see the [QA continuation handoff](docs/qa/WORK_HANDOFF.md); it records the remaining browser-based parity checks.
-`run_latest.ps1` checks Supabase Auth connectivity first, then starts the local Streamlit fallback through `streamlit_cloud/app.py`. That entrypoint selects and logs the highest numbered FIXED application file. FIXED274 is preserved as the backup version; FIXED272, FIXED271 and FIXED270 are also retained.
+The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings.
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
-If maintaining the Streamlit fallback on Community Cloud, its app file path must be `streamlit_cloud/app.py` on branch `main`; do not point it at a numbered app file. Local OCR runs with the Python 3.13 `.venv-ocr313` environment. PaddleOCR is not supported on Python 3.14, so install both requirements files in a Python 3.13 environment:
+Local OCR runs with the Python 3.13 `.venv-ocr313` environment. Install both requirements files in a Python 3.13 environment:
 
 ```powershell
 py -3.13 -m venv .venv-ocr313
@@ -20,7 +17,6 @@ Start the local API with that OCR environment when using the React OCR screen:
 .\.venv-ocr313\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8002
 ```
 
-For Streamlit Community Cloud fallback deployments, select Python 3.13 in the app's Advanced settings because its runtime version is managed by Streamlit rather than repository files.
 Cloud login survives a page refresh in the same browser tab by keeping only the Supabase refresh token in session storage. Closing the tab clears that browser storage; access tokens continue to use Supabase's default roughly one-hour lifetime and refresh five minutes before expiry.
 
 ### Shared unmatched-expression collection
@@ -71,11 +67,10 @@ CSV mode is local development only and retains its session-local pool.
 초기 수집 자료의 출처와 검수 상태를 기록했습니다. 사내 승인 문서가 아직 등록되지 않은 경우 사내문서 검색 결과는 비어 있습니다.
 
 
-운영 React 화면은 FastAPI를 통해 공통 Python 분석 엔진과 Supabase 저장소를 사용합니다. Streamlit fallback은 API를 거치지 않고 공통 모듈을 직접 호출합니다.
+운영 React 화면은 FastAPI를 통해 공통 Python 분석 엔진과 Supabase 저장소를 사용합니다.
 
 ```text
 React (Render Static Site) ── FastAPI (Render Web Service) ── service.py / matching_engine.py ─ repository.py ─ Supabase
-Streamlit fallback ───────────────────────────────────────────┘
 ```
 
 ## 현재 구축 상태
@@ -112,13 +107,14 @@ API_DOCS_ENABLED=false
 `SUPABASE_SECRET_KEY`는 Supabase Dashboard의 Project Settings → API Keys에서 확인합니다.
 `sb_secret_...` 또는 기존 `service_role` 키를 사용합니다. publishable/anon 키는 이 서버 저장소용 키로 사용할 수 없습니다.
 로컬에서는 `.env`, 배포 서버에서는 환경 변수를 사용합니다. 프로세스 환경 변수가 파일보다 우선합니다.
-Streamlit Community Cloud에서는 `.streamlit/secrets.toml.example` 내용을 앱 Secrets에 설정할 수 있습니다.
 
 서로 다른 터미널에서 두 프로세스를 실행합니다.
 
 ```powershell
-# Streamlit: http://localhost:8501 (가장 높은 FIXED 버전 자동 선택)
-.\run_latest.ps1
+# React: http://127.0.0.1:5173
+cd frontend
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
 ```powershell
@@ -197,15 +193,15 @@ API에서 새 옵션을 생략/null로 주면 기존 `exact_relaxed` 호출을 �
 입력 후 각 저장 버튼을 눌러야 공통 적용됩니다. 기호는 한 줄에 하나씩 입력하며 쉼표도 그대로 저장할 수 있습니다.
 기호 목록을 비우면 기존 기본값으로 돌아갑니다. 동작하지 않던 자동 접미사 후보 안내는 화면에서 제거했습니다.
 
-Streamlit과 API는 공통 규칙을 읽어 이번 분석 옵션과 함께 변경 불가 `MatchingConfig`로 전달합니다.
+API는 공통 규칙을 읽어 이번 분석 옵션과 함께 변경 불가 `MatchingConfig`로 전달합니다.
 엔진은 비교 준비, 모드별 검출, 겹침 정리와 위치 정렬로 분리되어 있습니다.
 표시용 겹침 처리와 실제 검출 구간은 분리합니다. 명시적 별칭 관리와 기존 API 변형 규칙의 추가 변경은 후속 항목입니다.
 
-Streamlit은 로그인 전 데이터를 읽지 않고, 매 실행 시 Auth 서버에서 사용자와 역할을 확인합니다.
+React는 로그인 전 개인 데이터를 읽지 않고, API는 사용자 access token을 검증합니다.
 API도 Supabase 사용자 access token을 Auth 서버에서 검증합니다. 서명 검증 없이 JWT 내용을 신뢰하지 않습니다.
 
 `kra_` 테이블은 RLS를 켜고 `anon`·`authenticated`의 직접 접근을 차단했습니다.
-데이터 접근은 서버 비밀 키로만 실행합니다. 이 키는 RLS를 우회하므로 Streamlit/API의 권한 검사와 분석 소유자 검사가 접근 경계입니다.
+데이터 접근은 서버 비밀 키로만 실행합니다. 이 키는 RLS를 우회하므로 API의 권한 검사와 분석 소유자 검사가 접근 경계입니다.
 직접 클라이언트 접근을 허용하는 RLS 정책은 의도적으로 만들지 않았습니다.
 
 기존 `public.keywords`는 이 앱의 코드와 뷰에서 참조하지 않는 레거시 테이블입니다. `secure_legacy_keywords_table` migration을 적용해 RLS를 켰고 `anon`·`authenticated`의 읽기·쓰기 권한을 회수했으며, 서버 역할 권한은 유지했습니다.
@@ -230,7 +226,7 @@ Supabase 서버 비밀 키를 외부 API 호출자에게 전달하지 않습니�
 | GET | `/api/v1/keywords?offset=0&limit=100&q=필러` | 키워드 검색·페이지 조회 |
 | GET | `/api/v1/reports/top-keywords?days=7&limit=10` | 기간별 공유 통계 |
 
-키워드 쓰기는 기존 Streamlit 관리자 화면에서 수행합니다. 별도 쓰기 API는 추가하지 않았습니다.
+키워드 쓰기는 React 관리자 화면에서 API를 통해 수행합니다.
 `API_DOCS_ENABLED=true`이면 `/docs`에서 API를 확인할 수 있습니다.
 
 ```powershell

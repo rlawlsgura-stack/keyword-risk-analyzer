@@ -1,4 +1,4 @@
-"""Shared environment settings for Streamlit, API and import commands."""
+"""Environment settings for the API and import commands."""
 import os
 from pathlib import Path
 

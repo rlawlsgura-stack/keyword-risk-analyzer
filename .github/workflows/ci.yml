@@ -40,14 +40,13 @@ jobs:
           api.py app_config.py approved_matching.py auxiliary_analysis.py
           legislation_source.py matching_engine.py ocr_keyword_import.py
           regulation_assistant.py repository.py request_notifications.py
-          service.py unmatched_collection.py keyword_app2_fixed329.py
-          streamlit_cloud tests scripts
+          service.py unmatched_collection.py tests scripts
 
       - name: Test
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
       - name: Compile Python sources
-        run: python -m compileall -q *.py streamlit_cloud tests scripts
+        run: python -m compileall -q *.py tests scripts
 
   frontend:
     runs-on: ubuntu-latest
