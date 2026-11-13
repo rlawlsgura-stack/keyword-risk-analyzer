@@ -1,3 +1,9 @@
+## React 1.0.12 / API 1.1.1 - React-only repository
+
+- Remove the Streamlit UI, launch scripts, dependencies, and dedicated tests.
+- Keep the shared FastAPI OCR helpers and align CI and operating documentation with the React deployment.
+- Show the React package version consistently in the application.
+
 ## FIXED332 - Batch AI keyword suggestions
 
 - Allow up to five unmatched keywords per recommendation request, with at most two requests in parallel.

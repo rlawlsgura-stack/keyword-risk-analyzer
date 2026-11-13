@@ -30,7 +30,7 @@ from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documen
                                reindex_embeddings, save_turn)
 
 configure()
-app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.0',
+app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.1',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
 app.add_middleware(
