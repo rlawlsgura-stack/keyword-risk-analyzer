@@ -1,13 +1,40 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Dialog, Help } from '../components/ui.tsx'
 import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDocument, listRegulationDocuments, matchRegulationDocument, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
 import { koSorted, uniqueValues } from '../lib/catalog.ts'
 import { useStore } from '../store.tsx'
 
 type DocumentMatches = Awaited<ReturnType<typeof matchRegulationDocument>>
 
+function DocumentManagementHelp() {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [open])
+  return <button ref={ref} type="button" className="regulation-management-help" aria-label="사내 규정 문서 검색 대상 도움말"
+    aria-expanded={open} onClick={event => { event.preventDefault(); event.stopPropagation(); setOpen(value => !value) }}
+    onKeyDown={event => event.stopPropagation()}>
+    <span aria-hidden>?</span>
+    <span className={`regulation-management-tooltip${open ? ' open' : ''}`} role="tooltip">
+      <strong>적용 기간과 검색 대상 안내</strong>
+      <span><b>어떤 문서가 검색되나요?</b> 선택한 기준일이 문서의 시행일과 종료일 사이에 있고, 상태가 승인 또는 이전 버전이며, 카테고리가 맞는 문서가 검색 후보입니다. 종료일이 비어 있으면 종료일 제한 없이 적용 중인 것으로 봅니다. 초안은 검색하지 않습니다.</span>
+      <span><b>버전은 어떻게 선택하나요?</b> 같은 문서의 버전이 여러 개면 기준일에 실제 적용 중인 버전을 찾습니다. 새 버전이 시행되기 전 날짜에는 그때 유효했던 이전 버전이 선택될 수 있습니다. 기준일에 적용 기간이 겹치면 시행일이 더 늦은 버전이 우선하며, 시행일도 같으면 승인 시각이 더 늦은 버전이 우선합니다.</span>
+      <span><b>예시:</b> 1판의 적용 기간이 1월 1일~6월 30일이고 2판이 7월 1일부터 시행된다면, 5월 20일 기준 검색은 1판을 사용하고 8월 10일 기준 검색은 2판을 사용합니다. 아직 승인되지 않은 3판 초안은 어느 날짜에서도 검색 후보가 아닙니다.</span>
+      <span><b>본문 확인·의미 검색 색인:</b> 본문 확인은 내용을 미리 보는 기능입니다. 의미 검색 색인은 선택한 문서에 의미 검색용 자료를 만드는 기능입니다. 둘 다 검색 대상 문서를 지정하지는 않습니다. 실제 검색은 조건에 맞는 문서들을 대상으로 관련 문단을 찾고, 그중 최대 5개를 보여줍니다.</span>
+    </span>
+  </button>
+}
+
 export function RegulationDocuments() {
   const { catalog, dropdowns } = useStore()
   const [documents, setDocuments] = useState<RegulationDocument[]>([])
+  const [documentListOpen, setDocumentListOpen] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -65,7 +92,7 @@ export function RegulationDocuments() {
       setEffectiveTo('')
       setPreview(null)
       await refresh()
-      setNotice(result.unchanged ? '동일한 내용의 문서가 이미 등록되어 있어 중복 등록하지 않았습니다.' : '새 초안을 등록했습니다. 본문을 확인한 뒤 승인하세요.')
+      setNotice(result.unchanged ? '동일한 내용의 문서가 이미 등록되어 있어 중복 등록하지 않았습니다.' : '새 초안을 등록했습니다. 첨부파일 목록보기 버튼을 클릭하여 본문을 확인한 뒤 문서를 승인하세요.')
     } catch (cause) { setError(cause instanceof Error ? cause.message : '문서를 등록하지 못했습니다.') }
     finally { setBusy(false) }
   }
@@ -122,16 +149,16 @@ export function RegulationDocuments() {
         </select>
         <span className="caption">유사 후보는 참고용입니다. 수정본이라면 기존 문서를 선택하고, 별도 문서라면 새 문서로 등록하세요.</span>
       </label>}
-      <details className="regulation-document-dates"><summary>적용 기간 설정 · 선택</summary>
+      <details className="regulation-document-dates"><summary>적용 기간 설정 · 선택<DocumentManagementHelp /></summary>
         <label>시행일<input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} /></label>
         <label>종료일<input type="date" value={effectiveTo} min={effectiveFrom || undefined} onChange={e => setEffectiveTo(e.target.value)} /></label>
-        <span className="caption">시행일을 비우면 등록일을 적용합니다. 기존 승인본의 시행일이 미래라면 그 날짜를 사용합니다. 종료일을 비우면 기한 없이 검색됩니다.</span>
       </details>
     </form>
-    <p className="caption regulation-document-help">의미 검색 색인은 관리자 기능입니다. 문서의 <strong>본문 확인</strong>을 누르면 해당 문서의 색인 버튼이 활성화됩니다. 승인된 문서의 색인은 질문과 의미가 비슷한 문단도 찾아줍니다.</p>
-    <p className="caption">한 번에 파일 1개를 등록합니다. 파일당 최대 2MB이며, PDF는 200페이지 이하, 추출 본문은 250,000자, 검색 조각은 300개까지 가능합니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.</p>
+    <p className="caption">한 번에 파일 1개를 등록합니다. 원본은 비공개 파일 저장소에 보관하며 파일당 최대 50MB입니다. PDF는 200페이지 이하, 추출 본문은 250,000자, 검색 조각은 300개까지 가능합니다. 등록 문서 수 자체에는 앱 제한이 없지만 목록은 최신 200건까지 표시합니다.</p>
     {error && <div role="alert" className="chat-warning">{error}</div>}
-    {notice && <div role="status" className="caption">{notice}</div>}
+    {notice && <div role="status" className="regulation-document-notice">{notice}</div>}
+    <button type="button" className="btn small regulation-document-list-open" onClick={() => setDocumentListOpen(true)}>첨부파일 목록 보기 ({documents.length})</button>
+    {documentListOpen && <Dialog title={<>{`첨부파일 목록 · ${documents.length}개`}<Help text="의미 검색 색인은 관리자 기능입니다. 문서의 본문 확인을 누르면 해당 문서의 색인 버튼이 활성화됩니다. 승인된 문서의 색인은 질문과 의미가 비슷한 문단도 찾아줍니다." /></>} onClose={() => setDocumentListOpen(false)} wide>
     <div className="regulation-document-list">{documents.map(doc => <div key={doc.id}>
       <strong>{doc.title}</strong> · {doc.source_key} · v{doc.version} · {doc.status === 'approved' ? '승인' : doc.status === 'draft' ? '초안' : '이전 버전'} · 시행 {doc.effective_from}
       <button type="button" onClick={() => void showPreview(doc.id)}>본문 확인</button>
@@ -143,5 +170,6 @@ export function RegulationDocuments() {
       <p>원본: {preview.original_name} · SHA-256: {preview.content_sha256}</p>
       {preview.chunks.map(chunk => <pre key={chunk.id}>{chunk.ordinal}. {chunk.content}</pre>)}
     </div>}
-  </details>
+    </Dialog>}
+   </details>
 }

@@ -42,13 +42,22 @@ class FakeRepository:
                      'content_sha256': 'a' * 64}]
         if name == 'save_regulation_turn':
             return '00000000-0000-0000-0000-000000000002'
-        if name == 'create_regulation_document':
+        if name == 'create_regulation_document_in_storage':
             return '00000000-0000-0000-0000-000000000003'
         if name == 'approve_regulation_document':
             return params['p_id']
         if name == 'delete_regulation_draft':
             return True
         raise AssertionError(name)
+
+    def upload_regulation_original(self, path, payload, mime_type):
+        self.calls.append(('storage_upload', {'path': path, 'size': len(payload), 'mime_type': mime_type}))
+
+    def cleanup_regulation_originals(self):
+        self.calls.append(('storage_cleanup', {}))
+
+    def delete_regulation_original(self, path):
+        self.calls.append(('storage_delete', {'path': path}))
 
     def request(self, method, path, *args, **kwargs):
         self.calls.append((method, path))
@@ -143,13 +152,15 @@ class RegulationCorpusApiTests(unittest.TestCase):
                 headers={'Authorization': 'Bearer test'})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['status'], 'draft')
-        created = next(params for name, params in repository.calls if name == 'create_regulation_document')
+        created = next(params for name, params in repository.calls if name == 'create_regulation_document_in_storage')
         self.assertRegex(created['p_source_key'], r'^doc-[0-9a-f]{24}$')
         self.assertEqual(created['p_title'], 'guidance')
         self.assertEqual(created['p_category'], '화장품')
         self.assertEqual(created['p_effective_from'], datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat())
         self.assertIsNone(created['p_effective_to'])
         self.assertEqual(created['p_chunks'][0]['ordinal'], 1)
+        self.assertRegex(created['p_storage_path'], r'^originals/[0-9a-f]{48}$')
+        self.assertNotIn('p_original_base64', created)
         self.assertIsNone(created['p_chunks'][0]['embedding'])
         document_id = response.json()['id']
         approved = client.post(f'/api/v1/admin/regulation/documents/{document_id}/approve',
@@ -196,7 +207,7 @@ class RegulationCorpusApiTests(unittest.TestCase):
                 files={'file': ('renamed-guidance.txt', '새로운 화장품 광고 심의 지침입니다.'.encode('utf-8'))},
                 headers={'Authorization': 'Bearer test'})
         self.assertEqual(response.status_code, 200, response.text)
-        created = next(params for name, params in repository.calls if name == 'create_regulation_document')
+        created = next(params for name, params in repository.calls if name == 'create_regulation_document_in_storage')
         self.assertEqual(created['p_source_key'], 'old-manual-key')
         self.assertIsNone(created['p_effective_to'])
 
@@ -217,7 +228,7 @@ class RegulationCorpusApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['id'], repository.documents[0]['id'])
         self.assertTrue(response.json()['unchanged'])
-        self.assertFalse(any(name == 'create_regulation_document' for name, _ in repository.calls))
+        self.assertFalse(any(name == 'create_regulation_document_in_storage' for name, _ in repository.calls))
 
     def test_identical_content_in_multiple_documents_requires_choice(self):
         repository = FakeRepository('admin')
@@ -231,7 +242,7 @@ class RegulationCorpusApiTests(unittest.TestCase):
             data={'category': '화장품'}, files={'file': ('guide.txt', payload)},
             headers={'Authorization': 'Bearer test'})
         self.assertEqual(response.status_code, 409)
-        self.assertFalse(any(name == 'create_regulation_document' for name, _ in repository.calls))
+        self.assertFalse(any(name == 'create_regulation_document_in_storage' for name, _ in repository.calls))
 
     def test_admin_can_keep_identical_file_as_separate_document(self):
         repository = FakeRepository('admin')
@@ -247,7 +258,7 @@ class RegulationCorpusApiTests(unittest.TestCase):
                 data={'category': '공산품', 'new_document': 'true'},
                 files={'file': ('other.txt', payload)}, headers={'Authorization': 'Bearer test'})
         self.assertEqual(response.status_code, 200, response.text)
-        created = next(params for name, params in repository.calls if name == 'create_regulation_document')
+        created = next(params for name, params in repository.calls if name == 'create_regulation_document_in_storage')
         self.assertNotEqual(created['p_source_key'], 'manual-a')
 
     def test_match_endpoint_suggests_similar_document_for_review(self):

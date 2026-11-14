@@ -385,7 +385,9 @@ def answer_regulation_question(request: dict[str, Any], repository) -> dict[str,
 
 
 def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, Any]:
-    scope = request['scope']
+    selected = request['scope']
+    scopes = (set(selected) if isinstance(selected, list) else
+              {'law', 'internal', 'keyword'} if selected == 'all' else {selected})
     query = request['query'].strip()
     category = request.get('category', '')
     context = request.get('context_text', '')[:20000]
@@ -397,7 +399,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
     warnings: list[str] = []
     law_to_keywords = request['direction'] == 'law_to_keywords'
 
-    if law_to_keywords and scope in {'internal', 'keyword'} and not request.get('use_llm'):
+    if law_to_keywords and 'law' not in scopes:
         return {'status': 'insufficient', 'administrator_review': False,
                 'answer': '법령 조문에서 등록 키워드를 찾으려면 국가법령정보센터 또는 통합 검색 범위를 선택해 주세요.',
                 'sources': [], 'keyword_matches': [], 'related_candidates': [],
@@ -413,23 +415,15 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
         sources.extend(legacy['sources'])
         matches.extend(legacy['keyword_matches'])
         tool_calls.extend(legacy['tool_calls'])
-        if request.get('include_keyword_candidates'):
-            if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
-                warnings.append('임베딩 기반 의미 유사도 검색은 서버 임베딩 설정 후 사용할 수 있습니다.')
-            else:
-                records = repository.load_keywords().fillna('').to_dict('records')
-                if category:
-                    records = [row for row in records if row.get('상품카테고리') == category]
-                try:
-                    related_candidates = (semantic_candidates(sources[-1]['text'][:2000], records, 10)
-                                          if records else [])
-                except (AuxiliaryUnavailable, ValueError) as exc:
-                    warnings.append(f'임베딩 기반 의미 유사도 후보를 만들지 못했습니다: {exc}')
-
-    if scope in {'keyword', 'all'} and not law_to_keywords:
+    if 'keyword' in scopes:
         keywords = repository.load_keywords()
         db_result = _db_source(keywords, f'{query}\n{context}', category)
-        matches = db_result['matches']
+        if law_to_keywords:
+            found = {(row.get('kwd_no'), row.get('키워드명')) for row in matches}
+            matches.extend(row for row in db_result['matches']
+                           if (row.get('kwd_no'), row.get('키워드명')) not in found)
+        else:
+            matches = db_result['matches']
         if db_result['source']:
             sources.append(db_result['source'])
         tool_calls.append({'tool': 'keyword_db', 'query': query})
@@ -446,7 +440,36 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
                 except (AuxiliaryUnavailable, ValueError) as exc:
                     warnings.append(f'임베딩 기반 의미 유사도 후보를 만들지 못했습니다: {exc}')
 
-    if scope in {'internal', 'all'}:
+    if law_to_keywords and request.get('include_keyword_candidates') and 'keyword' not in scopes:
+        if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
+            warnings.append('임베딩 기반 의미 유사도 검색은 서버 임베딩 설정 후 사용할 수 있습니다.')
+        else:
+            records = repository.load_keywords().fillna('').to_dict('records')
+            if category:
+                records = [row for row in records if row.get('상품카테고리') == category]
+            try:
+                law_source = next((source for source in sources if source['id'].startswith('LAW')),
+                                  None)
+                related_candidates = (semantic_candidates((law_source or sources[-1])['text'][:2000],
+                                                          records, 10) if records else [])
+            except (AuxiliaryUnavailable, ValueError, IndexError) as exc:
+                warnings.append(f'임베딩 기반 의미 유사도 후보를 만들지 못했습니다: {exc}')
+
+    if (request.get('include_keyword_candidates') and 'internal' in scopes
+            and 'keyword' not in scopes and not law_to_keywords):
+        if os.getenv('REGULATION_EMBEDDINGS_ENABLED', 'false').lower() != 'true':
+            warnings.append('임베딩 기반 의미 유사도 검색은 서버 임베딩 설정 후 사용할 수 있습니다.')
+        else:
+            records = repository.load_keywords().fillna('').to_dict('records')
+            if category:
+                records = [row for row in records if row.get('상품카테고리') == category]
+            try:
+                related_candidates = (semantic_candidates((context or query)[:2000], records, 10)
+                                      if records else [])
+            except (AuxiliaryUnavailable, ValueError) as exc:
+                warnings.append(f'임베딩 기반 의미 유사 후보를 만들지 못했습니다: {exc}')
+
+    if 'internal' in scopes:
         rows, method = search_documents(repository, f'{query}\n{context}'[:2000],
                                         category, request['as_of'])
         search_methods.append(method)
@@ -460,7 +483,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
                 'version': row['version'], 'content_sha256': row['content_sha256']})
         tool_calls.append({'tool': 'internal_guidance', 'query': query, 'method': method})
 
-    if scope in {'law', 'all'} and not law_to_keywords:
+    if 'law' in scopes and not law_to_keywords:
         terms = [term for term in dict.fromkeys(re.findall(r'[가-힣A-Za-z0-9]{2,}', query))
                  if term not in {'법령', '근거', '광고', '문구', '관련', '알려주세요'}][:2]
         if not terms:

@@ -2,8 +2,21 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 
 /* ---------- small primitives ---------- */
 export function Help({ text }: { text?: string }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    return () => document.removeEventListener('pointerdown', closeOutside)
+  }, [open])
   if (!text) return null
-  return <span className="help" title={text} aria-label={text}>?</span>
+  return <button ref={ref} type="button" className="help" aria-label="도움말 보기" aria-expanded={open}
+    onClick={event => { event.preventDefault(); event.stopPropagation(); setOpen(value => !value) }}>
+    ?<span className={`help-tooltip${open ? ' open' : ''}`} role="tooltip">{text}</span>
+  </button>
 }
 
 export function FieldLabel({ label, help, htmlFor }: { label: ReactNode; help?: string; htmlFor?: string }) {

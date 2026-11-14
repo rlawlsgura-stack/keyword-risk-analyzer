@@ -26,6 +26,12 @@ export function RequestsTab() {
   const [notifMsg, setNotifMsg] = useState<{ kind: 'success' | 'error'; text: string } | null>(null)
   const [notifError, setNotifError] = useState('')
 
+  const openRequest = (request: KeywordRequestRecord) => {
+    setSelectedId(request.id)
+    setFlash('')
+    setOpen(request)
+  }
+
   const load = useCallback(async () => {
     try {
       const all = (await loadKeywordRequests()).items
@@ -44,7 +50,7 @@ export function RequestsTab() {
   }, [isAdmin])
 
   const columns = [
-    { key: 'receipt', label: '접수번호', render: (r: KeywordRequestRecord) => receipt(r) },
+    { key: 'receipt', label: '접수번호', render: (r: KeywordRequestRecord) => <button type="button" className="request-receipt-link" aria-label={`${receipt(r)} 문의 상세 보기`} onClick={e => { e.stopPropagation(); openRequest(r) }}>{receipt(r)}</button> },
     ...(isAdmin ? [{ key: 'requester_email', label: '요청자' }] : []),
     { key: 'keyword', label: '키워드', render: (r: KeywordRequestRecord) => `${r.kwd_no || '신규'} | ${r.keyword_name || '신규 키워드'}` },
     { key: 'request_type', label: '문의 유형', render: (r: KeywordRequestRecord) => typeLabel(r.request_type) },
@@ -100,7 +106,7 @@ export function RequestsTab() {
                     {columns.map(c => <td key={c.key} className={`request-col-${c.key}`}>{c.key === 'detail'
                       ? <Button small className={isAdmin && (r.needs_attention ?? r.status !== '처리완료') ? 'request-needs-attention' : undefined}
                           title={isAdmin && (r.needs_attention ?? r.status !== '처리완료') ? '답변 또는 후속 처리 필요' : undefined}
-                          onClick={() => { setSelectedId(r.id); setFlash(''); setOpen(r) }}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
+                          onClick={() => openRequest(r)}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
                       : c.render ? c.render(r) : String(r[c.key] ?? '')}</td>)}
                   </tr>
                 ))}

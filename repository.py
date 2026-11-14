@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pandas as pd
 import requests
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import quote, urlencode, urlsplit
 
 from matching_engine import DB_COLS
 
@@ -84,6 +84,57 @@ class SupabaseRepository:
 
     def rpc(self, name, **params):
         return self.request('POST', '/rest/v1/rpc/kra_' + name, params)
+
+    def upload_regulation_original(self, path, payload, mime_type):
+        headers = {'apikey': self.key, 'Content-Type': mime_type,
+                   'x-upsert': 'false'}
+        if not self.key.startswith('sb_secret_'):
+            headers['Authorization'] = 'Bearer ' + self.key
+        try:
+            response = requests.post(
+                self.url + '/storage/v1/object/regulation-documents/' + quote(path, safe='/'),
+                headers=headers, data=payload, timeout=(10, 120))
+        except requests.RequestException as exc:
+            raise StorageError('Supabase Storage upload failed') from exc
+        if response.status_code >= 400:
+            raise StorageError(f'Supabase Storage upload failed ({response.status_code})')
+
+    def download_regulation_original(self, path):
+        headers = {'apikey': self.key}
+        if not self.key.startswith('sb_secret_'):
+            headers['Authorization'] = 'Bearer ' + self.key
+        try:
+            response = requests.get(
+                self.url + '/storage/v1/object/regulation-documents/' + quote(path, safe='/'),
+                headers=headers, timeout=(10, 120))
+        except requests.RequestException as exc:
+            raise StorageError('Supabase Storage download failed') from exc
+        if response.status_code >= 400:
+            raise StorageError(f'Supabase Storage download failed ({response.status_code})')
+        return response.content, response.headers.get('Content-Type', 'application/octet-stream')
+
+    def delete_regulation_original(self, path):
+        headers = {'apikey': self.key, 'Authorization': 'Bearer ' + self.key,
+                   'Content-Type': 'application/json'}
+        if self.key.startswith('sb_secret_'):
+            headers.pop('Authorization')
+        try:
+            response = requests.delete(
+                self.url + '/storage/v1/object/regulation-documents',
+                headers=headers, json={'prefixes': [path]}, timeout=(5, 30))
+        except requests.RequestException as exc:
+            raise StorageError('Supabase Storage delete failed') from exc
+        if response.status_code >= 400:
+            raise StorageError(f'Supabase Storage delete failed ({response.status_code})')
+
+    def cleanup_regulation_originals(self, limit=50):
+        rows = self.request('GET', '/rest/v1/kra_regulation_storage_deletions'
+                            '?select=storage_path&order=created_at.asc&limit=' + str(limit)) or []
+        for row in rows:
+            path = row['storage_path']
+            self.delete_regulation_original(path)
+            self.request('DELETE', '/rest/v1/kra_regulation_storage_deletions?'
+                         + urlencode({'storage_path': 'eq.' + path}))
 
     def record_openai_usage(self, month_start, usage):
         return self.rpc(

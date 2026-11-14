@@ -1,11 +1,12 @@
 """Versioned private guidance corpus and evidence retrieval."""
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
+import logging
 import os
 import re
+import secrets
 import unicodedata
 from datetime import date
 from urllib.parse import urlencode
@@ -18,14 +19,15 @@ from kiwi_runtime import get_kiwi, tokenization_lock
 from openai_usage import record_usage, usage_event
 
 
-MAX_DOCUMENT_BYTES = 2 * 1024 * 1024
+MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 MAX_DOCUMENT_CHARS = 250_000
 EMBEDDING_MODEL = 'text-embedding-3-small'
+logger = logging.getLogger(__name__)
 
 
 def extract_text(filename: str, payload: bytes) -> str:
     if not payload or len(payload) > MAX_DOCUMENT_BYTES:
-        raise ValueError('문서는 1바이트 이상 2MB 이하로 등록해 주세요.')
+        raise ValueError('문서는 1바이트 이상 50MB 이하로 등록해 주세요.')
     ext = filename.lower().rsplit('.', 1)[-1]
     if ext in {'txt', 'md'}:
         try:
@@ -126,17 +128,34 @@ def create_document(repository, *, source_key: str, version: str, title: str,
     mime = {'txt': 'text/plain', 'md': 'text/markdown',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'pdf': 'application/pdf'}[filename.lower().rsplit('.', 1)[-1]]
-    return repository.rpc('create_regulation_document',
-        p_source_key=source_key, p_version=version, p_title=title, p_category=category,
-        p_effective_from=effective_from.isoformat(),
-        p_effective_to=effective_to.isoformat() if effective_to else None,
-        p_content_sha256=hashlib.sha256(payload).hexdigest(),
-        p_original_name=filename[:200], p_original_base64=base64.b64encode(payload).decode('ascii'),
-        p_mime_type=mime, p_created_by=actor_id,
-        p_chunks=[{'ordinal': i + 1, 'content': chunk,
-                   'search_tokens': search_tokens(chunk),
-                   'embedding': None, 'embedding_model': None}
-                  for i, chunk in enumerate(chunks)])
+    storage_path = 'originals/' + secrets.token_hex(24)
+    repository.upload_regulation_original(storage_path, payload, mime)
+    try:
+        result = repository.rpc('create_regulation_document_in_storage',
+            p_source_key=source_key, p_version=version, p_title=title, p_category=category,
+            p_effective_from=effective_from.isoformat(),
+            p_effective_to=effective_to.isoformat() if effective_to else None,
+            p_content_sha256=hashlib.sha256(payload).hexdigest(),
+            p_original_name=filename[:200], p_storage_path=storage_path,
+            p_mime_type=mime, p_created_by=actor_id,
+            p_chunks=[{'ordinal': i + 1, 'content': chunk,
+                       'search_tokens': search_tokens(chunk),
+                       'embedding': None, 'embedding_model': None}
+                      for i, chunk in enumerate(chunks)])
+    except Exception:
+        try:
+            linked = repository.request('GET', '/rest/v1/kra_regulation_documents?'
+                + urlencode({'select': 'id', 'storage_path': 'eq.' + storage_path, 'limit': '1'}))
+            if not linked:
+                repository.delete_regulation_original(storage_path)
+        except Exception:
+            logger.warning('Unlinked regulation original cleanup deferred', exc_info=True)
+        raise
+    try:
+        repository.cleanup_regulation_originals()
+    except Exception:
+        logger.warning('Regulation original cleanup deferred', exc_info=True)
+    return result
 
 
 _DOCUMENT_FIELDS = 'id,source_key,version,title,category,status,content_sha256,effective_from,effective_to,original_name,approved_at'

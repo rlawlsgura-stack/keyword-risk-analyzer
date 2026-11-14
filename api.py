@@ -8,6 +8,7 @@ import unicodedata
 from threading import Lock
 from typing import Literal
 from uuid import UUID
+from urllib.parse import quote
 
 import requests
 from datetime import date, datetime
@@ -45,6 +46,7 @@ app.add_middleware(
     ).split(',') if origin.strip()],
     allow_methods=['GET', 'POST', 'PUT', 'DELETE'],
     allow_headers=['Authorization', 'Content-Type'],
+    expose_headers=['Content-Disposition'],
 )
 bearer = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
@@ -112,7 +114,8 @@ class RegulationQuestionRequest(BaseModel):
     context_text: str = Field(default='', max_length=20000)
     category: str = Field(default='', max_length=100)
     conversation_history: list[RegulationConversationMessage] = Field(default_factory=list, max_length=12)
-    scope: Literal['legacy', 'law', 'internal', 'keyword', 'all'] = 'legacy'
+    scope: (Literal['legacy', 'law', 'internal', 'keyword', 'all']
+            | list[Literal['law', 'internal', 'keyword']]) = 'legacy'
     use_llm: bool = False
     include_keyword_candidates: bool = False
     thread_id: UUID | None = None
@@ -124,6 +127,13 @@ class RegulationQuestionRequest(BaseModel):
         if sum(len(message.content) for message in messages) > 20000:
             raise ValueError('conversation history must not exceed 20000 characters')
         return messages
+
+    @field_validator('scope')
+    @classmethod
+    def validate_scope_selection(cls, scope):
+        if isinstance(scope, list) and (not scope or len(scope) != len(set(scope))):
+            raise ValueError('Select one or more distinct search modes')
+        return scope
 
 
 class CurrentAnalysisRequest(BaseModel):
@@ -1606,8 +1616,12 @@ def regulation_question(body: RegulationQuestionRequest, actor=Depends(current_a
         result = answer_regulation_question(request_data, repository)
         record_usage(repository, result.pop('openai_usage', None))
         if actor != 'integration':
+            mode = ('all' if len(body.scope) == 3 else
+                    ','.join(scope for scope in ('law', 'internal', 'keyword')
+                             if scope in body.scope)) \
+                if isinstance(body.scope, list) else body.scope
             result['thread_id'] = save_turn(repository, str(body.thread_id) if body.thread_id else None,
-                                            actor, body.scope, body.query, result['answer'],
+                                            actor, mode, body.query, result['answer'],
                                             result.get('sources', []))
         try:
             result['usage_summary'] = _openai_usage_summary(repository)
@@ -1801,6 +1815,40 @@ def preview_regulation_document(document_id: UUID, actor=Depends(current_actor),
     return document
 
 
+@app.get('/api/v1/regulation/documents/{document_id}/full-text')
+def read_regulation_document_full_text(document_id: UUID, actor=Depends(current_actor),
+        repository=Depends(get_repository)):
+    document = load_document_preview(repository, str(document_id))
+    if document is None or document.get('status') != 'approved':
+        raise HTTPException(404, 'Approved document not found')
+    return {
+        'id': str(document_id),
+        'title': document.get('title') or document.get('original_name') or '사내 규정 문서',
+        'version': document.get('version') or '',
+        'original_name': document.get('original_name') or '',
+        'text': '\n\n'.join(str(chunk.get('content') or '') for chunk in document['chunks']),
+    }
+
+
+@app.get('/api/v1/regulation/documents/{document_id}/download')
+def download_regulation_document_original(document_id: UUID, actor=Depends(current_actor),
+        repository=Depends(get_repository)):
+    rows = repository.request(
+        'GET', '/rest/v1/kra_regulation_documents?'
+        f'id=eq.{document_id}&select=id,status,original_name,storage_path,mime_type&limit=1') or []
+    if not rows or rows[0].get('status') != 'approved' or not rows[0].get('storage_path'):
+        raise HTTPException(404, 'Approved original file not found')
+    metadata = rows[0]
+    try:
+        payload, storage_mime = repository.download_regulation_original(metadata['storage_path'])
+    except StorageError as exc:
+        logger.warning('Regulation original download failed', exc_info=True)
+        raise HTTPException(503, 'Could not download the original document') from exc
+    filename = str(metadata.get('original_name') or 'regulation-document')
+    return Response(content=payload, media_type=metadata.get('mime_type') or storage_mime,
+                    headers={'Content-Disposition': f"attachment; filename*=UTF-8''{quote(filename, safe='')}"})
+
+
 @app.post('/api/v1/admin/regulation/documents/{document_id}/embeddings')
 def build_regulation_embeddings(document_id: UUID, actor=Depends(current_actor),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
@@ -1833,8 +1881,13 @@ def delete_regulation_document(document_id: UUID, actor=Depends(current_actor),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         repository=Depends(get_repository)):
     regulation_admin(actor, credentials, repository)
-    if not repository.rpc('delete_regulation_document', p_id=str(document_id)):
+    result = repository.rpc('delete_regulation_document_with_storage', p_id=str(document_id))
+    if not result or not result.get('deleted'):
         raise HTTPException(404, 'Document not found')
+    try:
+        repository.cleanup_regulation_originals()
+    except StorageError:
+        logger.warning('Regulation original cleanup deferred', exc_info=True)
     return {'id': str(document_id), 'deleted': True}
 
 

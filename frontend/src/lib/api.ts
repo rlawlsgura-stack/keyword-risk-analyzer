@@ -105,15 +105,42 @@ export const resetReport = (scope: 'all' | 'last-7-days') =>
 /* ---------- regulation ---------- */
 export type RegulationConversationMessage = { role: 'user' | 'assistant'; content: string }
 export type RegulationScope = 'law' | 'internal' | 'keyword' | 'all'
+export type RegulationScopeSelection = RegulationScope | Exclude<RegulationScope, 'all'>[]
 export type RegulationDocument = { id: string; source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string | null; status: string; original_name: string; approved_at: string | null }
 export type RegulationThread = { id: string; mode: string; created_at: string; updated_at: string }
-export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScope; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
+export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScopeSelection; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
 export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
 export const loadRegulationUsage = () => request<RegulationUsageSummary>('/api/v1/regulation/usage')
 export const listRegulationDocuments = () => request<{ items: RegulationDocument[] }>('/api/v1/admin/regulation/documents')
 export const previewRegulationDocument = (id: string) => request<RegulationDocument & { chunks: { id: string; ordinal: number; content: string; embedding_model: string | null }[]; content_sha256: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`)
+export const loadRegulationDocumentFullText = (id: string) => request<{ id: string; title: string; version: string; original_name: string; text: string }>(`/api/v1/regulation/documents/${encodeURIComponent(id)}/full-text`)
+export async function downloadRegulationDocumentOriginal(id: string): Promise<void> {
+  const token = await accessToken()
+  const response = await fetch(`${API_BASE_URL}/api/v1/regulation/documents/${encodeURIComponent(id)}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!response.ok) {
+    let message = `원본 파일 다운로드에 실패했습니다 (${response.status}).`
+    try {
+      const body = await response.json() as { detail?: string }
+      if (body.detail) message = body.detail
+    } catch { /* Keep the status-based message for non-JSON errors. */ }
+    throw new ApiError(response.status, message)
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  const filename = encodedName ? decodeURIComponent(encodedName) : 'regulation-document'
+  const objectUrl = URL.createObjectURL(await response.blob())
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
 export const matchRegulationDocument = (file: File) => {
   const form = new FormData()
   form.append('file', file, file.name)
