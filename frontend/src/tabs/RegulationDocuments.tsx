@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDocument, listRegulationDocuments, matchRegulationDocument, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
+import { koSorted, uniqueValues } from '../lib/catalog.ts'
+import { useStore } from '../store.tsx'
 
 type DocumentMatches = Awaited<ReturnType<typeof matchRegulationDocument>>
 
 export function RegulationDocuments() {
+  const { catalog, dropdowns } = useStore()
   const [documents, setDocuments] = useState<RegulationDocument[]>([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -49,7 +52,7 @@ export function RegulationDocuments() {
   const upload = async (event: FormEvent) => {
     event.preventDefault()
     if (!file || busy || matching || !matches || !replacementChoice) return
-    if (!category.trim()) { setError('상품 카테고리를 입력하세요. 공통 규정이면 "공통"을 입력하세요.'); return }
+    if (!category) { setError('상품 카테고리를 선택하세요. 공통 규정이면 "공통"을 선택하세요.'); return }
     setBusy(true)
     setNotice('')
     try {
@@ -92,10 +95,18 @@ export function RegulationDocuments() {
   }
   const suggestedIds = new Set([...(matches?.exact.map(doc => doc.id) ?? []),
     ...(matches?.candidates.map(candidate => candidate.document.id) ?? [])])
+  const categoryOptions = koSorted(new Set([
+    ...(dropdowns?.opt_categories ?? []),
+    ...uniqueValues(catalog?.rows ?? [], '상품카테고리'),
+  ].map(value => value.trim()).filter(value => value && value !== '공통')))
   return <details className="regulation-documents"><summary>사내 규정 문서 관리 · 관리자</summary>
     <p>상품 카테고리와 파일을 등록하면 제목·식별자·버전이 자동 생성됩니다. 파일 내용으로 동일 문서와 유사한 기존 문서를 찾고, 수정본은 관리자가 연결할 문서를 선택합니다.</p>
     <form className="regulation-document-form" onSubmit={upload}>
-      <label>상품 카테고리<input required disabled={busy} value={category} onChange={e => setCategory(e.target.value)} placeholder="예: 화장품 또는 공통" /></label>
+      <label>상품 카테고리<select required disabled={busy} value={category} onChange={e => setCategory(e.target.value)}>
+        <option value="">상품 카테고리 선택</option>
+        <option value="공통">공통</option>
+        {categoryOptions.map(value => <option key={value} value={value}>{value}</option>)}
+      </select></label>
       <label>문서 파일<input ref={fileInput} required disabled={busy} type="file" accept=".txt,.md,.docx,.pdf" onChange={e => void inspectFile(e.target.files?.[0] ?? null)} /></label>
       <button type="submit" disabled={busy || matching || !file || !matches || !replacementChoice}>초안 등록</button>
       {matching && <span className="caption regulation-document-match">파일 내용을 비교하고 있습니다.</span>}
