@@ -369,17 +369,19 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 }
 /* regulation chat workspace */
 .chat-workspace { min-height: max(560px, min(76vh, 820px)); display: flex; flex-direction: column; overflow: hidden; color: #202020; background: #fff; border: 1px solid #dfe5eb; border-radius: 8px; }
-.chat-header { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1.1rem; background: #fff; border-bottom: 1px solid #e6e8eb; }
+.chat-header { flex: 0 0 auto; padding: .9rem 1.1rem; background: #fff; border-bottom: 1px solid #e6e8eb; }
 .chat-header h2 { margin: 0 0 .15rem; color: #202020; font-size: 1.1rem; }
 .chat-header span { color: #727b86; font-size: .84rem; }
-.chat-options-toggle { min-height: 2.4rem; flex: 0 0 auto; padding: 0 .75rem; border: 1px solid #d8e1ea; border-radius: 999px; background: #f4f8fc; color: #167fc6; font-size: .9rem; cursor: pointer; }
-.chat-options-toggle:hover, .chat-options-toggle.active { background: #e8f4ff; border-color: #9bcdf2; }
+.chat-control-title { color: #303b46; font-size: 1rem; font-weight: 700; }
 .chat-controls { flex: 0 0 auto; }
 .chat-scope-bar { padding: .65rem 1rem; border-bottom: 1px solid #e6e8eb; background: #f7f9fb; }
 .chat-scope-bar > div { max-width: 24rem; }
-.chat-options { flex: 0 0 auto; padding: .85rem 1.1rem; background: #f7f9fb; border-bottom: 1px solid #e2e7ed; }
-.chat-options-title { margin-bottom: .75rem; color: #303b46; font-weight: 700; }
+.chat-options { padding: .5rem 1rem; background: #f7f9fb; border-bottom: 1px solid #e2e7ed; }
+.chat-options > summary { cursor: pointer; }
+.chat-options-body { padding: .75rem .1rem .35rem; }
 .chat-options-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1rem; align-items: end; }
+.chat-option-date { font-size: .875rem; color: var(--text); }
+.chat-option-date input { display: block; margin-top: .25rem; }
 .chat-options .check { color: #31333f; }
 .chat-option-checks { grid-column: 1 / -1; display: flex; flex-direction: column; gap: .5rem; }
 .chat-context-count { margin-top: .6rem; color: #727b86; font-size: .78rem; text-align: right; }

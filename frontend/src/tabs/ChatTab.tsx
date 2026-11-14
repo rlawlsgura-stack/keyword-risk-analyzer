@@ -57,7 +57,6 @@ export function ChatTab() {
   const [includeOcr, setIncludeOcr] = useState(false)
   const [includeText, setIncludeText] = useState(false)
   const [category, setCategory] = useState('')
-  const [optionsOpen, setOptionsOpen] = useState(false)
   const [warning, setWarning] = useState('')
   const [busy, setBusy] = useState(false)
   const [usageSummary, setUsageSummary] = useState<RegulationUsageSummary | null>(null)
@@ -147,28 +146,28 @@ export function ChatTab() {
 
   return (
     <section className="chat-workspace">
-      <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div>
-        <button className={`chat-options-toggle${optionsOpen ? ' active' : ''}`} onClick={() => setOptionsOpen(open => !open)} aria-expanded={optionsOpen} aria-label="검색 옵션">⚡ 검색 옵션</button>
-      </header>
+      <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div></header>
       <div className="chat-controls">
-        {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)} disabled={busy}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label><button type="button" className="chat-thread-delete" onClick={() => void removeThread()} disabled={!threadId || busy}>선택 대화 삭제</button></div>}
-        {corpusReady && <div className="chat-scope-bar"><Select label="검색 모드" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} /></div>}
+        {corpusReady && <div className="chat-saved-threads"><label><span className="chat-control-title">저장된 대화</span><select value={threadId ?? ''} onChange={e => void openThread(e.target.value)} disabled={busy}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label><button type="button" className="chat-thread-delete" onClick={() => void removeThread()} disabled={!threadId || busy}>선택 대화 삭제</button></div>}
+        {corpusReady && <div className="chat-scope-bar"><Select label={<span className="chat-control-title">검색 모드</span>} value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} /></div>}
         {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
-        {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
-          <div className="chat-options-grid">
-            <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
-            <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
-            {corpusReady && <label>사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
-            {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
-            <div className="chat-option-checks">
-              {corpusReady && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} checked={useLlm} onChange={setUseLlm} />}
-              {corpusReady && <Checkbox label="임베딩 기반 의미 유사도 검색 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
-              <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
-              <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
+        <details className="chat-options"><summary className="chat-control-title">검색 옵션</summary>
+          <div className="chat-options-body">
+            <div className="chat-options-grid">
+              <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
+              <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} />
+              {corpusReady && <label className="chat-option-date">사내문서 기준일 <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} /></label>}
+              {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} />}
+              <div className="chat-option-checks">
+                {corpusReady && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} checked={useLlm} onChange={setUseLlm} />}
+                {corpusReady && <Checkbox label="임베딩 기반 의미 유사도 검색 (위험 판정에 반영하지 않음)" checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={scope === 'law' || scope === 'internal'} />}
+                <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0} />
+                <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} checked={includeText} onChange={setIncludeText} />
+              </div>
             </div>
+            <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
           </div>
-          <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
-        </div>}
+        </details>
         {isAdmin && corpusReady && <RegulationDocuments />}
       </div>
       <main className="chat-thread" aria-live="polite">

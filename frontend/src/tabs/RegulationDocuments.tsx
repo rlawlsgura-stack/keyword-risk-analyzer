@@ -99,7 +99,7 @@ export function RegulationDocuments() {
     ...(dropdowns?.opt_categories ?? []),
     ...uniqueValues(catalog?.rows ?? [], '상품카테고리'),
   ].map(value => value.trim()).filter(value => value && value !== '공통')))
-  return <details className="regulation-documents"><summary>사내 규정 문서 관리 · 관리자</summary>
+  return <details className="regulation-documents"><summary className="chat-control-title">사내 규정 문서 관리 · 관리자</summary>
     <p>상품 카테고리와 파일을 등록하면 제목·식별자·버전이 자동 생성됩니다. 파일 내용으로 동일 문서와 유사한 기존 문서를 찾고, 수정본은 관리자가 연결할 문서를 선택합니다.</p>
     <form className="regulation-document-form" onSubmit={upload}>
       <label>상품 카테고리<select required disabled={busy} value={category} onChange={e => setCategory(e.target.value)}>
