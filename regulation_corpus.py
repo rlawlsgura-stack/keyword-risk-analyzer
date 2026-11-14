@@ -6,6 +6,7 @@ import hashlib
 import io
 import os
 import re
+import unicodedata
 from datetime import date
 from urllib.parse import urlencode
 from xml.etree import ElementTree
@@ -119,8 +120,8 @@ def _embed(texts: list[str], repository=None) -> list[list[float]] | None:
 
 def create_document(repository, *, source_key: str, version: str, title: str,
                     category: str, effective_from: date, effective_to: date | None,
-                    filename: str, payload: bytes, actor_id: str) -> dict:
-    text = extract_text(filename, payload)
+                    filename: str, payload: bytes, actor_id: str, text: str | None = None) -> dict:
+    text = extract_text(filename, payload) if text is None else text
     chunks = split_chunks(text)
     vectors = _embed(chunks, repository)
     mime = {'txt': 'text/plain', 'md': 'text/markdown',
@@ -140,20 +141,73 @@ def create_document(repository, *, source_key: str, version: str, title: str,
                   for i, chunk in enumerate(chunks)])
 
 
-def existing_document_versions(repository, source_key: str, filename: str) -> tuple[str, list[dict]]:
-    """Match uploads by stable filename, including documents registered before auto metadata."""
-    fields = 'id,source_key,version,category,status,content_sha256,effective_from,effective_to,original_name'
-    def find(column: str, value: str) -> list[dict]:
-        return repository.request('GET', '/rest/v1/kra_regulation_documents?' + urlencode({
-            'select': fields, column: f'eq.{value}', 'order': 'created_at.desc', 'limit': '200',
-        })) or []
+_DOCUMENT_FIELDS = 'id,source_key,version,title,category,status,content_sha256,effective_from,effective_to,original_name,approved_at'
 
-    versions = list({row['id']: row for row in
-                     find('source_key', source_key) + find('original_name', filename)}.values())
-    keys = {row['source_key'] for row in versions}
-    if len(keys) > 1:
-        raise ValueError('같은 파일명으로 여러 문서가 등록되어 있습니다. 파일명을 구분해 다시 업로드하세요.')
-    return (next(iter(keys)) if keys else source_key), versions
+
+def _find_documents(repository, column: str, value: str) -> list[dict]:
+    return repository.request('GET', '/rest/v1/kra_regulation_documents?' + urlencode({
+        'select': _DOCUMENT_FIELDS, column: f'eq.{value}', 'order': 'created_at.desc', 'limit': '200',
+    })) or []
+
+
+def document_versions(repository, source_key: str) -> list[dict]:
+    return _find_documents(repository, 'source_key', source_key)
+
+
+def documents_with_hash(repository, content_sha256: str) -> list[dict]:
+    return _find_documents(repository, 'content_sha256', content_sha256)
+
+
+def document_by_id(repository, document_id: str) -> dict | None:
+    rows = _find_documents(repository, 'id', document_id)
+    return rows[0] if rows else None
+
+
+def _shingles(value: str) -> set[str]:
+    value = ' '.join(unicodedata.normalize('NFKC', value).casefold().split())
+    return {value[i:i + 5] for i in range(max(0, len(value) - 4))}
+
+
+def _document_shingles(value: str) -> set[tuple[str, ...]]:
+    words = re.findall(r'[가-힣a-z0-9]{2,}', unicodedata.normalize('NFKC', value).casefold())
+    width = min(2, len(words))
+    return {tuple(words[i:i + width]) for i in range(len(words) - width + 1)} if width else set()
+
+
+def similar_document_candidates(repository, text: str) -> list[dict]:
+    """Use existing lexical search to shortlist documents; similarity is advisory only."""
+    chunks = split_chunks(text)
+    samples = [chunks[i][:1500] for i in dict.fromkeys((0, len(chunks) // 2, len(chunks) - 1))]
+    scores: dict[str, float] = {}
+    for sample in samples:
+        terms = [term for term in re.findall(r'[가-힣A-Za-z0-9]{2,}', sample)
+                 if len(term) <= 32]
+        if not terms:
+            continue
+        token = max(terms[:80], key=len).casefold()
+        rows = repository.rpc('search_regulation_chunks', p_tokens=token,
+            p_embedding=None, p_category='', p_as_of=date.today().isoformat(),
+            p_limit=10, p_strategy='lexical') or []
+        sample_shingles = _shingles(sample)
+        for row in rows:
+            other = _shingles(str(row['content'])[:1500])
+            union = len(sample_shingles | other)
+            score = len(sample_shingles & other) / union if union else 0.0
+            key = str(row['document_id'])
+            scores[key] = max(scores.get(key, 0.0), score)
+    query_shingles = _document_shingles(text)
+    candidates = []
+    for document_id, _ in sorted(scores.items(), key=lambda item: item[1], reverse=True)[:8]:
+        preview = load_document_preview(repository, document_id)
+        if not preview:
+            continue
+        other = _document_shingles('\n'.join(chunk['content'] for chunk in preview['chunks']))
+        union = len(query_shingles | other)
+        similarity = len(query_shingles & other) / union if union else 0.0
+        if similarity >= 0.25:
+            document = {key: value for key, value in preview.items() if key != 'chunks'}
+            candidates.append({'document': document, 'similarity': round(similarity, 3)})
+    return sorted(candidates, key=lambda item: item['similarity'], reverse=True)[:5]
 
 
 def list_documents(repository) -> list[dict]:
@@ -165,7 +219,7 @@ def list_documents(repository) -> list[dict]:
 
 def load_document_preview(repository, document_id: str) -> dict | None:
     doc_path = '/rest/v1/kra_regulation_documents?' + urlencode({
-        'select': 'id,source_key,version,title,category,effective_from,effective_to,status,content_sha256,original_name',
+        'select': 'id,source_key,version,title,category,effective_from,effective_to,status,content_sha256,original_name,approved_at',
         'id': f'eq.{document_id}', 'limit': '1'})
     documents = repository.request('GET', doc_path) or []
     if not documents:

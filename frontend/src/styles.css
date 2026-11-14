@@ -430,7 +430,9 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .regulation-document-form label { display: flex; flex-direction: column; gap: .2rem; }
 .regulation-document-form input { width: 100%; box-sizing: border-box; }
 .regulation-document-form input:not([type="file"]) { height: 2.4rem; padding: .4rem .65rem; border: 1px solid #cbd4de; border-radius: 6px; background: #fff; color: #202020; font: inherit; line-height: 1.25; }
+.regulation-document-form select { width: 100%; height: 2.4rem; padding: .4rem .65rem; border: 1px solid #cbd4de; border-radius: 6px; background: #fff; color: #202020; font: inherit; }
 .regulation-document-form > button { width: 100%; min-height: 2.4rem; align-self: end; padding: .3rem .85rem; border: 1px solid #cbd4de; border-radius: 6px; font: inherit; }
+.regulation-document-match { grid-column: 1 / -1; }
 .regulation-document-dates { grid-column: 1 / -1; }
 .regulation-document-dates[open] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .regulation-document-dates summary, .regulation-document-dates .caption { grid-column: 1 / -1; }

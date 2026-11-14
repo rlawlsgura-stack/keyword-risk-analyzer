@@ -28,7 +28,8 @@ from regulation_assistant import RegulationSearchError, answer_regulation_questi
 from openai_usage import current_month_start, monthly_budget, record_usage
 from keyword_suggestion import SuggestionProviderError, suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
-                               existing_document_versions, load_document_preview,
+                               document_by_id, document_versions, documents_with_hash,
+                               extract_text, similar_document_candidates, load_document_preview,
                                list_threads, load_thread, delete_thread,
                                reindex_embeddings, save_turn)
 
@@ -1658,22 +1659,40 @@ def regulation_documents(actor=Depends(current_actor),
 async def upload_regulation_document(
         category: str = Form('', max_length=100),
         effective_from: date | None = Form(None), effective_to: date | None = Form(None),
+        replace_document_id: UUID | None = Form(None),
+        new_document: bool = Form(False),
         file: UploadFile = File(...), actor=Depends(current_actor),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         repository=Depends(get_repository)):
     admin_id = regulation_admin(actor, credentials, repository)
     filename = os.path.basename(file.filename or '')
-    normalized_name = unicodedata.normalize('NFKC', filename).casefold().strip()
-    if not normalized_name:
+    if not filename.strip():
         raise HTTPException(422, '문서 파일명을 확인하세요.')
-    source_key = 'doc-' + hashlib.sha256(normalized_name.encode('utf-8')).hexdigest()[:24]
+    payload = await file.read(MAX_DOCUMENT_BYTES + 1)
+    try:
+        text = extract_text(filename, payload)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    content_hash = hashlib.sha256(payload).hexdigest()
+    if new_document and replace_document_id:
+        raise HTTPException(422, '새 문서 등록과 기존 문서 교체를 동시에 선택할 수 없습니다.')
+    if new_document:
+        source_key = 'doc-' + secrets.token_hex(12)
+    elif replace_document_id:
+        replacement = document_by_id(repository, str(replace_document_id))
+        if replacement is None:
+            raise HTTPException(404, '교체할 기존 문서를 찾을 수 없습니다.')
+        source_key = replacement['source_key']
+    else:
+        exact = documents_with_hash(repository, content_hash)
+        keys = {row['source_key'] for row in exact}
+        if len(keys) > 1:
+            raise HTTPException(409, '같은 내용의 문서가 여러 개 있습니다. 교체할 문서를 선택하세요.')
+        source_key = next(iter(keys)) if keys else 'doc-' + content_hash[:24]
     now = datetime.now(ZoneInfo('Asia/Seoul'))
     version = now.strftime('%Y%m%d-%H%M%S-%f')
     title = os.path.splitext(filename)[0].strip()[:200] or '문서'
-    try:
-        source_key, previous = existing_document_versions(repository, source_key, filename)
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from exc
+    previous = document_versions(repository, source_key)
     dates_supplied = effective_from is not None or effective_to is not None
     approved_starts = [date.fromisoformat(row['effective_from']) for row in previous
                        if row['status'] == 'approved']
@@ -1684,8 +1703,6 @@ async def upload_regulation_document(
         raise HTTPException(422, '새 문서의 시행일은 현재 승인본의 시행일보다 빠를 수 없습니다.')
     if effective_to and effective_to < effective_from:
         raise HTTPException(422, '종료일은 시행일보다 빠를 수 없습니다.')
-    payload = await file.read(MAX_DOCUMENT_BYTES + 1)
-    content_hash = hashlib.sha256(payload).hexdigest()
     same = next((row for row in previous if row['content_sha256'] == content_hash
                  and row['category'] == category.strip()
                  and (not dates_supplied or (row['effective_from'] == effective_from.isoformat()
@@ -1697,10 +1714,31 @@ async def upload_regulation_document(
         document_id = create_document(repository, source_key=source_key,
             version=version, title=title, category=category.strip(),
             effective_from=effective_from, effective_to=effective_to,
-            filename=filename, payload=payload, actor_id=admin_id)
+            filename=filename, payload=payload, actor_id=admin_id, text=text)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'id': document_id, 'status': 'draft'}
+
+
+@app.post('/api/v1/admin/regulation/documents/matches')
+async def match_regulation_document(file: UploadFile = File(...), actor=Depends(current_actor),
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        repository=Depends(get_repository)):
+    regulation_admin(actor, credentials, repository)
+    payload = await file.read(MAX_DOCUMENT_BYTES + 1)
+    try:
+        text = extract_text(file.filename or '', payload)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    exact = documents_with_hash(repository, hashlib.sha256(payload).hexdigest())
+    try:
+        candidates = [] if exact else similar_document_candidates(repository, text)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except (requests.RequestException, RuntimeError, KeyError) as exc:
+        logger.warning('Regulation document similarity lookup failed', exc_info=True)
+        raise HTTPException(503, '기존 문서 비교에 실패했습니다. 잠시 후 다시 시도하세요.') from exc
+    return {'exact': exact, 'candidates': candidates}
 
 
 @app.post('/api/v1/admin/regulation/documents/{document_id}/approve')

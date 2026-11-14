@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDocument, listRegulationDocuments, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
+import { approveRegulationDocument, buildRegulationEmbeddings, deleteRegulationDocument, listRegulationDocuments, matchRegulationDocument, previewRegulationDocument, uploadRegulationDocument, type RegulationDocument } from '../lib/api.ts'
+
+type DocumentMatches = Awaited<ReturnType<typeof matchRegulationDocument>>
 
 export function RegulationDocuments() {
   const [documents, setDocuments] = useState<RegulationDocument[]>([])
@@ -11,22 +13,50 @@ export function RegulationDocuments() {
   const [effectiveFrom, setEffectiveFrom] = useState('')
   const [effectiveTo, setEffectiveTo] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [matches, setMatches] = useState<DocumentMatches | null>(null)
+  const [matching, setMatching] = useState(false)
+  const [replacementChoice, setReplacementChoice] = useState('')
   const fileInput = useRef<HTMLInputElement>(null)
+  const matchRequest = useRef(0)
   const refresh = async () => {
     try { setDocuments((await listRegulationDocuments()).items); setError('') }
     catch (cause) { setError(cause instanceof Error ? cause.message : '문서 목록을 불러오지 못했습니다.') }
   }
   useEffect(() => { void refresh() }, [])
 
+  const inspectFile = async (selected: File | null) => {
+    const requestId = ++matchRequest.current
+    setFile(selected)
+    setMatches(null)
+    setReplacementChoice('')
+    setError('')
+    if (!selected) { setMatching(false); return }
+    setMatching(true)
+    try {
+      const result = await matchRegulationDocument(selected)
+      if (requestId !== matchRequest.current) return
+      setMatches(result)
+      const keys = new Set(result.exact.map(doc => doc.source_key))
+      setReplacementChoice(result.exact.length && keys.size === 1 ? result.exact[0].id
+        : result.exact.length || result.candidates.length ? '' : 'new')
+    } catch (cause) {
+      if (requestId === matchRequest.current) setError(cause instanceof Error ? cause.message : '문서 내용을 검사하지 못했습니다.')
+    } finally {
+      if (requestId === matchRequest.current) setMatching(false)
+    }
+  }
+
   const upload = async (event: FormEvent) => {
     event.preventDefault()
-    if (!file || busy) return
+    if (!file || busy || matching || !matches || !replacementChoice) return
     if (!category.trim()) { setError('상품 카테고리를 입력하세요. 공통 규정이면 "공통"을 입력하세요.'); return }
     setBusy(true)
     setNotice('')
     try {
-      const result = await uploadRegulationDocument({ category: category.trim() === '공통' ? '' : category.trim(), effective_from: effectiveFrom, effective_to: effectiveTo, file })
+      const result = await uploadRegulationDocument({ category: category.trim() === '공통' ? '' : category.trim(), effective_from: effectiveFrom, effective_to: effectiveTo, replace_document_id: replacementChoice === 'new' ? '' : replacementChoice, new_document: String(replacementChoice === 'new'), file })
       setFile(null)
+      setMatches(null)
+      setReplacementChoice('')
       if (fileInput.current) fileInput.current.value = ''
       setEffectiveFrom('')
       setEffectiveTo('')
@@ -60,12 +90,27 @@ export function RegulationDocuments() {
     catch (cause) { setError(cause instanceof Error ? cause.message : '문서를 삭제하지 못했습니다.') }
     finally { setBusy(false) }
   }
+  const suggestedIds = new Set([...(matches?.exact.map(doc => doc.id) ?? []),
+    ...(matches?.candidates.map(candidate => candidate.document.id) ?? [])])
   return <details className="regulation-documents"><summary>사내 규정 문서 관리 · 관리자</summary>
-    <p>상품 카테고리와 파일을 등록하면 제목·식별자·버전이 자동 생성됩니다. 같은 파일명의 내용이 바뀌면 새 초안으로 교체되며, 승인 후 최신본이 검색에 사용됩니다.</p>
+    <p>상품 카테고리와 파일을 등록하면 제목·식별자·버전이 자동 생성됩니다. 파일 내용으로 동일 문서와 유사한 기존 문서를 찾고, 수정본은 관리자가 연결할 문서를 선택합니다.</p>
     <form className="regulation-document-form" onSubmit={upload}>
-      <label>상품 카테고리<input required value={category} onChange={e => setCategory(e.target.value)} placeholder="예: 화장품 또는 공통" /></label>
-      <label>문서 파일<input ref={fileInput} required type="file" accept=".txt,.md,.docx,.pdf" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
-      <button type="submit" disabled={busy || !file}>초안 등록</button>
+      <label>상품 카테고리<input required disabled={busy} value={category} onChange={e => setCategory(e.target.value)} placeholder="예: 화장품 또는 공통" /></label>
+      <label>문서 파일<input ref={fileInput} required disabled={busy} type="file" accept=".txt,.md,.docx,.pdf" onChange={e => void inspectFile(e.target.files?.[0] ?? null)} /></label>
+      <button type="submit" disabled={busy || matching || !file || !matches || !replacementChoice}>초안 등록</button>
+      {matching && <span className="caption regulation-document-match">파일 내용을 비교하고 있습니다.</span>}
+      {file && !matching && !matches && <button type="button" onClick={() => void inspectFile(file)}>파일 검사 다시 시도</button>}
+      {matches && <label className="regulation-document-match">기존 문서 연결
+        <select value={replacementChoice} onChange={e => setReplacementChoice(e.target.value)} required disabled={busy}>
+          <option value="">연결 방식을 선택하세요</option>
+          <option value="new">새 문서로 등록</option>
+          {matches.exact.map(doc => <option key={doc.id} value={doc.id}>완전 동일 · {doc.title} · {doc.category || '공통'}</option>)}
+          {matches.candidates.map(({ document: doc, similarity }) => <option key={doc.id} value={doc.id}>유사 후보 {Math.round(similarity * 100)}% · {doc.title} · {doc.category || '공통'}</option>)}
+          {documents.filter(doc => doc.status !== 'superseded' && !suggestedIds.has(doc.id)).map(doc =>
+            <option key={doc.id} value={doc.id}>기존 문서 · {doc.title} · {doc.category || '공통'}</option>)}
+        </select>
+        <span className="caption">유사 후보는 참고용입니다. 수정본이라면 기존 문서를 선택하고, 별도 문서라면 새 문서로 등록하세요.</span>
+      </label>}
       <details className="regulation-document-dates"><summary>적용 기간 설정 · 선택</summary>
         <label>시행일<input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} /></label>
         <label>종료일<input type="date" value={effectiveTo} min={effectiveFrom || undefined} onChange={e => setEffectiveTo(e.target.value)} /></label>

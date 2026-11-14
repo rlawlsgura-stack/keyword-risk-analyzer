@@ -114,7 +114,13 @@ export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_t
 export const loadRegulationUsage = () => request<RegulationUsageSummary>('/api/v1/regulation/usage')
 export const listRegulationDocuments = () => request<{ items: RegulationDocument[] }>('/api/v1/admin/regulation/documents')
 export const previewRegulationDocument = (id: string) => request<RegulationDocument & { chunks: { id: string; ordinal: number; content: string; embedding_model: string | null }[]; content_sha256: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`)
-export const uploadRegulationDocument = (fields: { category: string; effective_from: string; effective_to: string; file: File }) => {
+export const matchRegulationDocument = (file: File) => {
+  const form = new FormData()
+  form.append('file', file, file.name)
+  return request<{ exact: RegulationDocument[]; candidates: { document: RegulationDocument; similarity: number }[] }>(
+    '/api/v1/admin/regulation/documents/matches', { method: 'POST', body: form })
+}
+export const uploadRegulationDocument = (fields: { category: string; effective_from: string; effective_to: string; replace_document_id: string; new_document: string; file: File }) => {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
   return request<{ id: string; status: string; unchanged?: boolean }>('/api/v1/admin/regulation/documents', { method: 'POST', body: form })
