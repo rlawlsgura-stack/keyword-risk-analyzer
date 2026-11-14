@@ -14,6 +14,12 @@ from matching_engine import DB_COLS
 from regulation_corpus import search_documents
 
 
+class SuggestionProviderError(Exception):
+    def __init__(self, status_code: int | None = None):
+        self.status_code = status_code
+        super().__init__(f"OpenAI request failed (HTTP {status_code})" if status_code else "OpenAI connection failed")
+
+
 def _normalized(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
@@ -173,9 +179,14 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
                 "sources": sources}, ensure_ascii=False)},
         ],
     }
-    response = requests.post("https://api.openai.com/v1/responses",
-                             headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=60)
-    response.raise_for_status()
+    try:
+        response = requests.post("https://api.openai.com/v1/responses",
+                                 headers={"Authorization": f"Bearer {api_key}"}, json=payload, timeout=60)
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise SuggestionProviderError(exc.response.status_code if exc.response is not None else None) from exc
+    except requests.RequestException as exc:
+        raise SuggestionProviderError() from exc
     stages.append({"name": "LLM 종합 추천", "status": "completed", "result_count": 1, "detail": "근거 기반 초안을 생성했습니다."})
     suggestion = json.loads(_response_text(response.json()))
     cited = suggestion.get("source_ids", [])

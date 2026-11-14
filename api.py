@@ -24,7 +24,7 @@ from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
 from regulation_assistant import RegulationSearchError, answer_regulation_question
 from openai_usage import current_month_start, monthly_budget, record_usage
-from keyword_suggestion import suggest_keyword
+from keyword_suggestion import SuggestionProviderError, suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
                                load_document_preview, list_threads, load_thread, delete_thread,
                                reindex_embeddings, save_turn)
@@ -645,8 +645,25 @@ def keyword_suggestion(body: KeywordSuggestionRequest, actor=Depends(current_act
                                body.context.strip(), body.as_of)
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
-    except (requests.RequestException, ValueError, KeyError, TypeError):
-        raise HTTPException(502, 'AI 추천을 완료하지 못했습니다. 잠시 후 다시 시도하세요.') from None
+    except SuggestionProviderError as exc:
+        status = exc.status_code
+        if status == 429:
+            raise HTTPException(429, 'OpenAI 요청 한도에 도달했습니다. 잠시 후 다시 시도하거나 프로젝트 사용 한도와 크레딧을 확인하세요.') from exc
+        if status == 401:
+            raise HTTPException(502, 'OpenAI API 키가 유효하지 않습니다. 서버 설정을 확인하세요.') from exc
+        if status == 403:
+            raise HTTPException(502, 'OpenAI 프로젝트에 이 모델의 사용 권한이 없습니다. 서버 설정을 확인하세요.') from exc
+        if status == 400:
+            raise HTTPException(502, 'OpenAI 요청이 거부되었습니다 (HTTP 400). 모델 설정 또는 요청 형식을 확인하세요.') from exc
+        if status is not None:
+            raise HTTPException(502, f'OpenAI 추천 요청이 실패했습니다 (HTTP {status}).') from exc
+        raise HTTPException(502, 'OpenAI API에 연결하지 못했습니다. 잠시 후 다시 시도하세요.') from exc
+    except requests.RequestException as exc:
+        logger.warning('Keyword suggestion evidence lookup failed', exc_info=True)
+        raise HTTPException(502, '추천 근거를 불러오지 못했습니다. 잠시 후 다시 시도하세요.') from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning('Keyword suggestion response could not be processed', exc_info=True)
+        raise HTTPException(502, 'AI 추천 응답을 해석하지 못했습니다. 잠시 후 다시 시도하세요.') from exc
 
 
 @app.post('/api/v1/unmatched-terms/normalize')

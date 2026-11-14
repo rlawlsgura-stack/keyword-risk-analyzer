@@ -4,11 +4,12 @@ from datetime import date
 from unittest.mock import patch
 
 import pandas as pd
+import requests
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from api import save_ocr_keywords
-from keyword_suggestion import suggest_keyword
+from api import KeywordSuggestionRequest, keyword_suggestion, save_ocr_keywords
+from keyword_suggestion import SuggestionProviderError, suggest_keyword
 from matching_engine import DB_COLS
 
 
@@ -50,6 +51,7 @@ class KeywordSuggestionTests(unittest.TestCase):
         with patch.dict('os.environ', {
             'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
             'OPENAI_API_KEY': 'test-key', 'LEGISLATION_API_KEY': '',
+            'REGULATION_EMBEDDINGS_ENABLED': 'false',
         }), patch('keyword_suggestion.search_documents', return_value=([], 'none')), \
                 patch('keyword_suggestion.requests.post', return_value=Response(suggestion)):
             return suggest_keyword(Repository(), '새 표현', '', '', date(2026, 11, 12))
@@ -161,6 +163,28 @@ class KeywordSuggestionTests(unittest.TestCase):
         with patch.dict('os.environ', {'REGULATION_LLM_ENABLED': 'false'}):
             with self.assertRaises(RuntimeError):
                 suggest_keyword(Repository(), '새 표현', '', '', date(2026, 11, 12))
+
+    def test_openai_http_error_keeps_status_without_exposing_response(self):
+        response = requests.Response()
+        response.status_code = 429
+        response._content = b'sensitive provider response'
+        with patch.dict('os.environ', {
+            'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+            'OPENAI_API_KEY': 'test-key', 'REGULATION_EMBEDDINGS_ENABLED': 'false',
+        }), patch('keyword_suggestion.search_documents', return_value=([], 'none')), \
+                patch('keyword_suggestion.requests.post', return_value=response):
+            with self.assertRaises(SuggestionProviderError) as raised:
+                suggest_keyword(Repository(), '유사', '화장품', '', date(2026, 11, 12))
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertNotIn('sensitive', str(raised.exception))
+
+    def test_suggestion_endpoint_reports_provider_limit(self):
+        with patch('api.suggest_keyword', side_effect=SuggestionProviderError(429)):
+            with self.assertRaises(HTTPException) as raised:
+                keyword_suggestion(KeywordSuggestionRequest(term='미세먼지'),
+                                   actor='member', repository=Repository())
+        self.assertEqual(raised.exception.status_code, 429)
+        self.assertIn('사용 한도', raised.exception.detail)
 
 
 if __name__ == '__main__':
