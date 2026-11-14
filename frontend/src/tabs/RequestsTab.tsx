@@ -11,7 +11,7 @@ import { Alert, Button, Checkbox, Dialog, Expander, Select, Spinner, TextArea, e
 
 const STATUSES = ['대기', '검토중', '처리완료'] as const
 const TYPE_ORDER: KeywordRequestType[] = ['risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration']
-const receipt = (request: KeywordRequestRecord) => request.receipt_no
+const receipt = (request: KeywordRequestRecord) => request.receipt_no || `KR-${request.id.slice(0, 8).toUpperCase()}`
 const typeLabel = (t: string) => REQUEST_TYPE_LABELS[t as KeywordRequestType] ?? t
 
 export function RequestsTab() {

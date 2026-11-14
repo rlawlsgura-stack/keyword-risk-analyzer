@@ -61,7 +61,8 @@ export function KeywordRequestForm({ onSubmitted }: { onSubmitted?: () => void }
       const row = fresh?.rows.find(r => String(r.kwd_no).trim().toUpperCase() === code)
       if (!row) { setMessages([{ kind: 'error', text: '현재 공유 DB에서 kwd_no를 찾을 수 없습니다. 최신 번호를 확인하세요.' }]); return }
       const result = await submitKeywordRequest({ kwd_no: String(row.kwd_no).trim(), request_type: type, request_detail: detail.trim() })
-      const next: Msg[] = [{ kind: 'success', text: `문의가 등록되었습니다. 접수번호: ${result.receipt_no}. 키워드 문의 화면의 내 문의 내역에서 확인할 수 있습니다.` }]
+      const receipt = result.receipt_no || `KR-${result.id.slice(0, 8).toUpperCase()}`
+      const next: Msg[] = [{ kind: 'success', text: `문의가 등록되었습니다. 접수번호: ${receipt}. 키워드 문의 화면의 내 문의 내역에서 확인할 수 있습니다.` }]
       if (result.notification === 'failed') {
         next.push({ kind: 'warning', text: '문의는 등록됐지만 관리자 이메일 알림은 발송되지 않았습니다.', caption: result.notification_error })
       }
