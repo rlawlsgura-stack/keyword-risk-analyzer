@@ -17,6 +17,7 @@ class RequestNotificationTests(unittest.TestCase):
         }
         self.row = {
             'id': 'request-123',
+            'receipt_no': '20261025_001',
             'kwd_no': 'B101',
             'keyword_name': '<피부>',
             'request_type': 'risk_grade_adjustment',
@@ -33,6 +34,7 @@ class RequestNotificationTests(unittest.TestCase):
         args, kwargs = post.call_args
         self.assertEqual(args[0], 'https://api.resend.com/emails')
         self.assertEqual(kwargs['headers']['Idempotency-Key'], 'keyword-request/request-123')
+        self.assertIn('20261025_001', kwargs['json']['text'])
         self.assertIn('&lt;script&gt;', kwargs['json']['html'])
         self.assertNotIn('<script>', kwargs['json']['html'])
         self.assertEqual(kwargs['json']['to'], ['admin@example.com'])

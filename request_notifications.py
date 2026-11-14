@@ -44,6 +44,7 @@ def send_keyword_request_email(request_row, *, env=None, post=requests.post):
         'review_criteria_change': '심의기준 변경요청',
     }
     fields = {
+        '접수번호': request_row.get('receipt_no', ''),
         '키워드 번호': request_row.get('kwd_no', ''),
         '키워드명': request_row.get('keyword_name', ''),
         '문의 유형': type_labels.get(request_type, request_type),

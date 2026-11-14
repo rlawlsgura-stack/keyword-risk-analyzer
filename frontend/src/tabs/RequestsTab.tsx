@@ -11,7 +11,7 @@ import { Alert, Button, Checkbox, Dialog, Expander, Select, Spinner, TextArea, e
 
 const STATUSES = ['대기', '검토중', '처리완료'] as const
 const TYPE_ORDER: KeywordRequestType[] = ['risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration']
-const receipt = (id: string) => `KR-${id.slice(0, 8).toUpperCase()}`
+const receipt = (request: KeywordRequestRecord) => request.receipt_no
 const typeLabel = (t: string) => REQUEST_TYPE_LABELS[t as KeywordRequestType] ?? t
 
 export function RequestsTab() {
@@ -44,7 +44,7 @@ export function RequestsTab() {
   }, [isAdmin])
 
   const columns = [
-    { key: 'receipt', label: '접수번호', render: (r: KeywordRequestRecord) => receipt(r.id) },
+    { key: 'receipt', label: '접수번호', render: (r: KeywordRequestRecord) => receipt(r) },
     ...(isAdmin ? [{ key: 'requester_email', label: '요청자' }] : []),
     { key: 'keyword', label: '키워드', render: (r: KeywordRequestRecord) => `${r.kwd_no || '신규'} | ${r.keyword_name || '신규 키워드'}` },
     { key: 'request_type', label: '문의 유형', render: (r: KeywordRequestRecord) => typeLabel(r.request_type) },
@@ -112,7 +112,7 @@ export function RequestsTab() {
         <div className="request-selected-heading">
           <div>
             <h4>선택한 문의 상세</h4>
-            <div className="caption">{receipt(selected.id)} | {selected.kwd_no || '신규'} {selected.keyword_name || '신규 키워드'} | {typeLabel(selected.request_type)}{isAdmin && selected.requester_email ? ` | ${selected.requester_email}` : ''}</div>
+            <div className="caption">{receipt(selected)} | {selected.kwd_no || '신규'} {selected.keyword_name || '신규 키워드'} | {typeLabel(selected.request_type)}{isAdmin && selected.requester_email ? ` | ${selected.requester_email}` : ''}</div>
           </div>
           <Button small onClick={() => { setFlash(''); setOpen(selected) }}>{isAdmin ? '답변 및 처리 열기' : '대화 상세 열기'}</Button>
         </div>
@@ -179,7 +179,7 @@ function RequestDialog({ request, onClose, onChanged }: {
     if (isAdmin && m.author_role === 'user' && !childOf.has(m.id) && !disabled) {
       nodes.push(feedbackFor === m.id ? (
         <Feedback key="fb" code={code} message={m} requestId={request.id} onSaved={() => after('대화 내역에 메시지를 추가했습니다.')} onError={setError} />
-      ) : <Button key="fbbtn" small onClick={() => setFeedbackFor(m.id)}>{code} 피드백 작성</Button>)
+      ) : <Button key="fbbtn" small className="request-feedback-button" onClick={() => setFeedbackFor(m.id)}>{code} 피드백 작성</Button>)
     }
     if (!isAdmin && m.author_role === 'admin' && !childOf.has(m.id) && !disabled) {
       nodes.push(followFor === m.id ? (
@@ -195,7 +195,7 @@ function RequestDialog({ request, onClose, onChanged }: {
 
   return (
     <Dialog title="문의 상세 및 처리" onClose={onClose} wide>
-      <div><b>접수번호:</b> {receipt(request.id)}</div>
+      <div><b>접수번호:</b> {receipt(request)}</div>
       <div><b>키워드no.:</b> {request.kwd_no}</div>
       <div><b>키워드명:</b> {request.keyword_name}</div>
       <div className="caption">접수 시각: {formatDatetime(request.created_at)}</div>
@@ -214,7 +214,7 @@ function RequestDialog({ request, onClose, onChanged }: {
           node = childOf.get(node.id)
         }
         return (
-          <div key={root.id} className="thread-item">
+          <div key={root.id} className={`thread-item request-thread-item ${i % 2 === 0 ? 'tone-blue' : 'tone-green'}`}>
             {caption([q, '사용자 문의', `처리상태: ${root.status || '대기'}`, ...who(root)])}
             <div style={{ whiteSpace: 'pre-wrap' }}>{root.body}</div>
             {userControls(root, q)}

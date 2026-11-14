@@ -146,7 +146,7 @@ class SupabaseRepository:
 
     def load_keyword_requests(self, access_token, limit=1000):
         limit = max(1, min(int(limit), 1000))
-        path = ('/rest/v1/kra_keyword_requests?select=id,requester_id,requester_email,'
+        path = ('/rest/v1/kra_keyword_requests?select=id,receipt_no,requester_id,requester_email,'
                 'kwd_no,keyword_name,request_type,request_detail,status,admin_reply,created_at'
                 '&order=created_at.desc&limit=' + str(limit))
         return self.request('GET', path, token=access_token) or []

@@ -27,11 +27,11 @@ export function Spinner({ text }: { text?: string }) {
   return <div className="row center tight" style={{ margin: '.5rem 0' }}><span className="spinner" />{text && <span className="caption">{text}</span>}</div>
 }
 
-export function Button({ children, onClick, primary, disabled, small, full, title, type = 'button' }: {
+export function Button({ children, onClick, primary, disabled, small, full, title, className, type = 'button' }: {
   children: ReactNode; onClick?: () => void; primary?: boolean; disabled?: boolean; small?: boolean; full?: boolean; title?: string
-  type?: 'button' | 'submit'
+  className?: string; type?: 'button' | 'submit'
 }) {
-  const cls = ['btn', primary && 'primary', small && 'small', full && 'full'].filter(Boolean).join(' ')
+  const cls = ['btn', primary && 'primary', small && 'small', full && 'full', className].filter(Boolean).join(' ')
   return <button type={type} className={cls} onClick={onClick} disabled={disabled} title={title}>{children}</button>
 }
 

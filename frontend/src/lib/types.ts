@@ -131,6 +131,7 @@ export type KeywordRequestType = 'risk_grade_adjustment' | 'review_criteria_chan
 
 export type KeywordRequestRecord = {
   id: string
+  receipt_no: string
   requester_id?: string
   requester_email?: string
   kwd_no: string
