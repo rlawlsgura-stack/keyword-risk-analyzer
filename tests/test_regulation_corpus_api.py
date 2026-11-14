@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from fastapi.testclient import TestClient
 
 import api
+from repository import StorageError
 from regulation_assistant import _llm_explanation
 
 
@@ -155,6 +156,30 @@ class RegulationCorpusApiTests(unittest.TestCase):
                                headers={'Authorization': 'Bearer test'})
         self.assertEqual(approved.status_code, 200)
         self.assertEqual(approved.json()['status'], 'approved')
+
+    def test_draft_upload_does_not_call_openai_when_embeddings_are_enabled(self):
+        repository = FakeRepository('admin')
+        with patch.dict(os.environ, {'REGULATION_EMBEDDINGS_ENABLED': 'true',
+                                      'OPENAI_API_KEY': ''}), \
+             patch('regulation_corpus._embed', side_effect=AssertionError('unexpected embedding')) as embed:
+            response = self.client(repository).post('/api/v1/admin/regulation/documents',
+                data={'category': '화장품', 'new_document': 'true'},
+                files={'file': ('guide.txt', b'Enough text for a regulation document draft.')},
+                headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 200, response.text)
+        embed.assert_not_called()
+
+    def test_storage_failure_returns_actionable_upload_error(self):
+        repository = FakeRepository('admin')
+        with patch.object(repository, 'rpc', side_effect=StorageError('sensitive storage details')), \
+             patch('api.logger.warning'):
+            response = self.client(repository).post('/api/v1/admin/regulation/documents',
+                data={'category': '화장품', 'new_document': 'true'},
+                files={'file': ('guide.txt', b'Enough text for a regulation document draft.')},
+                headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('문서 저장소', response.json()['detail'])
+        self.assertNotIn('sensitive', response.text)
 
     def test_explicit_replacement_reuses_identity_after_filename_change(self):
         repository = FakeRepository('admin')

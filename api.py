@@ -1676,23 +1676,29 @@ async def upload_regulation_document(
     content_hash = hashlib.sha256(payload).hexdigest()
     if new_document and replace_document_id:
         raise HTTPException(422, '새 문서 등록과 기존 문서 교체를 동시에 선택할 수 없습니다.')
-    if new_document:
-        source_key = 'doc-' + secrets.token_hex(12)
-    elif replace_document_id:
-        replacement = document_by_id(repository, str(replace_document_id))
-        if replacement is None:
-            raise HTTPException(404, '교체할 기존 문서를 찾을 수 없습니다.')
-        source_key = replacement['source_key']
-    else:
-        exact = documents_with_hash(repository, content_hash)
-        keys = {row['source_key'] for row in exact}
-        if len(keys) > 1:
-            raise HTTPException(409, '같은 내용의 문서가 여러 개 있습니다. 교체할 문서를 선택하세요.')
-        source_key = next(iter(keys)) if keys else 'doc-' + content_hash[:24]
+    try:
+        if new_document:
+            source_key = 'doc-' + secrets.token_hex(12)
+        elif replace_document_id:
+            replacement = document_by_id(repository, str(replace_document_id))
+            if replacement is None:
+                raise HTTPException(404, '교체할 기존 문서를 찾을 수 없습니다.')
+            source_key = replacement['source_key']
+        else:
+            exact = documents_with_hash(repository, content_hash)
+            keys = {row['source_key'] for row in exact}
+            if len(keys) > 1:
+                raise HTTPException(409, '같은 내용의 문서가 여러 개 있습니다. 교체할 문서를 선택하세요.')
+            source_key = next(iter(keys)) if keys else 'doc-' + content_hash[:24]
+        previous = document_versions(repository, source_key)
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except StorageError as exc:
+        logger.warning('Regulation document lookup failed', exc_info=True)
+        raise HTTPException(503, '문서 저장소 요청이 실패했습니다. API 서버 로그를 확인하세요.') from exc
     now = datetime.now(ZoneInfo('Asia/Seoul'))
     version = now.strftime('%Y%m%d-%H%M%S-%f')
     title = os.path.splitext(filename)[0].strip()[:200] or '문서'
-    previous = document_versions(repository, source_key)
     dates_supplied = effective_from is not None or effective_to is not None
     approved_starts = [date.fromisoformat(row['effective_from']) for row in previous
                        if row['status'] == 'approved']
@@ -1717,6 +1723,13 @@ async def upload_regulation_document(
             filename=filename, payload=payload, actor_id=admin_id, text=text)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    except ConflictError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except StorageError as exc:
+        logger.warning('Regulation document upload failed', exc_info=True)
+        raise HTTPException(503, '문서 저장소 요청이 실패했습니다. API 서버 로그를 확인하세요.') from exc
     return {'id': document_id, 'status': 'draft'}
 
 
@@ -1730,7 +1743,13 @@ async def match_regulation_document(file: UploadFile = File(...), actor=Depends(
         text = extract_text(file.filename or '', payload)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    exact = documents_with_hash(repository, hashlib.sha256(payload).hexdigest())
+    try:
+        exact = documents_with_hash(repository, hashlib.sha256(payload).hexdigest())
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except StorageError as exc:
+        logger.warning('Regulation document hash lookup failed', exc_info=True)
+        raise HTTPException(503, '문서 저장소 요청이 실패했습니다. API 서버 로그를 확인하세요.') from exc
     try:
         candidates = [] if exact else similar_document_candidates(repository, text)
     except ValueError as exc:

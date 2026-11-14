@@ -123,7 +123,6 @@ def create_document(repository, *, source_key: str, version: str, title: str,
                     filename: str, payload: bytes, actor_id: str, text: str | None = None) -> dict:
     text = extract_text(filename, payload) if text is None else text
     chunks = split_chunks(text)
-    vectors = _embed(chunks, repository)
     mime = {'txt': 'text/plain', 'md': 'text/markdown',
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'pdf': 'application/pdf'}[filename.lower().rsplit('.', 1)[-1]]
@@ -136,8 +135,7 @@ def create_document(repository, *, source_key: str, version: str, title: str,
         p_mime_type=mime, p_created_by=actor_id,
         p_chunks=[{'ordinal': i + 1, 'content': chunk,
                    'search_tokens': search_tokens(chunk),
-                   'embedding': vectors[i] if vectors else None,
-                   'embedding_model': EMBEDDING_MODEL if vectors else None}
+                   'embedding': None, 'embedding_model': None}
                   for i, chunk in enumerate(chunks)])
 
 
