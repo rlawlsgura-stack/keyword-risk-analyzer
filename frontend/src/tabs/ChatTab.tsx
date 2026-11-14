@@ -154,7 +154,6 @@ export function ChatTab() {
         {corpusReady && <div className="chat-saved-threads"><label>저장된 대화 <select value={threadId ?? ''} onChange={e => void openThread(e.target.value)} disabled={busy}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {SCOPE_LABELS[thread.mode as RegulationScope] ?? thread.mode}</option>)}</select></label><button type="button" className="chat-thread-delete" onClick={() => void removeThread()} disabled={!threadId || busy}>선택 대화 삭제</button></div>}
         {corpusReady && <div className="chat-scope-bar"><Select label="검색 모드" value={scope} options={SCOPES} format={s => SCOPE_LABELS[s]} onChange={setScope} /></div>}
         {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
-        {isAdmin && corpusReady && <RegulationDocuments />}
         {optionsOpen && <div className="chat-options"><div className="chat-options-title">검색 옵션</div>
           <div className="chat-options-grid">
             <Select label="질문 방향" value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} />
@@ -170,6 +169,7 @@ export function ChatTab() {
           </div>
           <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
         </div>}
+        {isAdmin && corpusReady && <RegulationDocuments />}
       </div>
       <main className="chat-thread" aria-live="polite">
         {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.</div></div>}
