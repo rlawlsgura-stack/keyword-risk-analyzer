@@ -140,6 +140,22 @@ def create_document(repository, *, source_key: str, version: str, title: str,
                   for i, chunk in enumerate(chunks)])
 
 
+def existing_document_versions(repository, source_key: str, filename: str) -> tuple[str, list[dict]]:
+    """Match uploads by stable filename, including documents registered before auto metadata."""
+    fields = 'id,source_key,version,category,status,content_sha256,effective_from,effective_to,original_name'
+    def find(column: str, value: str) -> list[dict]:
+        return repository.request('GET', '/rest/v1/kra_regulation_documents?' + urlencode({
+            'select': fields, column: f'eq.{value}', 'order': 'created_at.desc', 'limit': '200',
+        })) or []
+
+    versions = list({row['id']: row for row in
+                     find('source_key', source_key) + find('original_name', filename)}.values())
+    keys = {row['source_key'] for row in versions}
+    if len(keys) > 1:
+        raise ValueError('같은 파일명으로 여러 문서가 등록되어 있습니다. 파일명을 구분해 다시 업로드하세요.')
+    return (next(iter(keys)) if keys else source_key), versions
+
+
 def list_documents(repository) -> list[dict]:
     return repository.request('GET', '/rest/v1/kra_regulation_documents?'
         'select=id,source_key,version,title,category,effective_from,effective_to,status,'

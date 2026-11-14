@@ -81,6 +81,8 @@ begin
        or jsonb_array_length(p_chunks) > 300 then
         raise exception 'Document must contain 1 to 300 chunks';
     end if;
+    delete from public.kra_regulation_documents
+     where source_key = p_source_key and status = 'draft';
     insert into public.kra_regulation_documents(
         source_key, version, title, category, effective_from, effective_to,
         content_sha256, original_name, original_bytes, mime_type, created_by)
@@ -120,13 +122,14 @@ begin
     end if;
     if exists (select 1 from public.kra_regulation_documents
                where source_key = v_doc.source_key and status = 'approved'
-                 and effective_from >= v_doc.effective_from) then
+                 and effective_from > v_doc.effective_from) then
         raise exception 'New version must start after the previous approved version'
             using errcode = '40001';
     end if;
     update public.kra_regulation_documents
        set status = 'superseded',
-           effective_to = case when effective_to is null or effective_to >= v_doc.effective_from
+           effective_to = case when effective_from = v_doc.effective_from then effective_from
+                               when effective_to is null or effective_to >= v_doc.effective_from
                                then v_doc.effective_from - 1 else effective_to end
       where source_key = v_doc.source_key and status = 'approved';
     update public.kra_regulation_documents set status = 'approved',
@@ -153,6 +156,15 @@ language sql stable security invoker set search_path = '' as $$
         where d.status in ('approved', 'superseded') and d.effective_from <= p_as_of
           and (d.effective_to is null or d.effective_to >= p_as_of)
           and (d.category = '' or p_category = '' or d.category = p_category)
+          and not exists (
+              select 1 from public.kra_regulation_documents newer
+              where newer.source_key = d.source_key
+                and newer.status in ('approved', 'superseded')
+                and newer.effective_from <= p_as_of
+                and (newer.effective_to is null or newer.effective_to >= p_as_of)
+                and (newer.effective_from > d.effective_from or
+                     (newer.effective_from = d.effective_from and newer.approved_at > d.approved_at))
+          )
     ),
     lexical as (
         select id, row_number() over (order by

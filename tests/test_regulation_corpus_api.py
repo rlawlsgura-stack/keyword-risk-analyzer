@@ -1,7 +1,11 @@
 """Exercise role isolation and saved evidence through the public API contract."""
 import os
+import hashlib
 import unittest
+from datetime import datetime
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 
@@ -15,10 +19,14 @@ class FakeRepository:
         self.calls = []
         self.delete_result = True
         self.delete_prefer = None
+        self.documents = []
 
     def user(self, token):
         return {'id': '00000000-0000-0000-0000-000000000001',
                 'app_metadata': {'role': self.role}}
+
+    def load_openai_usage(self, month_start):
+        return {}
 
     def rpc(self, name, **params):
         self.calls.append((name, params))
@@ -42,6 +50,13 @@ class FakeRepository:
         if method == 'DELETE':
             self.delete_prefer = kwargs.get('prefer')
             return [{'id': 'deleted'}] if self.delete_result else []
+        if method == 'GET' and 'kra_regulation_documents' in path:
+            query = parse_qs(urlsplit(path).query)
+            for column in ('source_key', 'original_name'):
+                if column in query:
+                    value = query[column][0].removeprefix('eq.')
+                    return [row for row in self.documents if row[column] == value]
+            return self.documents
         return []
 
 
@@ -111,14 +126,17 @@ class RegulationCorpusApiTests(unittest.TestCase):
         client = self.client(repository)
         with patch.dict(os.environ, {'REGULATION_EMBEDDINGS_ENABLED': 'false'}):
             response = client.post('/api/v1/admin/regulation/documents',
-                data={'source_key': 'qa-guidance', 'version': '2026-11',
-                      'title': '심의 지침', 'category': '', 'effective_from': '2026-11-10',
-                      'effective_to': ''},
+                data={'category': '화장품', 'effective_from': '', 'effective_to': ''},
                 files={'file': ('guidance.txt', '화장품 광고 심의 지침의 테스트 본문입니다.'.encode('utf-8'))},
                 headers={'Authorization': 'Bearer test'})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['status'], 'draft')
         created = next(params for name, params in repository.calls if name == 'create_regulation_document')
+        self.assertEqual(created['p_source_key'], 'doc-' + hashlib.sha256(b'guidance.txt').hexdigest()[:24])
+        self.assertEqual(created['p_title'], 'guidance')
+        self.assertEqual(created['p_category'], '화장품')
+        self.assertEqual(created['p_effective_from'], datetime.now(ZoneInfo('Asia/Seoul')).date().isoformat())
+        self.assertIsNone(created['p_effective_to'])
         self.assertEqual(created['p_chunks'][0]['ordinal'], 1)
         self.assertIsNone(created['p_chunks'][0]['embedding'])
         document_id = response.json()['id']
@@ -126,6 +144,56 @@ class RegulationCorpusApiTests(unittest.TestCase):
                                headers={'Authorization': 'Bearer test'})
         self.assertEqual(approved.status_code, 200)
         self.assertEqual(approved.json()['status'], 'approved')
+
+    def test_same_filename_reuses_existing_document_identity(self):
+        repository = FakeRepository('admin')
+        repository.documents = [{
+            'id': '00000000-0000-0000-0000-000000000004', 'source_key': 'old-manual-key',
+            'version': '2026-10', 'category': '화장품', 'status': 'approved',
+            'content_sha256': '0' * 64, 'effective_from': '2026-11-14',
+            'effective_to': None, 'original_name': 'guidance.txt',
+        }]
+        client = self.client(repository)
+        with patch.dict(os.environ, {'REGULATION_EMBEDDINGS_ENABLED': 'false'}):
+            response = client.post('/api/v1/admin/regulation/documents',
+                data={'category': '화장품'},
+                files={'file': ('guidance.txt', '새로운 화장품 광고 심의 지침입니다.'.encode('utf-8'))},
+                headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 200, response.text)
+        created = next(params for name, params in repository.calls if name == 'create_regulation_document')
+        self.assertEqual(created['p_source_key'], 'old-manual-key')
+        self.assertIsNone(created['p_effective_to'])
+
+    def test_identical_approved_file_is_not_registered_again(self):
+        repository = FakeRepository('admin')
+        payload = '화장품 광고 심의 지침의 테스트 본문입니다.'.encode('utf-8')
+        repository.documents = [{
+            'id': '00000000-0000-0000-0000-000000000004', 'source_key': 'old-manual-key',
+            'version': '2026-10', 'category': '화장품', 'status': 'approved',
+            'content_sha256': hashlib.sha256(payload).hexdigest(),
+            'effective_from': '2026-10-10',
+            'effective_to': None, 'original_name': 'guidance.txt',
+        }]
+        client = self.client(repository)
+        response = client.post('/api/v1/admin/regulation/documents',
+            data={'category': '화장품'}, files={'file': ('guidance.txt', payload)},
+            headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['id'], repository.documents[0]['id'])
+        self.assertTrue(response.json()['unchanged'])
+        self.assertFalse(any(name == 'create_regulation_document' for name, _ in repository.calls))
+
+    def test_ambiguous_filename_does_not_replace_unrelated_document(self):
+        repository = FakeRepository('admin')
+        repository.documents = [
+            {'id': 'doc-a', 'source_key': 'manual-a', 'original_name': 'guide.txt'},
+            {'id': 'doc-b', 'source_key': 'manual-b', 'original_name': 'guide.txt'},
+        ]
+        response = self.client(repository).post('/api/v1/admin/regulation/documents',
+            data={'category': '화장품'}, files={'file': ('guide.txt', b'new guidance')},
+            headers={'Authorization': 'Bearer test'})
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(any(name == 'create_regulation_document' for name, _ in repository.calls))
 
     def test_llm_answer_requires_a_verbatim_citation(self):
         class Response:

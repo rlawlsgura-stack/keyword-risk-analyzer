@@ -114,10 +114,10 @@ export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_t
 export const loadRegulationUsage = () => request<RegulationUsageSummary>('/api/v1/regulation/usage')
 export const listRegulationDocuments = () => request<{ items: RegulationDocument[] }>('/api/v1/admin/regulation/documents')
 export const previewRegulationDocument = (id: string) => request<RegulationDocument & { chunks: { id: string; ordinal: number; content: string; embedding_model: string | null }[]; content_sha256: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}`)
-export const uploadRegulationDocument = (fields: { source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string; file: File }) => {
+export const uploadRegulationDocument = (fields: { category: string; effective_from: string; effective_to: string; file: File }) => {
   const form = new FormData()
   for (const [key, value] of Object.entries(fields)) form.append(key, value)
-  return request<{ id: string; status: string }>('/api/v1/admin/regulation/documents', { method: 'POST', body: form })
+  return request<{ id: string; status: string; unchanged?: boolean }>('/api/v1/admin/regulation/documents', { method: 'POST', body: form })
 }
 export const approveRegulationDocument = (id: string) => request<{ id: string; status: string }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/approve`, { method: 'POST' })
 export const buildRegulationEmbeddings = (id: string) => request<{ id: string; embedded_chunks: number }>(`/api/v1/admin/regulation/documents/${encodeURIComponent(id)}/embeddings`, { method: 'POST' })

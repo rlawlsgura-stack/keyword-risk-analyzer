@@ -1,5 +1,6 @@
 """Run: python -m uvicorn api:app --host 0.0.0.0 --port 8000"""
 import os
+import hashlib
 import secrets
 import logging
 import re
@@ -9,7 +10,8 @@ from typing import Literal
 from uuid import UUID
 
 import requests
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +28,8 @@ from regulation_assistant import RegulationSearchError, answer_regulation_questi
 from openai_usage import current_month_start, monthly_budget, record_usage
 from keyword_suggestion import SuggestionProviderError, suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
-                               load_document_preview, list_threads, load_thread, delete_thread,
+                               existing_document_versions, load_document_preview,
+                               list_threads, load_thread, delete_thread,
                                reindex_embeddings, save_turn)
 
 configure()
@@ -1653,25 +1656,48 @@ def regulation_documents(actor=Depends(current_actor),
 
 @app.post('/api/v1/admin/regulation/documents')
 async def upload_regulation_document(
-        source_key: str = Form(..., min_length=2, max_length=80),
-        version: str = Form(..., min_length=1, max_length=80),
-        title: str = Form(..., min_length=1, max_length=200),
         category: str = Form('', max_length=100),
-        effective_from: date = Form(...), effective_to: date | None = Form(None),
+        effective_from: date | None = Form(None), effective_to: date | None = Form(None),
         file: UploadFile = File(...), actor=Depends(current_actor),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         repository=Depends(get_repository)):
     admin_id = regulation_admin(actor, credentials, repository)
-    if not re.fullmatch(r'[a-z0-9_-]{2,80}', source_key):
-        raise HTTPException(422, '문서 식별자는 영문 소문자, 숫자, _, -만 사용할 수 있습니다.')
+    filename = os.path.basename(file.filename or '')
+    normalized_name = unicodedata.normalize('NFKC', filename).casefold().strip()
+    if not normalized_name:
+        raise HTTPException(422, '문서 파일명을 확인하세요.')
+    source_key = 'doc-' + hashlib.sha256(normalized_name.encode('utf-8')).hexdigest()[:24]
+    now = datetime.now(ZoneInfo('Asia/Seoul'))
+    version = now.strftime('%Y%m%d-%H%M%S-%f')
+    title = os.path.splitext(filename)[0].strip()[:200] or '문서'
+    try:
+        source_key, previous = existing_document_versions(repository, source_key, filename)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    dates_supplied = effective_from is not None or effective_to is not None
+    approved_starts = [date.fromisoformat(row['effective_from']) for row in previous
+                       if row['status'] == 'approved']
+    latest_approved_start = max(approved_starts, default=None)
+    if effective_from is None:
+        effective_from = max(now.date(), latest_approved_start or now.date())
+    elif latest_approved_start and effective_from < latest_approved_start:
+        raise HTTPException(422, '새 문서의 시행일은 현재 승인본의 시행일보다 빠를 수 없습니다.')
     if effective_to and effective_to < effective_from:
         raise HTTPException(422, '종료일은 시행일보다 빠를 수 없습니다.')
     payload = await file.read(MAX_DOCUMENT_BYTES + 1)
+    content_hash = hashlib.sha256(payload).hexdigest()
+    same = next((row for row in previous if row['content_sha256'] == content_hash
+                 and row['category'] == category.strip()
+                 and (not dates_supplied or (row['effective_from'] == effective_from.isoformat()
+                      and row['effective_to'] == (effective_to.isoformat() if effective_to else None)))
+                 and row['status'] in {'draft', 'approved'}), None)
+    if same:
+        return {'id': same['id'], 'status': same['status'], 'unchanged': True}
     try:
         document_id = create_document(repository, source_key=source_key,
-            version=version, title=title, category=category,
+            version=version, title=title, category=category.strip(),
             effective_from=effective_from, effective_to=effective_to,
-            filename=file.filename or '', payload=payload, actor_id=admin_id)
+            filename=filename, payload=payload, actor_id=admin_id)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     return {'id': document_id, 'status': 'draft'}

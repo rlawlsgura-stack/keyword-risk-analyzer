@@ -14,6 +14,15 @@ language sql stable security invoker set search_path = '' as $$
         where d.status in ('approved', 'superseded') and d.effective_from <= p_as_of
           and (d.effective_to is null or d.effective_to >= p_as_of)
           and (d.category = '' or p_category = '' or d.category = p_category)
+          and not exists (
+              select 1 from public.kra_regulation_documents newer
+              where newer.source_key = d.source_key
+                and newer.status in ('approved', 'superseded')
+                and newer.effective_from <= p_as_of
+                and (newer.effective_to is null or newer.effective_to >= p_as_of)
+                and (newer.effective_from > d.effective_from or
+                     (newer.effective_from = d.effective_from and newer.approved_at > d.approved_at))
+          )
     ),
     lexical as (
         select id, row_number() over (order by

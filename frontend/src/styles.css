@@ -431,13 +431,16 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .regulation-document-form input { width: 100%; box-sizing: border-box; }
 .regulation-document-form input:not([type="file"]) { height: 2.4rem; padding: .4rem .65rem; border: 1px solid #cbd4de; border-radius: 6px; background: #fff; color: #202020; font: inherit; line-height: 1.25; }
 .regulation-document-form > button { width: 100%; min-height: 2.4rem; align-self: end; padding: .3rem .85rem; border: 1px solid #cbd4de; border-radius: 6px; font: inherit; }
+.regulation-document-dates { grid-column: 1 / -1; }
+.regulation-document-dates[open] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.regulation-document-dates summary, .regulation-document-dates .caption { grid-column: 1 / -1; }
 .regulation-document-help { margin: .4rem 0; }
 .regulation-document-list > div { padding: .35rem 0; border-top: 1px solid #e6e8eb; }
 .regulation-document-list button { margin-left: .5rem; }
 .chat-keyword-highlight { padding: 0 .08em; border-radius: 2px; background: #ffe08a; color: #5b3b00; font-weight: 700; }
 @media (max-width: 700px) { .chat-workspace { min-height: max(420px, calc(100dvh - 8rem)); } .chat-options-grid { grid-template-columns: 1fr; } .chat-thread { min-height: max(28rem, calc(100dvh - 18rem)); } .chat-bubble { max-width: 92%; } }
 @media (max-width: 480px) { .chat-saved-threads label { flex-basis: 100%; } .chat-thread-delete { width: 100%; } }
-@media (max-width: 700px) { .regulation-document-form { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .regulation-document-form, .regulation-document-dates[open] { grid-template-columns: 1fr; } }
 
 .recommendation-target { color: #8a4b00; background: #fff1c2; border-radius: 4px; padding: .2rem .4rem; font-weight: 600; }
 .recommendation-highlight { color: #842a00; background: #ffe08a; border-radius: 2px; padding: 0 .04em; font-weight: 700; }
