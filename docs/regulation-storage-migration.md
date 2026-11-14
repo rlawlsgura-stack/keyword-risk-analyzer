@@ -4,12 +4,12 @@
 
 ## 기존 환경에 적용할 때
 
-1. 운영 환경의 DB 백업을 확인하고 `supabase/migrations/20261114115135_regulation_document_storage.sql`을 Supabase에 적용합니다. 이 단계에서 비공개 버킷, 스토리지 경로 컬럼, 이전 원본 정리 대기열 및 구버전 파일 이관 RPC가 만들어집니다.
+1. 운영 환경의 DB 백업을 확인하고 `supabase/migrations/20261114121006_regulation_document_storage.sql`을 Supabase에 적용합니다. 이 단계에서 비공개 버킷, 스토리지 경로 컬럼, 이전 원본 정리 대기열 및 구버전 파일 이관 RPC가 만들어집니다.
 2. 백엔드를 배포합니다. 새 API는 원본 파일을 Storage에 올리고 나머지 문서 처리는 기존 DB RPC 흐름을 따릅니다.
 3. 백엔드의 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`를 환경변수로 지정한 뒤 `python scripts/migrate_regulation_document_files_to_storage.py`를 실행합니다. 이 스크립트는 기존 파일을 한 번에 하나씩 옮기고 SHA-256을 비교한 다음 DB 경로를 갱신합니다. 완료 메시지를 확인하기 전에는 구 `original_bytes` 컬럼을 제거하지 마세요.
 4. 관리자에서 문서 목록, 본문 확인, 검색, 승인 및 삭제를 확인합니다.
 
-마이그레이션 SQL 적용과 이관 스크립트 실행은 이 로컬 작업에서는 수행하지 않았습니다. 기존 파일은 위 절차가 실행되기 전까지 PostgreSQL에 남아 있고 새 코드와 호환되도록 컬럼을 유지합니다.
+Supabase에 Storage 마이그레이션 SQL을 적용했고, 2026-11-14에 이전에 PostgreSQL에 남아 있던 원본 5개를 이관 스크립트로 옮겼습니다. 적용 후 승인 문서 4개와 이전 버전 2개 모두 Storage 경로가 있고, DB의 `original_bytes`는 비워진 것을 확인했습니다. 이관 스크립트는 각 원본의 SHA-256을 확인한 뒤에만 DB 경로를 갱신합니다.
 
 ## 용량과 전송 방식
 

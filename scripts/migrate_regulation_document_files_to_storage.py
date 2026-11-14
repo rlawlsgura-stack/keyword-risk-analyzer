@@ -2,7 +2,10 @@
 import base64
 import hashlib
 import secrets
+import sys
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from repository import SupabaseRepository
 
 
@@ -14,7 +17,8 @@ def main():
         if not rows:
             break
         row = rows[0]
-        payload = base64.b64decode(row['original_base64'], validate=True)
+        encoded = ''.join(str(row['original_base64']).split())
+        payload = base64.b64decode(encoded, validate=True)
         digest = hashlib.sha256(payload).hexdigest()
         if digest != row['content_sha256']:
             raise RuntimeError(f"Original file hash mismatch for {row['id']}")
