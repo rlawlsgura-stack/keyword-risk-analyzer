@@ -261,6 +261,11 @@ class KeywordRequestMessageEdit(BaseModel):
     request_type: Literal['risk_grade_adjustment', 'review_criteria_change', 'new_keyword_registration'] | None = None
 
 
+class KeywordInquiryStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    status: Literal['대기', '검토중', '처리완료']
+
+
 class AdminRequestNotificationsUpdate(BaseModel):
     enabled: bool
 
@@ -1020,6 +1025,21 @@ def add_keyword_request_message(request_id: UUID, body: KeywordRequestMessageCre
         raise HTTPException(422, str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(403, str(exc)) from exc
+
+
+@app.post('/api/v1/keyword-requests/{request_id}/messages/{message_id}/status')
+def set_keyword_inquiry_status(request_id: UUID, message_id: UUID,
+                               body: KeywordInquiryStatusUpdate,
+                               actor=Depends(current_actor),
+                               credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                               repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'An administrator session is required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    return repository.set_keyword_inquiry_status(
+        str(request_id), str(message_id), body.status, credentials.credentials)
 
 
 @app.put('/api/v1/keyword-requests/{request_id}/messages/{message_id}')

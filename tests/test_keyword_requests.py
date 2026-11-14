@@ -288,6 +288,24 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
             SupabaseRepository().respond_to_keyword_inquiry(
                 request_id, inquiry_id, 'feedback', 'invalid', 'admin-access-token')
 
+    def test_answered_inquiry_status_change_uses_authenticated_rpc(self):
+        request_id = '00000000-0000-0000-0000-000000000001'
+        inquiry_id = '00000000-0000-0000-0000-000000000002'
+        result_row = {'id': inquiry_id, 'status': '처리완료', 'request_status': '처리완료'}
+        with patch('repository.requests.request', return_value=self.response(result_row)) as request:
+            result = SupabaseRepository().set_keyword_inquiry_status(
+                request_id, inquiry_id, '처리완료', 'admin-access-token')
+
+        self.assertEqual(result, result_row)
+        self.assertEqual(request.call_args.args[:2], (
+            'POST', 'https://project.example.supabase.co/rest/v1/rpc/kra_admin_set_keyword_inquiry_status'))
+        self.assertEqual(request.call_args.kwargs['json'], {
+            'p_request_id': request_id, 'p_inquiry_id': inquiry_id, 'p_status': '처리완료'})
+        self.assertEqual(request.call_args.kwargs['headers']['Authorization'], 'Bearer admin-access-token')
+        with self.assertRaises(ValueError):
+            SupabaseRepository().set_keyword_inquiry_status(
+                request_id, inquiry_id, 'invalid', 'admin-access-token')
+
     def test_request_message_sql_is_append_only_and_owner_scoped(self):
         sql = (Path(__file__).resolve().parents[1]
                / 'supabase' / 'keyword_request_messages_setup.sql').read_text(encoding='utf-8')

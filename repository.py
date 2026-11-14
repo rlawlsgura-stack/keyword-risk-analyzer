@@ -230,6 +230,17 @@ class SupabaseRepository:
             token=access_token,
         )
 
+    def set_keyword_inquiry_status(self, request_id, inquiry_id, status, access_token):
+        request_id = str(UUID(str(request_id)))
+        inquiry_id = str(UUID(str(inquiry_id)))
+        if status not in {'대기', '검토중', '처리완료'}:
+            raise ValueError('처리상태 값이 올바르지 않습니다.')
+        return self.request(
+            'POST', '/rest/v1/rpc/kra_admin_set_keyword_inquiry_status',
+            {'p_request_id': request_id, 'p_inquiry_id': inquiry_id,
+             'p_status': status}, token=access_token,
+        )
+
     def add_keyword_request_message(self, request_id, author_id, author_email,
                                     body, access_token, author_role='user', reply_to_id=None):
         request_id = str(UUID(str(request_id)))

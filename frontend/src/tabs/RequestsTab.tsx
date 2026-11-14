@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   addRequestMessage, deleteKeywordRequest, deleteRequestMessage, editRequestMessage, loadKeywordRequests,
-  loadRequestMessages, loadRequestNotifications, saveRequestNotifications,
+  loadRequestMessages, loadRequestNotifications, saveRequestNotifications, setRequestMessageStatus,
 } from '../lib/api.ts'
 import { formatDatetime } from '../lib/catalog.ts'
 import type { KeywordRequestMessage, KeywordRequestRecord, KeywordRequestType } from '../lib/types.ts'
@@ -142,6 +142,7 @@ function RequestDialog({ request, onClose, onChanged }: {
   const [messages, setMessages] = useState<KeywordRequestMessage[] | null>(null)
   const [threadError, setThreadError] = useState('')
   const [feedbackFor, setFeedbackFor] = useState<string | null>(null)
+  const [statusFor, setStatusFor] = useState<string | null>(null)
   const [followFor, setFollowFor] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -153,7 +154,7 @@ function RequestDialog({ request, onClose, onChanged }: {
   }, [request.id])
   useEffect(() => { void load() }, [load])
 
-  const after = async (flash: string) => { setError(''); setFeedbackFor(null); setFollowFor(null); setConfirmDelete(null); await load(); await onChanged(flash) }
+  const after = async (flash: string) => { setError(''); setFeedbackFor(null); setStatusFor(null); setFollowFor(null); setConfirmDelete(null); await load(); await onChanged(flash) }
   const disabled = Boolean(threadError)
 
   const roots = (messages ?? []).filter(m => m.author_role === 'user' && !m.reply_to_id)
@@ -178,10 +179,17 @@ function RequestDialog({ request, onClose, onChanged }: {
         </div>
       ) : <Button key="delbtn" small onClick={() => setConfirmDelete(m.id)}>{code} 삭제</Button>)
     }
-    if (isAdmin && m.author_role === 'user' && !childOf.has(m.id) && !disabled) {
-      nodes.push(feedbackFor === m.id ? (
-        <Feedback key="fb" code={code} message={m} requestId={request.id} onSaved={() => after('대화 내역에 메시지를 추가했습니다.')} onError={setError} />
-      ) : <Button key="fbbtn" small className="request-feedback-button" onClick={() => setFeedbackFor(m.id)}>{code} 피드백 작성</Button>)
+    if (isAdmin && m.author_role === 'user' && !disabled) {
+      if (childOf.get(m.id)?.author_role === 'admin') {
+        nodes.push(statusFor === m.id ? (
+          <StatusEditor key="status" code={code} message={m} requestId={request.id}
+            onSaved={() => after('처리상태를 변경했습니다.')} onCancel={() => setStatusFor(null)} onError={setError} />
+        ) : <Button key="statusbtn" small onClick={() => setStatusFor(m.id)}>{code} 처리상태 변경</Button>)
+      } else if (!childOf.has(m.id)) {
+        nodes.push(feedbackFor === m.id ? (
+          <Feedback key="fb" code={code} message={m} requestId={request.id} onSaved={() => after('대화 내역에 메시지를 추가했습니다.')} onError={setError} />
+        ) : <Button key="fbbtn" small className="request-feedback-button" onClick={() => setFeedbackFor(m.id)}>{code} 피드백 작성</Button>)
+      }
     }
     if (!isAdmin && m.author_role === 'admin' && !childOf.has(m.id) && !disabled) {
       nodes.push(followFor === m.id ? (
@@ -310,6 +318,25 @@ function Feedback({ code, message, requestId, onSaved, onError }: {
       </form>
     </div>
   )
+}
+
+function StatusEditor({ code, message, requestId, onSaved, onCancel, onError }: {
+  code: string; message: KeywordRequestMessage; requestId: string
+  onSaved: () => void; onCancel: () => void; onError: (text: string) => void
+}) {
+  const [status, setStatus] = useState(message.status)
+  const [saving, setSaving] = useState(false)
+  return <form className="request-status-editor" onSubmit={async event => {
+    event.preventDefault()
+    if (saving || status === message.status) return
+    setSaving(true)
+    try { await setRequestMessageStatus(requestId, message.id, status); onSaved() }
+    catch { onError(`${code} 처리상태를 변경하지 못했습니다.`) }
+    finally { setSaving(false) }
+  }}>
+    <Select label={`${code} 처리상태`} value={status} options={[...STATUSES]} onChange={setStatus} disabled={saving} />
+    <div className="row tight"><Button primary type="submit" disabled={saving || status === message.status}>상태 저장</Button><Button onClick={onCancel} disabled={saving}>취소</Button></div>
+  </form>
 }
 
 function Compose({ label, submit, emptyText, failText, onSubmit, onSaved, onError, primary }: {

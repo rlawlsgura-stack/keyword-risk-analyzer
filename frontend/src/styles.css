@@ -349,6 +349,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .request-message-card.user { color: #244f7a; background: #f2f8ff; border-color: #cfe2f5; border-left-color: #3993e6; }
 .request-message-card.admin { color: #315d47; background: #f2faf5; border-color: #cfe8d8; border-left-color: #48a36d; }
 .request-message-card p { margin: .3rem 0 0; color: #31333f; white-space: pre-wrap; overflow-wrap: anywhere; }
+.request-status-editor { max-width: 20rem; padding: .6rem 0; }
 .request-thread-item { border-left-width: 4px; }
 .request-thread-item.tone-blue { background: #f3f8ff; border-color: #d3e3f5; border-left-color: #78a9dc; }
 .request-thread-item.tone-green { background: #f3faf5; border-color: #d2e9d8; border-left-color: #76b68b; }

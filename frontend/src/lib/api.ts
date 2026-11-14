@@ -212,6 +212,10 @@ export const loadRequestMessages = (id: string) =>
 export const addRequestMessage = (id: string, body: string, reply_to_id: string | null, status = '') =>
   request<unknown>(`/api/v1/keyword-requests/${id}/messages`, { method: 'POST', body: json({ body, reply_to_id, status }) })
 
+export const setRequestMessageStatus = (id: string, messageId: string, status: string) =>
+  request<{ id: string; status: string; request_status: string }>(`/api/v1/keyword-requests/${id}/messages/${messageId}/status`,
+    { method: 'POST', body: json({ status }) })
+
 export const editRequestMessage = (id: string, messageId: string, body: string, request_type?: KeywordRequestType) =>
   request<unknown>(`/api/v1/keyword-requests/${id}/messages/${messageId}`, { method: 'PUT', body: json({ body, request_type: request_type ?? null }) })
 
