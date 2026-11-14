@@ -98,7 +98,9 @@ export function RequestsTab() {
                   <tr key={r.id} className={selectedId === r.id ? 'selected' : ''} style={{ cursor: 'pointer' }} tabIndex={0}
                     onClick={() => setSelectedId(r.id)} onKeyDown={e => { if (e.key === 'Enter') setSelectedId(r.id) }}>
                     {columns.map(c => <td key={c.key} className={`request-col-${c.key}`}>{c.key === 'detail'
-                      ? <Button small onClick={() => { setSelectedId(r.id); setFlash(''); setOpen(r) }}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
+                      ? <Button small className={isAdmin && (r.needs_attention ?? r.status !== '처리완료') ? 'request-needs-attention' : undefined}
+                          title={isAdmin && (r.needs_attention ?? r.status !== '처리완료') ? '답변 또는 후속 처리 필요' : undefined}
+                          onClick={() => { setSelectedId(r.id); setFlash(''); setOpen(r) }}>{isAdmin ? '답변 및 처리' : '상세 보기'}</Button>
                       : c.render ? c.render(r) : String(r[c.key] ?? '')}</td>)}
                   </tr>
                 ))}

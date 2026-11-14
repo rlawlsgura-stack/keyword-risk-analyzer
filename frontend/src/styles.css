@@ -336,6 +336,8 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .request-table.admin .request-col-created_at { width: 13%; }
 .request-table.admin .request-col-detail { width: 12%; }
 .request-table .request-col-detail .btn { display: inline-flex; width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; padding-inline: .2rem; font-size: .8rem; white-space: nowrap; }
+.request-table .btn.request-needs-attention { color: #983d57; background: #ffedf1; border-color: #e8b7c4; }
+.request-table .btn.request-needs-attention:hover:not(:disabled) { color: #802843; background: #ffe0e8; border-color: #d98da3; }
 .request-table-summary { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .request-status { display: inline-block; padding: .15rem .55rem; border-radius: 999px; color: #1670b5; background: #e9f5ff; white-space: nowrap; }
 .request-status.done { color: #268350; background: #e9f7ef; }

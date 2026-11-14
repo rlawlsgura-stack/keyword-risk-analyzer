@@ -139,6 +139,7 @@ export type KeywordRequestRecord = {
   request_type: KeywordRequestType | string
   request_detail: string
   status: string
+  needs_attention?: boolean
   admin_reply: string
   created_at: string
   updated_at?: string

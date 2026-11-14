@@ -70,8 +70,9 @@ class KeywordRequestRepositoryTests(unittest.TestCase):
         with patch('repository.requests.request', return_value=self.response([])) as request:
             SupabaseRepository().load_keyword_requests('user-access-token')
 
+        self.assertIn('/rest/v1/kra_keyword_request_overview?', request.call_args.args[1])
         self.assertIn('id,receipt_no,requester_id', request.call_args.args[1])
-        self.assertIn('status,admin_reply,created_at', request.call_args.args[1])
+        self.assertIn('status,admin_reply,created_at,needs_attention', request.call_args.args[1])
 
     def test_admin_request_update_uses_user_jwt_and_only_workflow_fields(self):
         row = {'id': 'request-1', 'status': '검토중', 'admin_reply': '확인 중입니다.'}
