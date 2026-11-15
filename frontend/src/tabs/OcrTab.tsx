@@ -31,6 +31,8 @@ export function OcrTab() {
   const [engineError, setEngineError] = useState('')
   const [notice, setNotice] = useState<{ kind: 'success' | 'warning' | 'error'; text: string } | null>(null)
   const [previews, setPreviews] = useState<string[]>([])
+  const [showOcrImages, setShowOcrImages] = useState(true)
+  const [showOcrCandidates, setShowOcrCandidates] = useState(true)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const files = ocr.files
@@ -67,6 +69,8 @@ export function OcrTab() {
   const choose = (list: FileList | null) => {
     const chosen = [...(list ?? [])].filter(f => ACCEPT.includes(f.name.split('.').pop()?.toLowerCase() ?? ''))
     const oversized = chosen.filter(f => f.size > MAX_FILE)
+    setShowOcrImages(true)
+    setShowOcrCandidates(true)
     setNotice(oversized.length ? { kind: 'error', text: `${oversized.map(f => f.name).join(', ')}: 파일별 한도 20MB를 넘었습니다.` } : null)
     setOcr(s => ({ ...s, files: chosen.filter(f => f.size <= MAX_FILE), results: [], candidates: [], page: 0, version: s.version + 1 }))
   }
@@ -75,6 +79,8 @@ export function OcrTab() {
     setBusy(true); setEngineError(''); setNotice(null)
     try {
       const result = await extractOCR(files)
+      setShowOcrImages(true)
+      setShowOcrCandidates(true)
       setOcr(s => ({ ...s, results: result.files, candidates: result.candidates, version: s.version + 1 }))
     } catch (error) {
       setEngineError(`OCR 준비 중 오류가 발생했습니다: ${errorText(error)}`)
@@ -216,8 +222,14 @@ export function OcrTab() {
           {hasOverlay && <div className="caption">이미지 위 인식 글자를 드래그해 선택한 뒤 Ctrl+C로 복사할 수 있습니다.</div>}
           <div className="mt"><Button primary disabled={busy || tooMany || tooBig} onClick={runOcr}>OCR 분석 실행</Button></div>
           {busy && <Spinner text={`${files.length}장의 이미지를 순차로 OCR 처리하고 있습니다...`} />}
-          <Expander title={`OCR 분석 결과 이미지 (${files.length})`} defaultOpen>
-          <div style={{ width: '60%', minWidth: 320 }} className="mt">
+          <div className="ocr-section-heading mt">
+            <strong>OCR 분석 결과 이미지 ({files.length})</strong>
+            <button type="button" className="btn small" aria-expanded={showOcrImages}
+              onClick={() => setShowOcrImages(value => !value)}>
+              {showOcrImages ? '접기 ▲' : '펼치기 ▼'}
+            </button>
+          </div>
+          {showOcrImages && <div style={{ width: '60%', minWidth: 320 }} className="mt">
             {pageCount > 1 && (
               <div className="row center" style={{ justifyContent: 'space-between' }}>
                 <Button small disabled={page <= 0} onClick={() => setOcr(s => ({ ...s, page: page - 1 }))}>‹ 이전</Button>
@@ -236,8 +248,7 @@ export function OcrTab() {
                 )
               })}
             </div>
-          </div>
-          </Expander>
+          </div>}
           {files.length > 1 && (
             <Expander title={`첨부 이미지 파일명 ${files.length}개 확인`}>
               {files.map((f, i) => <div key={i}>• {f.name} ({(f.size / MB).toFixed(1)}MB)</div>)}
@@ -251,14 +262,20 @@ export function OcrTab() {
             : <Alert key={r.index} kind="warning">{`${r.name}: 인식한 텍스트가 없습니다.`}</Alert>
       ))}
       {notice && <Alert kind={notice.kind}>{notice.text}</Alert>}
-      <Expander title={`OCR 후보 텍스트 목록 (${ocr.candidates.length})`} defaultOpen>
-      {!ocr.candidates.length ? (
+      {ocr.candidates.length > 0 && <div className="mt"><Button onClick={reset}>OCR 분석 초기화</Button></div>}
+      <div className="ocr-section-heading mt">
+        <strong>OCR 후보 텍스트 목록 ({ocr.candidates.length})</strong>
+        <button type="button" className="btn small" aria-expanded={showOcrCandidates}
+          onClick={() => setShowOcrCandidates(value => !value)}>
+          {showOcrCandidates ? '접기 ▲' : '펼치기 ▼'}
+        </button>
+      </div>
+      {showOcrCandidates && (!ocr.candidates.length ? (
         <div style={{ background: '#e8f1ff', color: '#0061b0', minHeight: 62, maxWidth: 720, borderRadius: 8, padding: '1rem', marginTop: '1rem' }}>
           이미지를 업로드하고 OCR을 실행하면 검토할 후보가 여기에 표시됩니다.
         </div>
       ) : (
         <div className="mt">
-          <Button onClick={reset}>OCR 분석 초기화</Button>
           <div className="table-wrap mt">
             <table className="grid">
               <thead>
@@ -318,8 +335,7 @@ export function OcrTab() {
             {isAdmin && <Button primary onClick={save} disabled={busy}>선택 후보 승인 및 DB 저장</Button>}
           </div>
         </div>
-      )}
-      </Expander>
+      ))}
       <OcrABCompare />
     </div>
   )
