@@ -104,7 +104,7 @@ export function AnalysisTab() {
     }
   }, [mode, partialMinLen, opts, categories, risks, addPending, reloadCatalog, catalog])
 
-  // OCR → "OCR 후보 텍스트 분석 및 하이라이트 미리보기" switches here and runs once.
+  // OCR → "OCR 추출 텍스트 분석 및 하이라이트 미리보기" switches here and runs once.
   useEffect(() => {
     if (autoRun && tab === 'analysis' && !busy) { setAutoRun(false); void run(analysisText) }
   }, [autoRun, tab, busy, run, analysisText, setAutoRun])

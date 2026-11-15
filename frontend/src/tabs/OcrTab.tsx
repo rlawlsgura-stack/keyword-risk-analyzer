@@ -264,7 +264,7 @@ export function OcrTab() {
       {notice && <Alert kind={notice.kind}>{notice.text}</Alert>}
       {ocr.candidates.length > 0 && <div className="mt"><Button onClick={reset}>OCR 분석 초기화</Button></div>}
       <div className="ocr-section-heading mt">
-        <strong>OCR 후보 텍스트 목록 ({ocr.candidates.length})</strong>
+        <strong>OCR 추출 텍스트 목록 ({ocr.candidates.length})</strong>
         <button type="button" className="btn small" aria-expanded={showOcrCandidates}
           onClick={() => setShowOcrCandidates(value => !value)}>
           {showOcrCandidates ? '접기 ▲' : '펼치기 ▼'}
@@ -331,7 +331,7 @@ export function OcrTab() {
           {duplicates.length > 0 && <Alert kind="warning">{`기존 DB 또는 후보끼리 중복된 항목: ${duplicates.join(', ')}`}</Alert>}
           <div className="caption">신뢰도가 60% 미만인 후보는 기본 선택 해제 상태입니다. 모든 후보를 직접 검토하세요.</div>
           <div className="row tight mt">
-            <Button onClick={sendToAnalysis} title="승인 체크된 OCR 후보만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.">OCR 후보 텍스트 분석 및 하이라이트 미리보기</Button>
+            <Button onClick={sendToAnalysis} title="승인 체크된 OCR 추출 텍스트만 분석 입력란에 보내고 기존 키워드 DB로 분석합니다.">OCR 추출 텍스트 분석 및 하이라이트 미리보기</Button>
             {isAdmin && <Button primary onClick={save} disabled={busy}>선택 후보 승인 및 DB 저장</Button>}
           </div>
         </div>
