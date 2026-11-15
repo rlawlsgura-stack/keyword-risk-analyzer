@@ -4,6 +4,7 @@ import { pySorted } from '../lib/catalog.ts'
 import type { KeywordSuggestion, OCRCandidate, OCRFileResult } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Button, Expander, Spinner, errorText } from '../components/ui.tsx'
+import { OcrABCompare } from './OcrABCompare.tsx'
 
 const ACCEPT = ['png', 'jpg', 'jpeg', 'webp', 'bmp']
 const MB = 1024 * 1024
@@ -315,6 +316,7 @@ export function OcrTab() {
           </div>
         </div>
       )}
+      <OcrABCompare />
     </div>
   )
 }
