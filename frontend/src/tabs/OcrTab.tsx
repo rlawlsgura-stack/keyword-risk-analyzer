@@ -222,13 +222,11 @@ export function OcrTab() {
           {hasOverlay && <div className="caption">이미지 위 인식 글자를 드래그해 선택한 뒤 Ctrl+C로 복사할 수 있습니다.</div>}
           <div className="mt"><Button primary disabled={busy || tooMany || tooBig} onClick={runOcr}>OCR 분석 실행</Button></div>
           {busy && <Spinner text={`${files.length}장의 이미지를 순차로 OCR 처리하고 있습니다...`} />}
-          <div className="ocr-section-heading mt">
+          <button type="button" className="ocr-section-heading mt" aria-expanded={showOcrImages}
+            onClick={() => setShowOcrImages(value => !value)}>
             <strong>OCR 분석 결과 이미지 ({files.length})</strong>
-            <button type="button" className="btn small" aria-expanded={showOcrImages}
-              onClick={() => setShowOcrImages(value => !value)}>
-              {showOcrImages ? '접기 ▲' : '펼치기 ▼'}
-            </button>
-          </div>
+            <span className="ocr-section-toggle">{showOcrImages ? '접기 ▲' : '펼치기 ▼'}</span>
+          </button>
           {showOcrImages && <div style={{ width: '60%', minWidth: 320 }} className="mt">
             {pageCount > 1 && (
               <div className="row center" style={{ justifyContent: 'space-between' }}>
@@ -263,13 +261,11 @@ export function OcrTab() {
       ))}
       {notice && <Alert kind={notice.kind}>{notice.text}</Alert>}
       {ocr.candidates.length > 0 && <div className="mt"><Button onClick={reset}>OCR 분석 초기화</Button></div>}
-      <div className="ocr-section-heading mt">
+      <button type="button" className="ocr-section-heading mt" aria-expanded={showOcrCandidates}
+        onClick={() => setShowOcrCandidates(value => !value)}>
         <strong>OCR 추출 텍스트 목록 ({ocr.candidates.length})</strong>
-        <button type="button" className="btn small" aria-expanded={showOcrCandidates}
-          onClick={() => setShowOcrCandidates(value => !value)}>
-          {showOcrCandidates ? '접기 ▲' : '펼치기 ▼'}
-        </button>
-      </div>
+        <span className="ocr-section-toggle">{showOcrCandidates ? '접기 ▲' : '펼치기 ▼'}</span>
+      </button>
       {showOcrCandidates && (!ocr.candidates.length ? (
         <div style={{ background: '#e8f1ff', color: '#0061b0', minHeight: 62, maxWidth: 720, borderRadius: 8, padding: '1rem', marginTop: '1rem' }}>
           이미지를 업로드하고 OCR을 실행하면 검토할 후보가 여기에 표시됩니다.
