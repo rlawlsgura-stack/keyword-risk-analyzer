@@ -463,16 +463,12 @@ export function OcrABCompare() {
   const addRanges = (marks: Map<number, TextHighlight[]>, index: number, ranges: TextRange[], kind: MarkKind) =>
     marks.set(index, [...(marks.get(index) ?? []), ...ranges.map(range => ({ ...range, kind }))])
   if (mode === 'matches') {
-    for (const match of matches) {
-      addRanges(marksA, match.aIndex, match.aRanges, 'matched')
-      addRanges(marksB, match.bIndex, match.bRanges, 'matched')
-    }
+    for (const match of matches) addRanges(marksB, match.bIndex, match.bRanges, 'matched')
   } else if (mode === 'requirements') {
     for (const mark of comparison?.requirementMarks ?? []) marksB.set(mark.bIndex, mark.highlights)
   } else {
     for (const difference of differences) {
       const ranges = differenceTextRanges(difference)
-      if (difference.aIndex !== undefined) addRanges(marksA, difference.aIndex, ranges.aRanges, difference.kind)
       if (difference.bIndex !== undefined) addRanges(marksB, difference.bIndex, ranges.bRanges, difference.kind)
     }
   }
