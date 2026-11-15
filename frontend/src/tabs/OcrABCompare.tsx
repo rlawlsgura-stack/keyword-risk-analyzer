@@ -364,6 +364,10 @@ export function OcrABCompare() {
   const [templateTerms, setTemplateTerms] = useState('')
   const [templateError, setTemplateError] = useState('')
   const [templateMessage, setTemplateMessage] = useState('')
+  const [ocrTextDialogOpen, setOcrTextDialogOpen] = useState(false)
+  const [ocrTextBusy, setOcrTextBusy] = useState(false)
+  const [ocrTextError, setOcrTextError] = useState('')
+  const [ocrTextResults, setOcrTextResults] = useState<{ a: OCRFileResult | null; b: OCRFileResult | null } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -405,6 +409,8 @@ export function OcrABCompare() {
     setError('')
     setNotice('')
     setComparison(null)
+    setOcrTextResults(null)
+    setOcrTextDialogOpen(false)
     if (side === 'a') setFileA(file)
     else setFileB(file)
   }
@@ -471,6 +477,30 @@ export function OcrABCompare() {
     }
   }
 
+  const openOCRText = async () => {
+    setOcrTextDialogOpen(true)
+    setOcrTextError('')
+    if (comparison?.a || ocrTextResults?.a) return
+    if (!fileA || (mode !== 'requirements' && !fileB)) {
+      setOcrTextError('OCR 분석할 이미지를 먼저 첨부해 주세요.')
+      return
+    }
+    setOcrTextBusy(true)
+    try {
+      const result = await extractOCR(mode === 'requirements' ? [fileA] : [fileA, fileB!])
+      const a = result.files.find(file => file.index === 0) ?? null
+      const b = mode === 'requirements' ? null : result.files.find(file => file.index === 1) ?? null
+      if (!a || a.error || (mode !== 'requirements' && (!b || b.error))) {
+        throw new Error([a?.error, b?.error].filter(Boolean).join(' / ') || '이미지 OCR 결과를 받지 못했습니다.')
+      }
+      setOcrTextResults({ a, b })
+    } catch (cause) {
+      setOcrTextError(cause instanceof Error ? cause.message : 'OCR 텍스트를 추출하지 못했습니다.')
+    } finally {
+      setOcrTextBusy(false)
+    }
+  }
+
   const runComparison = async () => {
     const terms = parseSearchTerms(searchInput)
     if (!fileA || busy || (mode === 'requirements' ? !terms.length : !fileB)) return
@@ -478,6 +508,7 @@ export function OcrABCompare() {
     setError('')
     setNotice('')
     setComparison(null)
+    setOcrTextResults(null)
     try {
       let hashes: [string | null, string | null] = [null, null]
       if (mode !== 'requirements') hashes = await Promise.all([sha256(fileA), sha256(fileB!)])
@@ -548,6 +579,8 @@ export function OcrABCompare() {
   }
   const searchTermsInput = parseSearchTerms(searchInput)
   const canCompare = Boolean(fileA && !busy && (mode === 'requirements' ? searchTermsInput.length : fileB))
+  const ocrTextA = comparison?.a ?? ocrTextResults?.a ?? null
+  const ocrTextB = comparison?.b ?? ocrTextResults?.b ?? null
   const searchCounts = {
     found: searchTerms.filter(item => item.occurrences > 0).length,
     missing: searchTerms.filter(item => item.occurrences === 0).length,
@@ -567,7 +600,7 @@ export function OcrABCompare() {
           <div className="ocr-ab-upload-title"><strong>A안 검색어</strong><span>쉼표로 여러 개 입력</span></div>
           <label htmlFor="ocr-ab-search-terms">찾을 단어 또는 문구</label>
           <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="제품명, 중량, 전성분, 제조번호 및 사용기한"
-            onChange={event => { setSearchInput(event.target.value); setComparison(null); setError(''); setNotice(''); setTemplateMessage('') }} />
+            onChange={event => { setSearchInput(event.target.value); setComparison(null); setOcrTextResults(null); setOcrTextDialogOpen(false); setError(''); setNotice(''); setTemplateMessage('') }} />
           <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 입력한 문구가 A안 이미지에 있으면 표시합니다.</p>
           <div className="ocr-ab-template-tools">
             <select aria-label="저장된 검색어 템플릿" value={selectedTemplate} onChange={event => setSelectedTemplate(event.target.value)} disabled={!templates.length}>
@@ -597,6 +630,8 @@ export function OcrABCompare() {
         <select value={mode} disabled={busy} onChange={event => {
           setMode(event.target.value as ComparisonMode)
           setComparison(null)
+          setOcrTextResults(null)
+          setOcrTextDialogOpen(false)
           setError('')
           setNotice('')
         }}>
@@ -621,7 +656,10 @@ export function OcrABCompare() {
         ? `검색어 ${searchTerms.length}개 · 발견 ${searchCounts.found} · 미발견 ${searchCounts.missing}`
         : mode === 'matches' ? `A안과 일치하는 B안 문구 ${matches.length}건`
           : comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
-        <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
+        <div className="ocr-ab-report-actions">
+          <Button className="ocr-ab-no-print" disabled={ocrTextBusy} onClick={() => void openOCRText()}>{ocrTextBusy ? 'OCR 분석 중…' : 'OCR 분석'}</Button>
+          <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
+        </div>
       </div>
       {comparison.identical && mode === 'differences' && <Alert kind="success">A안과 B안은 파일 내용이 완전히 같습니다. OCR 분석은 생략했습니다.</Alert>}
       {comparison.identical && mode === 'matches' && <Alert kind="info">A안과 B안은 동일한 파일입니다. OCR 문구를 대조해 일치 위치를 표시했습니다.</Alert>}
@@ -680,6 +718,23 @@ export function OcrABCompare() {
         ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
         : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
     </div>}
+    {ocrTextDialogOpen && <Dialog title="OCR 추출 텍스트" onClose={() => setOcrTextDialogOpen(false)} wide>
+      <p className="ocr-ab-ocr-intro">첨부 이미지에서 OCR로 인식한 문구입니다. 텍스트를 선택해 복사할 수 있습니다.</p>
+      {ocrTextError && <Alert kind="error">{ocrTextError}</Alert>}
+      {ocrTextBusy && <Spinner text="이미지에서 텍스트를 OCR 분석하고 있습니다…" />}
+      {!ocrTextBusy && !ocrTextError && <div className={`ocr-ab-ocr-results${mode === 'requirements' ? ' single' : ''}`}>
+        <article>
+          <h4>A안 · 원안 <span>{fileA?.name}</span></h4>
+          {ocrTextA?.truncated && <p className="ocr-ab-ocr-note">인식 결과가 길어 일부 문구가 제외되었을 수 있습니다.</p>}
+          <pre>{ocrTextA?.lines.map(line => line.text).join('\n').trim() || '인식된 텍스트가 없습니다.'}</pre>
+        </article>
+        {mode !== 'requirements' && <article>
+          <h4>B안 · 대조안 <span>{fileB?.name}</span></h4>
+          {ocrTextB?.truncated && <p className="ocr-ab-ocr-note">인식 결과가 길어 일부 문구가 제외되었을 수 있습니다.</p>}
+          <pre>{ocrTextB?.lines.map(line => line.text).join('\n').trim() || '인식된 텍스트가 없습니다.'}</pre>
+        </article>}
+      </div>}
+    </Dialog>}
     {templateDialogOpen && <Dialog title={editingTemplateName ? '검색어 템플릿 수정' : '검색어 템플릿 만들기'} onClose={() => { setTemplateDialogOpen(false); setEditingTemplateName(null); setTemplateError('') }}>
       <form className="ocr-ab-template-form" onSubmit={saveSearchTemplate}>
         <label htmlFor="ocr-ab-template-name">템플릿 이름</label>
