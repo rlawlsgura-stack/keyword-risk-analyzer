@@ -1,3 +1,8 @@
+## React 1.0.13 / API 1.1.1
+
+- Replace the third A/B review mode's B image upload with comma- or line-separated search terms for the A image.
+- Highlight matching OCR text in the A image; keep the existing two-image comparison modes.
+
 ## React 1.0.12 / API 1.1.1 - React-only repository
 
 - Remove the Streamlit UI, launch scripts, dependencies, and dedicated tests.
