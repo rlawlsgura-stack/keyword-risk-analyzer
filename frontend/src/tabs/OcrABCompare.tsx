@@ -187,12 +187,40 @@ function DifferenceText({ difference, side }: { difference: Difference; side: Si
   return <HighlightedText text={text || '해당 문구 없음'} ranges={side === 'a' ? ranges.aRanges : ranges.bRanges} kind={difference.kind} />
 }
 
-function estimateCharacterWidth(character: string): number {
-  if (/\s/u.test(character)) return 0.32
-  if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u2e80-\ua4cf]/u.test(character)) return 1
-  if (/[ilI1.,:;'|!]/u.test(character)) return 0.32
-  if (/[MW@%#&]/u.test(character)) return 0.88
-  return 0.58
+let textMeasureContext: CanvasRenderingContext2D | null | undefined
+
+function estimateCharacterPositions(text: string, lineHeight: number): number[] {
+  const chars = Array.from(text)
+  const fallbackWeights = chars.map(character => {
+    if (/\s/u.test(character)) return 0.32
+    if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u2e80-\ua4cf]/u.test(character)) return 1
+    if (/[ilI1.,:;'|!]/u.test(character)) return 0.32
+    if (/[MW@%#&]/u.test(character)) return 0.88
+    return 0.58
+  })
+  const makePositions = (weights: number[]) => {
+    const total = weights.reduce((sum, weight) => sum + weight, 0)
+    let position = 0
+    return [0, ...weights.map(weight => {
+      position += total ? weight / total : 0
+      return position
+    })]
+  }
+  if (textMeasureContext === undefined) {
+    textMeasureContext = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d')
+  }
+  const context = textMeasureContext
+  if (!context) return makePositions(fallbackWeights)
+
+  context.font = `${Math.max(1, lineHeight)}px "Malgun Gothic", Arial, sans-serif`
+  const widths = [0]
+  let prefix = ''
+  for (const character of chars) {
+    prefix += character
+    widths.push(context.measureText(prefix).width)
+  }
+  const totalWidth = widths[widths.length - 1]
+  return totalWidth > 0 ? widths.map(width => width / totalWidth) : makePositions(fallbackWeights)
 }
 
 function findMatchingLines(a: OCRLine[], b: OCRLine[]): Match[] {
@@ -236,17 +264,13 @@ function DifferencePreview({ fileUrl, result, side, highlighted }: {
     const [boxX1, y1, boxX2, y2] = line.bbox
     if (boxX2 <= boxX1 || y2 <= y1) return []
     const chars = Array.from(line.text)
-    const weights = chars.map(estimateCharacterWidth)
-    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
-    if (!totalWeight) return []
-    const prefixWeights = [0]
-    weights.forEach(weight => prefixWeights.push(prefixWeights[prefixWeights.length - 1] + weight))
+    const positions = estimateCharacterPositions(line.text, y2 - y1)
     return ranges.flatMap(range => {
       const start = Math.max(0, Math.min(chars.length, range.start))
       const end = Math.max(start, Math.min(chars.length, range.end))
       if (end <= start) return []
-      const x1 = boxX1 + (boxX2 - boxX1) * prefixWeights[start] / totalWeight
-      const x2 = boxX1 + (boxX2 - boxX1) * prefixWeights[end] / totalWeight
+      const x1 = boxX1 + (boxX2 - boxX1) * positions[start]
+      const x2 = boxX1 + (boxX2 - boxX1) * positions[end]
       return [{ index: [index, start, end, range.kind].join('-'), text: chars.slice(start, end).join(''), kind: range.kind, x1, y1, x2, y2 }]
     })
   })
