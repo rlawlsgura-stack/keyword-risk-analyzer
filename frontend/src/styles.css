@@ -554,6 +554,19 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-match > strong { grid-row: span 2; align-self: start; padding: .2rem .35rem; border-radius: 4px; background: #eaf7ef; color: #176c3d; font-size: .72rem; text-align: center; }
 .ocr-ab-match small { color: #77879a; font-size: .68rem; }
 .ocr-ab-match p { margin: .15rem 0 0; color: #344659; font-size: .78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ocr-ab-requirements { margin-top: .8rem; }
+.ocr-ab-requirements h5 { margin: 0 0 .45rem; font-size: .84rem; }
+.ocr-ab-requirement { margin-top: .55rem; padding: .65rem; border: 1px solid #e3e9ef; border-radius: 5px; background: #fff; break-inside: avoid; }
+.ocr-ab-requirement-head { display: flex; align-items: center; gap: .55rem; margin-bottom: .45rem; }
+.ocr-ab-requirement-head > strong { color: #5d6e80; font-size: .76rem; }
+.ocr-ab-requirement-status { padding: .12rem .4rem; border-radius: 4px; font-size: .7rem; font-weight: 600; }
+.ocr-ab-requirement-status.found { background: #e3f4e9; color: #176c3d; }
+.ocr-ab-requirement-status.partial { background: #fff3d5; color: #825b08; }
+.ocr-ab-requirement-status.missing { background: #ffe7e4; color: #96362d; }
+.ocr-ab-requirement-status.unsearchable { background: #edf0f3; color: #637181; }
+.ocr-ab-requirement-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem .8rem; }
+.ocr-ab-requirement-body small { color: #77879a; font-size: .68rem; }
+.ocr-ab-requirement-body p { margin: .15rem 0 0; color: #344659; font-size: .78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
 .ocr-ab-text-mark { border-radius: 2px; padding: 0 .04em; }
 .ocr-ab-text-mark[data-kind="changed"] { background: #ffd8d2; color: #8f2e24; }
 .ocr-ab-text-mark[data-kind="added"] { background: #ffe9a9; color: #755108; }
@@ -566,7 +579,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-diff p { margin: .15rem 0 0; color: #344659; font-size: .78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
 .ocr-ab-advice { grid-column: 2 / -1; color: #596b7e; font-size: .73rem; }
 .ocr-ab-disclaimer { margin: .75rem 0 0; color: #7b8997; font-size: .72rem; line-height: 1.5; }
-@media (max-width: 700px) { .ocr-ab-section { padding: .85rem; } .ocr-ab-inputs, .ocr-ab-panes { grid-template-columns: 1fr; } .ocr-ab-heading { align-items: flex-start; } .ocr-ab-controls { align-items: flex-start; } .ocr-ab-mode { width: 100%; } .ocr-ab-mode select { flex: 1; min-width: 0; } .ocr-ab-diff { grid-template-columns: 3.5rem minmax(0, 1fr); } .ocr-ab-diff-kind { grid-row: span 1; } .ocr-ab-advice { grid-column: 2; } .ocr-ab-match { grid-template-columns: 2rem minmax(0, 1fr); } .ocr-ab-match > div:last-child { grid-column: 2; } .ocr-ab-match > strong { grid-row: span 2; } }
+@media (max-width: 700px) { .ocr-ab-section { padding: .85rem; } .ocr-ab-inputs, .ocr-ab-panes, .ocr-ab-requirement-body { grid-template-columns: 1fr; } .ocr-ab-heading { align-items: flex-start; } .ocr-ab-controls { align-items: flex-start; } .ocr-ab-mode { width: 100%; } .ocr-ab-mode select { flex: 1; min-width: 0; } .ocr-ab-diff { grid-template-columns: 3.5rem minmax(0, 1fr); } .ocr-ab-diff-kind { grid-row: span 1; } .ocr-ab-advice { grid-column: 2; } .ocr-ab-match { grid-template-columns: 2rem minmax(0, 1fr); } .ocr-ab-match > div:last-child { grid-column: 2; } .ocr-ab-match > strong { grid-row: span 2; } }
 @media print {
   @page { size: A4 landscape; margin: 10mm; }
   body * { visibility: hidden !important; }
@@ -574,7 +587,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
   .ocr-ab-report { position: absolute; inset: 0; width: 100%; margin: 0; padding: 0; border: 0; }
   .ocr-ab-no-print { display: none !important; }
   .ocr-ab-panes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .ocr-ab-pane, .ocr-ab-diff, .ocr-ab-match { break-inside: avoid; }
+  .ocr-ab-pane, .ocr-ab-diff, .ocr-ab-match, .ocr-ab-requirement { break-inside: avoid; }
   .ocr-ab-image-scroll { max-height: none; overflow: visible; }
   .ocr-ab-image-stage img { max-height: 110mm; }
   .ocr-ab-mark, .ocr-ab-text-mark { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
