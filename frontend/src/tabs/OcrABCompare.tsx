@@ -6,8 +6,11 @@ import { Alert, Button, Spinner } from '../components/ui.tsx'
 const ACCEPT = ['png', 'jpg', 'jpeg', 'webp', 'bmp']
 const MAX_FILE = 20 * 1024 * 1024
 type Difference = { kind: 'changed' | 'added' | 'removed'; aIndex?: number; bIndex?: number; aText: string; bText: string }
-type Comparison = { a: OCRFileResult | null; b: OCRFileResult | null; differences: Difference[]; hashes: [string | null, string | null]; identical: boolean; approximate: boolean }
+type Match = { aIndex: number; bIndex: number; aText: string; bText: string }
+type ComparisonMode = 'differences' | 'matches'
+type Comparison = { a: OCRFileResult | null; b: OCRFileResult | null; differences: Difference[]; matches: Match[]; hashes: [string | null, string | null]; identical: boolean; approximate: boolean }
 type Side = 'a' | 'b'
+type MarkKind = Difference['kind'] | 'matched'
 
 const normalizeLine = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -65,6 +68,28 @@ function compareLines(a: OCRLine[], b: OCRLine[]): { differences: Difference[]; 
   return { differences, approximate: false }
 }
 
+function findMatchingLines(a: OCRLine[], b: OCRLine[]): Match[] {
+  const aIndexes = new Map<string, number[]>()
+  a.forEach((line, index) => {
+    const key = normalizeLine(line.text)
+    if (!key) return
+    const indexes = aIndexes.get(key)
+    if (indexes) indexes.push(index)
+    else aIndexes.set(key, [index])
+  })
+  const used = new Map<string, number>()
+  return b.flatMap((line, bIndex) => {
+    const key = normalizeLine(line.text)
+    const candidates = aIndexes.get(key)
+    if (!key || !candidates) return []
+    const offset = used.get(key) ?? 0
+    if (offset >= candidates.length) return []
+    used.set(key, offset + 1)
+    const aIndex = candidates[offset]
+    return [{ aIndex, bIndex, aText: a[aIndex].text, bText: line.text }]
+  })
+}
+
 async function sha256(file: File): Promise<string | null> {
   if (!globalThis.crypto?.subtle) return null
   const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer())
@@ -72,7 +97,7 @@ async function sha256(file: File): Promise<string | null> {
 }
 
 function DifferencePreview({ fileUrl, result, side, highlighted }: {
-  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, Difference['kind'][]>
+  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, MarkKind[]>
 }) {
   const src = result?.preview_data || fileUrl
   const width = result?.image_width || 1, height = result?.image_height || 1
@@ -81,7 +106,7 @@ function DifferencePreview({ fileUrl, result, side, highlighted }: {
     if (!kinds?.length || !line.bbox || line.bbox.length !== 4) return []
     const [x1, y1, x2, y2] = line.bbox
     if (x2 <= x1 || y2 <= y1) return []
-    const kind = kinds.includes('added') ? 'added' : kinds.includes('removed') ? 'removed' : 'changed'
+    const kind = kinds.includes('matched') ? 'matched' : kinds.includes('added') ? 'added' : kinds.includes('removed') ? 'removed' : 'changed'
     return [{ index, text: line.text, kind, x1, y1, x2, y2 }]
   })
   return <div className="ocr-ab-image-scroll"><div className="ocr-ab-image-stage">
@@ -97,6 +122,7 @@ export function OcrABCompare() {
   const [urlA, setUrlA] = useState('')
   const [urlB, setUrlB] = useState('')
   const [comparison, setComparison] = useState<Comparison | null>(null)
+  const [mode, setMode] = useState<ComparisonMode>('differences')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -136,8 +162,9 @@ export function OcrABCompare() {
     setComparison(null)
     try {
       const [hashA, hashB] = await Promise.all([sha256(fileA), sha256(fileB)])
-      if (hashA && hashA === hashB) {
-        setComparison({ a: null, b: null, differences: [], hashes: [hashA, hashB], identical: true, approximate: false })
+      const identical = Boolean(hashA && hashA === hashB)
+      if (identical && mode === 'differences') {
+        setComparison({ a: null, b: null, differences: [], matches: [], hashes: [hashA, hashB], identical: true, approximate: false })
         return
       }
       const result = await extractOCR([fileA, fileB])
@@ -146,12 +173,15 @@ export function OcrABCompare() {
       if (!a || !b || a.error || b.error) {
         throw new Error([a?.error, b?.error].filter(Boolean).join(' / ') || '두 이미지의 OCR 결과를 받지 못했습니다.')
       }
-      const compared = compareLines(a.lines, b.lines)
-      setComparison({ a, b, differences: compared.differences, hashes: [hashA, hashB], identical: false, approximate: compared.approximate })
+      const compared = mode === 'differences' ? compareLines(a.lines, b.lines) : { differences: [], approximate: false }
+      const matches = mode === 'matches' ? findMatchingLines(a.lines, b.lines) : []
+      setComparison({ a, b, differences: compared.differences, matches, hashes: [hashA, hashB], identical, approximate: compared.approximate })
       const notices = []
-      if (!a.lines.some(line => line.bbox) || !b.lines.some(line => line.bbox)) notices.push('OCR 위치 정보를 얻지 못한 문구는 차이 목록에만 표시됩니다.')
+      if (!a.lines.some(line => line.bbox) || !b.lines.some(line => line.bbox)) notices.push('OCR 위치 정보를 얻지 못한 문구는 아래 결과 목록에서만 확인할 수 있습니다.')
       if (compared.approximate) notices.push('인식 문구가 많아 순서 기준으로 간략 대조했습니다. 하이라이트를 확인해 주세요.')
-      if (a.truncated || b.truncated) notices.push('OCR 결과가 2,000줄에서 잘려 일부 차이는 누락될 수 있습니다.')
+      if (a.truncated || b.truncated) notices.push(mode === 'matches'
+        ? 'OCR 결과가 2,000줄에서 잘려 일부 일치 문구가 누락될 수 있습니다.'
+        : 'OCR 결과가 2,000줄에서 잘려 일부 차이는 누락될 수 있습니다.')
       setNotice(notices.join(' '))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'A/B 비교 중 오류가 발생했습니다.')
@@ -161,17 +191,27 @@ export function OcrABCompare() {
   }
 
   const differences = comparison?.differences ?? []
-  const marksA = new Map<number, Difference['kind'][]>()
-  const marksB = new Map<number, Difference['kind'][]>()
-  for (const difference of differences) {
-    if (difference.aIndex !== undefined) marksA.set(difference.aIndex, [...(marksA.get(difference.aIndex) ?? []), difference.kind])
-    if (difference.bIndex !== undefined) marksB.set(difference.bIndex, [...(marksB.get(difference.bIndex) ?? []), difference.kind])
+  const matches = comparison?.matches ?? []
+  const marksA = new Map<number, MarkKind[]>()
+  const marksB = new Map<number, MarkKind[]>()
+  const addMark = (marks: Map<number, MarkKind[]>, index: number, kind: MarkKind) =>
+    marks.set(index, [...(marks.get(index) ?? []), kind])
+  if (mode === 'matches') {
+    for (const match of matches) {
+      addMark(marksA, match.aIndex, 'matched')
+      addMark(marksB, match.bIndex, 'matched')
+    }
+  } else {
+    for (const difference of differences) {
+      if (difference.aIndex !== undefined) addMark(marksA, difference.aIndex, difference.kind)
+      if (difference.bIndex !== undefined) addMark(marksB, difference.bIndex, difference.kind)
+    }
   }
   const canCompare = Boolean(fileA && fileB && !busy)
 
   return <section className="ocr-ab-section">
     <div className="ocr-ab-heading">
-      <div><h3>A/B 이미지 비교 검토</h3><p>기존 이미지 OCR 기능과 분리된 비교 공간입니다. A안을 기준으로 B안의 문구 변화를 표시합니다.</p></div>
+      <div><h3>A/B 이미지 비교 검토</h3><p>비교 모드에서 차이 또는 A안과 일치하는 B안 문구를 찾아 표시합니다.</p></div>
       <span className="ocr-ab-badge">OCR + SHA-256</span>
     </div>
     <div className="ocr-ab-inputs ocr-ab-no-print">
@@ -189,26 +229,44 @@ export function OcrABCompare() {
       })}
     </div>
     <div className="ocr-ab-controls ocr-ab-no-print">
+      <label className="ocr-ab-mode">
+        <span>비교 모드</span>
+        <select value={mode} disabled={busy} onChange={event => {
+          setMode(event.target.value as ComparisonMode)
+          setComparison(null)
+          setError('')
+          setNotice('')
+        }}>
+          <option value="differences">A안 대비 B안의 차이 찾기</option>
+          <option value="matches">A안과 일치하는 B안 내용 찾기</option>
+        </select>
+      </label>
       <span>지원 형식 PNG, JPG, JPEG, WEBP, BMP · 파일별 최대 20MB</span>
-      <Button primary disabled={!canCompare} onClick={() => void runComparison()}>{busy ? '비교 중…' : '차이 분석'}</Button>
+      <Button primary disabled={!canCompare} onClick={() => void runComparison()}>
+        {busy ? '비교 중…' : mode === 'matches' ? '일치 내용 찾기' : '차이 분석'}
+      </Button>
     </div>
     {error && <Alert kind="error">{error}</Alert>}
-    {busy && <Spinner text="두 이미지를 OCR 분석하고 변경 문구를 대조하고 있습니다…" />}
+    {busy && <Spinner text={mode === 'matches' ? '두 이미지를 OCR 분석하고 일치 문구를 찾고 있습니다…' : '두 이미지를 OCR 분석하고 변경 문구를 대조하고 있습니다…'} />}
     {notice && <div className="ocr-ab-notice">{notice}</div>}
 
     {comparison && <div className="ocr-ab-report">
-      <div className="ocr-ab-report-title"><div><h4>비교 검토 결과</h4><span>{comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
+      <div className="ocr-ab-report-title"><div><h4>비교 검토 결과</h4><span>{mode === 'matches'
+        ? `A안과 일치하는 B안 문구 ${matches.length}건`
+        : comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
         <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
       </div>
-      {comparison.identical && <Alert kind="success">A안과 B안은 파일 내용이 완전히 같습니다. OCR 분석은 생략했습니다.</Alert>}
-      {!comparison.identical && differences.length === 0 && <Alert kind="info">이미지 해시는 다르지만 OCR 문구 차이는 찾지 못했습니다. 이미지 색상·배치 차이는 이 대조 범위에 포함되지 않습니다.</Alert>}
+      {comparison.identical && mode === 'differences' && <Alert kind="success">A안과 B안은 파일 내용이 완전히 같습니다. OCR 분석은 생략했습니다.</Alert>}
+      {comparison.identical && mode === 'matches' && <Alert kind="info">A안과 B안은 동일한 파일입니다. OCR 문구를 대조해 일치 위치를 표시했습니다.</Alert>}
+      {mode === 'differences' && !comparison.identical && differences.length === 0 && <Alert kind="info">이미지 해시는 다르지만 OCR 문구 차이는 찾지 못했습니다. 이미지 색상·배치 차이는 이 대조 범위에 포함되지 않습니다.</Alert>}
+      {mode === 'matches' && matches.length === 0 && <Alert kind="info">OCR 문구가 A안과 완전히 일치하는 B안 내용을 찾지 못했습니다.</Alert>}
       <div className="ocr-ab-panes">
         <article className="ocr-ab-pane"><header><strong>A안 · 원안</strong><span>{fileA?.name}</span></header>
           {urlA && <DifferencePreview fileUrl={urlA} result={comparison.a} side="a" highlighted={marksA} />}</article>
         <article className="ocr-ab-pane"><header><strong>B안 · 대조안</strong><span>{fileB?.name}</span></header>
           {urlB && <DifferencePreview fileUrl={urlB} result={comparison.b} side="b" highlighted={marksB} />}</article>
       </div>
-      {!comparison.identical && differences.length > 0 && <>
+      {mode === 'differences' && !comparison.identical && differences.length > 0 && <>
           <div className="ocr-ab-legend"><span><i className="ocr-ab-dot changed" />변경 문구</span><span><i className="ocr-ab-dot added" />추가 문구</span><span><i className="ocr-ab-dot removed" />삭제 문구</span></div>
           <div className="ocr-ab-diffs"><h5>차이 및 확인 안내</h5>
             {differences.map((difference, index) => <article className="ocr-ab-diff" key={`${difference.kind}-${difference.aIndex}-${difference.bIndex}-${index}`}>
@@ -219,7 +277,19 @@ export function OcrABCompare() {
             </article>)}
           </div>
       </>}
-      {!comparison.identical && <p className="ocr-ab-disclaimer">이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.</p>}
+      {mode === 'matches' && matches.length > 0 && <>
+        <div className="ocr-ab-legend"><span><i className="ocr-ab-dot matched" />A안과 일치하는 문구</span></div>
+        <div className="ocr-ab-matches"><h5>A안과 일치하는 B안 문구</h5>
+          {matches.map((match, index) => <article className="ocr-ab-match" key={`${match.aIndex}-${match.bIndex}-${index}`}>
+            <strong>{index + 1}</strong>
+            <div><small>A안 · 원안</small><p>{match.aText}</p></div>
+            <div><small>B안 · 대조안</small><p>{match.bText}</p></div>
+          </article>)}
+        </div>
+      </>}
+      {!comparison.identical && <p className="ocr-ab-disclaimer">{mode === 'matches'
+        ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
+        : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
     </div>}
   </section>
 }
