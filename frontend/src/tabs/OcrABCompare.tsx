@@ -17,9 +17,9 @@ type TextHighlight = TextRange & { kind: MarkKind }
 type MarkKind = Difference['kind'] | 'matched'
 type TextAlignment = { aMatches: TextRange[]; bMatches: TextRange[]; aChanges: TextRange[]; bChanges: TextRange[] }
 type RequirementEvidence = { bIndex: number; text: string; highlights: TextHighlight[] }
-type RequirementStatus = 'found' | 'partial' | 'missing' | 'unsearchable'
+type RequirementStatus = 'found' | 'missing'
 type RequirementCheck = {
-  aIndex: number; aText: string; status: RequirementStatus; tokenCount: number; foundTokenCount: number
+  aIndex: number; aText: string; status: RequirementStatus; tokenCount: number
   aHighlights: TextHighlight[]; evidence: RequirementEvidence[]
 }
 type Comparison = {
@@ -317,10 +317,8 @@ function findRequirementChecks(a: OCRLine[], b: OCRLine[]): RequirementCheck[] {
     const tokens = requirementTokens(line.text)
     const evidenceByLine = new Map<number, TextHighlight[]>()
     const aHighlights: TextHighlight[] = []
-    let foundTokenCount = 0
     for (const token of tokens) {
       const occurrences = findTokenRanges(searchableB, token.value)
-      if (occurrences.size) foundTokenCount++
       for (const [bIndex, ranges] of occurrences) {
         evidenceByLine.set(bIndex, [
           ...(evidenceByLine.get(bIndex) ?? []),
@@ -336,10 +334,12 @@ function findRequirementChecks(a: OCRLine[], b: OCRLine[]): RequirementCheck[] {
     const evidence = [...evidenceByLine]
       .sort(([left], [right]) => left - right)
       .map(([bIndex, highlights]) => ({ bIndex, text: b[bIndex].text, highlights: highlights.sort((left, right) => left.start - right.start) }))
-    const status: RequirementStatus = !tokens.length ? 'unsearchable'
-      : foundTokenCount === tokens.length ? 'found'
-        : foundTokenCount ? 'partial' : 'missing'
-    return { aIndex, aText: line.text, status, tokenCount: tokens.length, foundTokenCount, aHighlights, evidence }
+    const found = tokens.length > 0 && aHighlights.every(highlight => highlight.kind === 'matched')
+    const status: RequirementStatus = found ? 'found' : 'missing'
+    return {
+      aIndex, aText: line.text, status, tokenCount: tokens.length,
+      aHighlights: found ? aHighlights : aHighlights.map(highlight => ({ ...highlight, kind: 'changed' })), evidence,
+    }
   })
 }
 
@@ -498,9 +498,7 @@ export function OcrABCompare() {
   const canCompare = Boolean(fileA && fileB && !busy)
   const requirementCounts = {
     found: requirements.filter(item => item.status === 'found').length,
-    partial: requirements.filter(item => item.status === 'partial').length,
     missing: requirements.filter(item => item.status === 'missing').length,
-    unsearchable: requirements.filter(item => item.status === 'unsearchable').length,
   }
 
   return <section className="ocr-ab-section">
@@ -549,14 +547,14 @@ export function OcrABCompare() {
 
     {comparison && <div className="ocr-ab-report">
       <div className="ocr-ab-report-title"><div><h4>비교 검토 결과</h4><span>{mode === 'requirements'
-        ? `A안 항목 ${requirements.length}건 · 모두 찾음 ${requirementCounts.found} · 일부 찾음 ${requirementCounts.partial} · 미발견 ${requirementCounts.missing} · 검색 불가 ${requirementCounts.unsearchable}`
+        ? `A안 항목 ${requirements.length}건 · 모두 찾음 ${requirementCounts.found} · 미발견 ${requirementCounts.missing}`
         : mode === 'matches' ? `A안과 일치하는 B안 문구 ${matches.length}건`
           : comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
         <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
       </div>
       {comparison.identical && mode === 'differences' && <Alert kind="success">A안과 B안은 파일 내용이 완전히 같습니다. OCR 분석은 생략했습니다.</Alert>}
       {comparison.identical && mode === 'matches' && <Alert kind="info">A안과 B안은 동일한 파일입니다. OCR 문구를 대조해 일치 위치를 표시했습니다.</Alert>}
-      {mode === 'requirements' && requirementCounts.found + requirementCounts.partial + requirementCounts.missing === 0 && <Alert kind="info">A안에서 검색할 수 있는 OCR 항목을 찾지 못했습니다.</Alert>}
+      {mode === 'requirements' && (requirements.length === 0 || requirements.every(item => item.tokenCount === 0)) && <Alert kind="info">A안에서 검색할 수 있는 OCR 항목을 찾지 못했습니다. 해당 항목은 미발견으로 표시됩니다.</Alert>}
       {mode === 'differences' && !comparison.identical && differences.length === 0 && <Alert kind="info">이미지 해시는 다르지만 OCR 문구 차이는 찾지 못했습니다. 이미지 색상·배치 차이는 이 대조 범위에 포함되지 않습니다.</Alert>}
       {mode === 'matches' && matches.length === 0 && <Alert kind="info">OCR 문구가 A안과 완전히 일치하는 B안 내용을 찾지 못했습니다.</Alert>}
       <div className="ocr-ab-panes">
@@ -593,16 +591,13 @@ export function OcrABCompare() {
         </div>
         <div className="ocr-ab-requirements">
           <h5>A안 항목별 B안 포함 여부</h5>
-          <p className="caption">A안의 OCR 줄을 항목으로 보고, 각 단어를 B안 전체에서 위치와 순서에 상관없이 찾습니다. 동의어나 의미가 비슷한 표현은 추론하지 않습니다.</p>
+          <p className="caption">A안의 OCR 한 줄을 하나의 항목으로 봅니다. 그 줄의 검색 가능한 단어가 B안 어디서든 모두 확인된 경우만 ‘모두 찾음’이며, 하나라도 없거나 검색할 단어가 없으면 ‘미발견’입니다. 검색은 위치와 순서에 상관없이 하며 동의어나 유사 표현은 추론하지 않습니다.</p>
           {requirements.map((requirement, index) => <article className={'ocr-ab-requirement ' + requirement.status} key={requirement.aIndex}>
             <header className="ocr-ab-requirement-head">
               <strong>{index + 1}</strong>
               <span className={'ocr-ab-requirement-status ' + requirement.status}>
-                {requirement.status === 'found' ? '모두 찾음' : requirement.status === 'partial' ? '일부 찾음' : requirement.status === 'missing' ? '미발견' : '검색 불가'}
+                {requirement.status === 'found' ? '모두 찾음' : '미발견'}
               </span>
-              <span className="caption">{requirement.tokenCount
-                ? requirement.foundTokenCount + '/' + requirement.tokenCount + '개 단어 확인'
-                : '검색 가능한 단어 없음'}</span>
             </header>
             <div className="ocr-ab-requirement-body">
               <div><small>A안 항목</small><p><HighlightedText text={requirement.aText} ranges={requirement.aHighlights} /></p></div>
@@ -613,7 +608,7 @@ export function OcrABCompare() {
                       <HighlightedText text={evidence.text} ranges={evidence.highlights} />
                     </p>
                   ))
-                  : <p>{requirement.status === 'unsearchable' ? '검색할 수 있는 OCR 단어가 없습니다.' : 'B안에서 직접 일치하는 단어를 찾지 못했습니다.'}</p>}
+                  : <p>{requirement.tokenCount === 0 ? '검색할 수 있는 OCR 단어가 없어 미발견 처리했습니다.' : 'B안에서 직접 일치하는 단어를 찾지 못했습니다.'}</p>}
               </div>
             </div>
           </article>)}

@@ -561,9 +561,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-requirement-head > strong { color: #5d6e80; font-size: .76rem; }
 .ocr-ab-requirement-status { padding: .12rem .4rem; border-radius: 4px; font-size: .7rem; font-weight: 600; }
 .ocr-ab-requirement-status.found { background: #e3f4e9; color: #176c3d; }
-.ocr-ab-requirement-status.partial { background: #fff3d5; color: #825b08; }
 .ocr-ab-requirement-status.missing { background: #ffe7e4; color: #96362d; }
-.ocr-ab-requirement-status.unsearchable { background: #edf0f3; color: #637181; }
 .ocr-ab-requirement-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem .8rem; }
 .ocr-ab-requirement-body small { color: #77879a; font-size: .68rem; }
 .ocr-ab-requirement-body p { margin: .15rem 0 0; color: #344659; font-size: .78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
