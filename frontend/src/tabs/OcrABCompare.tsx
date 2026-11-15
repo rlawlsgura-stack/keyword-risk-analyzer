@@ -1,16 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { extractOCR } from '../lib/api.ts'
 import type { OCRFileResult, OCRLine } from '../lib/types.ts'
 import { Alert, Button, Spinner } from '../components/ui.tsx'
 
 const ACCEPT = ['png', 'jpg', 'jpeg', 'webp', 'bmp']
 const MAX_FILE = 20 * 1024 * 1024
-type Difference = { kind: 'changed' | 'added' | 'removed'; aIndex?: number; bIndex?: number; aText: string; bText: string }
-type Match = { aIndex: number; bIndex: number; aText: string; bText: string }
+type TextRange = { start: number; end: number }
+type Difference = {
+  kind: 'changed' | 'added' | 'removed'; aIndex?: number; bIndex?: number; aText: string; bText: string
+  aRanges?: TextRange[]; bRanges?: TextRange[]; aMatches?: TextRange[]; bMatches?: TextRange[]
+}
+type Match = { aIndex: number; bIndex: number; aText: string; bText: string; aRanges: TextRange[]; bRanges: TextRange[] }
 type ComparisonMode = 'differences' | 'matches'
 type Comparison = { a: OCRFileResult | null; b: OCRFileResult | null; differences: Difference[]; matches: Match[]; hashes: [string | null, string | null]; identical: boolean; approximate: boolean }
 type Side = 'a' | 'b'
+type TextHighlight = TextRange & { kind: MarkKind }
 type MarkKind = Difference['kind'] | 'matched'
+type TextAlignment = { aMatches: TextRange[]; bMatches: TextRange[]; aChanges: TextRange[]; bChanges: TextRange[] }
 
 const normalizeLine = (value: string) => value.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim()
 
@@ -68,6 +74,127 @@ function compareLines(a: OCRLine[], b: OCRLine[]): { differences: Difference[]; 
   return { differences, approximate: false }
 }
 
+function normalizeMappedText(value: string) {
+  const values: string[] = [], sourceIndexes: number[] = []
+  Array.from(value).forEach((character, sourceIndex) => {
+    for (const normalized of Array.from(character.normalize('NFKC').toLocaleLowerCase())) {
+      const comparable = /\s/u.test(normalized) ? ' ' : normalized
+      if (comparable === ' ' && values.at(-1) === ' ') continue
+      values.push(comparable)
+      sourceIndexes.push(sourceIndex)
+    }
+  })
+  let start = 0, end = values.length
+  while (values[start] === ' ') start++
+  while (end > start && values[end - 1] === ' ') end--
+  return { chars: values.slice(start, end), sourceIndexes: sourceIndexes.slice(start, end) }
+}
+
+function rangesFromIndexes(sourceIndexes: number[]): TextRange[] {
+  const sorted = [...new Set(sourceIndexes)].sort((a, b) => a - b)
+  const ranges: TextRange[] = []
+  for (const index of sorted) {
+    const previous = ranges.at(-1)
+    if (previous && index <= previous.end) previous.end = Math.max(previous.end, index + 1)
+    else ranges.push({ start: index, end: index + 1 })
+  }
+  return ranges
+}
+
+function allTextRanges(value: string): TextRange[] {
+  const chars = Array.from(value)
+  const indexes = chars.flatMap((character, index) => /\s/u.test(character) ? [] : [index])
+  return rangesFromIndexes(indexes)
+}
+
+function alignText(aText: string, bText: string): TextAlignment {
+  const a = normalizeMappedText(aText), b = normalizeMappedText(bText)
+  const originalA = Array.from(aText), originalB = Array.from(bText)
+  const aMatched = new Set<number>(), bMatched = new Set<number>()
+  const n = a.chars.length, m = b.chars.length
+  if (n * m <= 250_000 && n && m) {
+    const lcs = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1))
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        lcs[i][j] = a.chars[i] === b.chars[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1])
+      }
+    }
+    let i = 0, j = 0
+    while (i < n && j < m) {
+      if (a.chars[i] === b.chars[j]) {
+        aMatched.add(a.sourceIndexes[i++])
+        bMatched.add(b.sourceIndexes[j++])
+      } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++
+      else j++
+    }
+  } else {
+    let prefix = 0
+    while (prefix < n && prefix < m && a.chars[prefix] === b.chars[prefix]) {
+      aMatched.add(a.sourceIndexes[prefix])
+      bMatched.add(b.sourceIndexes[prefix])
+      prefix++
+    }
+    let suffix = 0
+    while (n - suffix > prefix && m - suffix > prefix && a.chars[n - suffix - 1] === b.chars[m - suffix - 1]) {
+      aMatched.add(a.sourceIndexes[n - suffix - 1])
+      bMatched.add(b.sourceIndexes[m - suffix - 1])
+      suffix++
+    }
+  }
+  const aComparable = a.sourceIndexes.filter(index => !/\s/u.test(originalA[index]))
+  const bComparable = b.sourceIndexes.filter(index => !/\s/u.test(originalB[index]))
+  return {
+    aMatches: rangesFromIndexes([...aMatched].filter(index => !/\s/u.test(originalA[index]))).filter(range => range.end - range.start >= 2),
+    bMatches: rangesFromIndexes([...bMatched].filter(index => !/\s/u.test(originalB[index]))).filter(range => range.end - range.start >= 2),
+    aChanges: rangesFromIndexes(aComparable.filter(index => !aMatched.has(index))),
+    bChanges: rangesFromIndexes(bComparable.filter(index => !bMatched.has(index))),
+  }
+}
+
+function withTextRanges(difference: Difference): Difference {
+  if (difference.kind === 'changed') {
+    const aligned = alignText(difference.aText, difference.bText)
+    return { ...difference, aRanges: aligned.aChanges, bRanges: aligned.bChanges, aMatches: aligned.aMatches, bMatches: aligned.bMatches }
+  }
+  return difference.kind === 'added'
+    ? { ...difference, aRanges: [], bRanges: allTextRanges(difference.bText), aMatches: [], bMatches: [] }
+    : { ...difference, aRanges: allTextRanges(difference.aText), bRanges: [], aMatches: [], bMatches: [] }
+}
+
+function differenceTextRanges(difference: Difference): { aRanges: TextRange[]; bRanges: TextRange[] } {
+  return { aRanges: difference.aRanges ?? [], bRanges: difference.bRanges ?? [] }
+}
+
+function HighlightedText({ text, ranges, kind }: { text: string; ranges: TextRange[]; kind: MarkKind }) {
+  const chars = Array.from(text)
+  const parts: ReactNode[] = []
+  let cursor = 0
+  ranges.forEach((range, index) => {
+    const start = Math.max(cursor, Math.max(0, Math.min(chars.length, range.start)))
+    const end = Math.max(start, Math.min(chars.length, range.end))
+    if (end <= start) return
+    if (start > cursor) parts.push(chars.slice(cursor, start).join(''))
+    parts.push(<mark key={index} className="ocr-ab-text-mark" data-kind={kind}>{chars.slice(start, end).join('')}</mark>)
+    cursor = end
+  })
+  if (cursor < chars.length) parts.push(chars.slice(cursor).join(''))
+  return <>{parts.length ? parts : text}</>
+}
+
+function DifferenceText({ difference, side }: { difference: Difference; side: Side }) {
+  const ranges = differenceTextRanges(difference)
+  const text = side === 'a' ? difference.aText : difference.bText
+  return <HighlightedText text={text || '해당 문구 없음'} ranges={side === 'a' ? ranges.aRanges : ranges.bRanges} kind={difference.kind} />
+}
+
+function estimateCharacterWidth(character: string): number {
+  if (/\s/u.test(character)) return 0.32
+  if (/[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af\u2e80-\ua4cf]/u.test(character)) return 1
+  if (/[ilI1.,:;'|!]/u.test(character)) return 0.32
+  if (/[MW@%#&]/u.test(character)) return 0.88
+  return 0.58
+}
+
 function findMatchingLines(a: OCRLine[], b: OCRLine[]): Match[] {
   const aIndexes = new Map<string, number[]>()
   a.forEach((line, index) => {
@@ -86,7 +213,9 @@ function findMatchingLines(a: OCRLine[], b: OCRLine[]): Match[] {
     if (offset >= candidates.length) return []
     used.set(key, offset + 1)
     const aIndex = candidates[offset]
-    return [{ aIndex, bIndex, aText: a[aIndex].text, bText: line.text }]
+    const aText = a[aIndex].text
+    const ranges = allTextRanges(aText)
+    return [{ aIndex, bIndex, aText, bText: line.text, aRanges: ranges, bRanges: allTextRanges(line.text) }]
   })
 }
 
@@ -97,17 +226,29 @@ async function sha256(file: File): Promise<string | null> {
 }
 
 function DifferencePreview({ fileUrl, result, side, highlighted }: {
-  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, MarkKind[]>
+  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, TextHighlight[]>
 }) {
   const src = result?.preview_data || fileUrl
   const width = result?.image_width || 1, height = result?.image_height || 1
   const boxes = (result?.lines ?? []).flatMap((line, index) => {
-    const kinds = highlighted.get(index)
-    if (!kinds?.length || !line.bbox || line.bbox.length !== 4) return []
-    const [x1, y1, x2, y2] = line.bbox
-    if (x2 <= x1 || y2 <= y1) return []
-    const kind = kinds.includes('matched') ? 'matched' : kinds.includes('added') ? 'added' : kinds.includes('removed') ? 'removed' : 'changed'
-    return [{ index, text: line.text, kind, x1, y1, x2, y2 }]
+    const ranges = highlighted.get(index)
+    if (!ranges?.length || !line.bbox || line.bbox.length !== 4) return []
+    const [boxX1, y1, boxX2, y2] = line.bbox
+    if (boxX2 <= boxX1 || y2 <= y1) return []
+    const chars = Array.from(line.text)
+    const weights = chars.map(estimateCharacterWidth)
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
+    if (!totalWeight) return []
+    const prefixWeights = [0]
+    weights.forEach(weight => prefixWeights.push(prefixWeights[prefixWeights.length - 1] + weight))
+    return ranges.flatMap(range => {
+      const start = Math.max(0, Math.min(chars.length, range.start))
+      const end = Math.max(start, Math.min(chars.length, range.end))
+      if (end <= start) return []
+      const x1 = boxX1 + (boxX2 - boxX1) * prefixWeights[start] / totalWeight
+      const x2 = boxX1 + (boxX2 - boxX1) * prefixWeights[end] / totalWeight
+      return [{ index: [index, start, end, range.kind].join('-'), text: chars.slice(start, end).join(''), kind: range.kind, x1, y1, x2, y2 }]
+    })
   })
   return <div className="ocr-ab-image-scroll"><div className="ocr-ab-image-stage">
     <img src={src} alt={`${side === 'a' ? 'A안' : 'B안'} 미리보기`} />
@@ -173,9 +314,23 @@ export function OcrABCompare() {
       if (!a || !b || a.error || b.error) {
         throw new Error([a?.error, b?.error].filter(Boolean).join(' / ') || '두 이미지의 OCR 결과를 받지 못했습니다.')
       }
-      const compared = mode === 'differences' ? compareLines(a.lines, b.lines) : { differences: [], approximate: false }
-      const matches = mode === 'matches' ? findMatchingLines(a.lines, b.lines) : []
-      setComparison({ a, b, differences: compared.differences, matches, hashes: [hashA, hashB], identical, approximate: compared.approximate })
+      const lineComparison = compareLines(a.lines, b.lines)
+      const compared = lineComparison
+      const lineDifferences = lineComparison.differences.map(withTextRanges)
+      const differences = mode === 'differences' ? lineDifferences : []
+      const matches = mode === 'matches' ? [
+        ...findMatchingLines(a.lines, b.lines),
+        ...lineDifferences.flatMap(difference => {
+          if (difference.kind !== 'changed' || difference.aIndex === undefined || difference.bIndex === undefined) return []
+          if (!difference.aMatches?.length && !difference.bMatches?.length) return []
+          return [{
+            aIndex: difference.aIndex, bIndex: difference.bIndex,
+            aText: difference.aText, bText: difference.bText,
+            aRanges: difference.aMatches ?? [], bRanges: difference.bMatches ?? [],
+          }]
+        }),
+      ] : []
+      setComparison({ a, b, differences, matches, hashes: [hashA, hashB], identical, approximate: compared.approximate })
       const notices = []
       if (!a.lines.some(line => line.bbox) || !b.lines.some(line => line.bbox)) notices.push('OCR 위치 정보를 얻지 못한 문구는 아래 결과 목록에서만 확인할 수 있습니다.')
       if (compared.approximate) notices.push('인식 문구가 많아 순서 기준으로 간략 대조했습니다. 하이라이트를 확인해 주세요.')
@@ -192,26 +347,27 @@ export function OcrABCompare() {
 
   const differences = comparison?.differences ?? []
   const matches = comparison?.matches ?? []
-  const marksA = new Map<number, MarkKind[]>()
-  const marksB = new Map<number, MarkKind[]>()
-  const addMark = (marks: Map<number, MarkKind[]>, index: number, kind: MarkKind) =>
-    marks.set(index, [...(marks.get(index) ?? []), kind])
+  const marksA = new Map<number, TextHighlight[]>()
+  const marksB = new Map<number, TextHighlight[]>()
+  const addRanges = (marks: Map<number, TextHighlight[]>, index: number, ranges: TextRange[], kind: MarkKind) =>
+    marks.set(index, [...(marks.get(index) ?? []), ...ranges.map(range => ({ ...range, kind }))])
   if (mode === 'matches') {
     for (const match of matches) {
-      addMark(marksA, match.aIndex, 'matched')
-      addMark(marksB, match.bIndex, 'matched')
+      addRanges(marksA, match.aIndex, match.aRanges, 'matched')
+      addRanges(marksB, match.bIndex, match.bRanges, 'matched')
     }
   } else {
     for (const difference of differences) {
-      if (difference.aIndex !== undefined) addMark(marksA, difference.aIndex, difference.kind)
-      if (difference.bIndex !== undefined) addMark(marksB, difference.bIndex, difference.kind)
+      const ranges = differenceTextRanges(difference)
+      if (difference.aIndex !== undefined) addRanges(marksA, difference.aIndex, ranges.aRanges, difference.kind)
+      if (difference.bIndex !== undefined) addRanges(marksB, difference.bIndex, ranges.bRanges, difference.kind)
     }
   }
   const canCompare = Boolean(fileA && fileB && !busy)
 
   return <section className="ocr-ab-section">
     <div className="ocr-ab-heading">
-      <div><h3>A/B 이미지 비교 검토</h3><p>비교 모드에서 차이 또는 A안과 일치하는 B안 문구를 찾아 표시합니다.</p></div>
+      <div><h3>A/B 이미지 비교 검토</h3><p>차이·일치 문자 구간을 강조합니다. 이미지 표식은 OCR 줄 박스 안에서 위치를 추정합니다.</p></div>
       <span className="ocr-ab-badge">OCR + SHA-256</span>
     </div>
     <div className="ocr-ab-inputs ocr-ab-no-print">
@@ -271,8 +427,8 @@ export function OcrABCompare() {
           <div className="ocr-ab-diffs"><h5>차이 및 확인 안내</h5>
             {differences.map((difference, index) => <article className="ocr-ab-diff" key={`${difference.kind}-${difference.aIndex}-${difference.bIndex}-${index}`}>
               <strong className={`ocr-ab-diff-kind ${difference.kind}`}>{difference.kind === 'changed' ? '변경' : difference.kind === 'added' ? '추가' : '삭제'}</strong>
-              <div><small>A안</small><p>{difference.aText || '해당 문구 없음'}</p></div>
-              <div><small>B안</small><p>{difference.bText || '해당 문구 없음'}</p></div>
+              <div><small>A안</small><p><DifferenceText difference={difference} side="a" /></p></div>
+              <div><small>B안</small><p><DifferenceText difference={difference} side="b" /></p></div>
               <div className="ocr-ab-advice">{difference.kind === 'changed' ? '변경된 표현의 근거와 의도된 수정인지 확인해 주세요.' : difference.kind === 'added' ? '새 문구의 근거와 사용 가능 여부를 확인해 주세요.' : '삭제가 의도된 것인지 확인하고, 필요하면 원안 문구를 복원해 주세요.'}</div>
             </article>)}
           </div>
@@ -282,8 +438,8 @@ export function OcrABCompare() {
         <div className="ocr-ab-matches"><h5>A안과 일치하는 B안 문구</h5>
           {matches.map((match, index) => <article className="ocr-ab-match" key={`${match.aIndex}-${match.bIndex}-${index}`}>
             <strong>{index + 1}</strong>
-            <div><small>A안 · 원안</small><p>{match.aText}</p></div>
-            <div><small>B안 · 대조안</small><p>{match.bText}</p></div>
+            <div><small>A안 · 원안</small><p><HighlightedText text={match.aText} ranges={match.aRanges} kind="matched" /></p></div>
+            <div><small>B안 · 대조안</small><p><HighlightedText text={match.bText} ranges={match.bRanges} kind="matched" /></p></div>
           </article>)}
         </div>
       </>}

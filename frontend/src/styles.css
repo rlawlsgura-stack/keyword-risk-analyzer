@@ -554,6 +554,11 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-match > strong { grid-row: span 2; align-self: start; padding: .2rem .35rem; border-radius: 4px; background: #eaf7ef; color: #176c3d; font-size: .72rem; text-align: center; }
 .ocr-ab-match small { color: #77879a; font-size: .68rem; }
 .ocr-ab-match p { margin: .15rem 0 0; color: #344659; font-size: .78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ocr-ab-text-mark { border-radius: 2px; padding: 0 .04em; }
+.ocr-ab-text-mark[data-kind="changed"] { background: #ffd8d2; color: #8f2e24; }
+.ocr-ab-text-mark[data-kind="added"] { background: #ffe9a9; color: #755108; }
+.ocr-ab-text-mark[data-kind="removed"] { background: #eadcf2; color: #5d3d73; }
+.ocr-ab-text-mark[data-kind="matched"] { background: #d6f2df; color: #135d34; }
 .ocr-ab-diff-kind { grid-row: span 2; align-self: start; padding: .2rem .35rem; border-radius: 4px; background: #fff1ed; color: #a33b31; font-size: .72rem; text-align: center; }
 .ocr-ab-diff-kind.added { background: #fff7df; color: #8b6513; }
 .ocr-ab-diff-kind.removed { background: #f4eef8; color: #674b80; }
@@ -572,5 +577,5 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
   .ocr-ab-pane, .ocr-ab-diff, .ocr-ab-match { break-inside: avoid; }
   .ocr-ab-image-scroll { max-height: none; overflow: visible; }
   .ocr-ab-image-stage img { max-height: 110mm; }
-  .ocr-ab-mark { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .ocr-ab-mark, .ocr-ab-text-mark { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
