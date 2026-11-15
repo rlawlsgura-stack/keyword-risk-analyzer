@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { extractOCR } from '../lib/api.ts'
 import type { OCRFileResult, OCRLine } from '../lib/types.ts'
-import { Alert, Button, Spinner } from '../components/ui.tsx'
+import { Alert, Button, Dialog, Spinner } from '../components/ui.tsx'
 
 const ACCEPT = ['png', 'jpg', 'jpeg', 'webp', 'bmp']
 const MAX_FILE = 20 * 1024 * 1024
+const SEARCH_TEMPLATES_KEY = 'keyword-risk.ocr-search-templates.v1'
 type TextRange = { start: number; end: number }
 type Difference = {
   kind: 'changed' | 'added' | 'removed'; aIndex?: number; bIndex?: number; aText: string; bText: string
@@ -18,6 +19,7 @@ type MarkKind = Difference['kind'] | 'matched'
 type TextAlignment = { aMatches: TextRange[]; bMatches: TextRange[]; aChanges: TextRange[]; bChanges: TextRange[] }
 type SearchTermCheck = { term: string; occurrences: number }
 type SearchTermAnalysis = { checks: SearchTermCheck[]; marks: Array<{ aIndex: number; highlights: TextHighlight[] }> }
+type SearchTemplate = { name: string; terms: string }
 type Comparison = {
   a: OCRFileResult | null; b: OCRFileResult | null; differences: Difference[]; matches: Match[]
   searchTerms: SearchTermCheck[]; searchMarks: SearchTermAnalysis['marks']
@@ -263,6 +265,15 @@ function parseSearchTerms(value: string): string[] {
   return [...unique.values()]
 }
 
+function appendSearchTerms(current: string, addition: string): string {
+  const unique = new Map<string, string>()
+  for (const term of [...parseSearchTerms(current), ...parseSearchTerms(addition)]) {
+    const key = normalizeMappedText(term).chars.join('').replace(/\s/gu, '')
+    if (key && !unique.has(key)) unique.set(key, term)
+  }
+  return [...unique.values()].join(', ')
+}
+
 function findSearchTermMatches(lines: OCRLine[], terms: string[]): SearchTermAnalysis {
   const combinedText = lines.map(line => line.text).join('\n')
   const sourcePositions: Array<{ line: number; index: number } | null> = []
@@ -345,11 +356,32 @@ export function OcrABCompare() {
   const [comparison, setComparison] = useState<Comparison | null>(null)
   const [mode, setMode] = useState<ComparisonMode>('differences')
   const [searchInput, setSearchInput] = useState('')
+  const [templates, setTemplates] = useState<SearchTemplate[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState('')
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateTerms, setTemplateTerms] = useState('')
+  const [templateError, setTemplateError] = useState('')
+  const [templateMessage, setTemplateMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const inputA = useRef<HTMLInputElement>(null)
   const inputB = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(SEARCH_TEMPLATES_KEY)
+      if (!stored) return
+      const parsed: unknown = JSON.parse(stored)
+      if (!Array.isArray(parsed)) return
+      setTemplates(parsed.filter((item): item is SearchTemplate =>
+        item && typeof item.name === 'string' && typeof item.terms === 'string' && item.name.trim().length > 0 && parseSearchTerms(item.terms).length > 0,
+      ))
+    } catch {
+      setTemplateMessage('저장된 템플릿을 읽지 못했습니다. 브라우저 저장 공간을 확인해 주세요.')
+    }
+  }, [])
 
   useEffect(() => {
     if (!fileA) { setUrlA(''); return }
@@ -374,6 +406,40 @@ export function OcrABCompare() {
     setComparison(null)
     if (side === 'a') setFileA(file)
     else setFileB(file)
+  }
+
+  const loadSelectedTemplate = () => {
+    const template = templates.find(item => item.name === selectedTemplate)
+    if (!template) return
+    setSearchInput(current => appendSearchTerms(current, template.terms))
+    setComparison(null)
+    setError('')
+    setNotice('')
+    setTemplateMessage(`'${template.name}' 템플릿의 검색어를 추가했습니다. 이미 입력된 검색어는 중복해서 넣지 않았습니다.`)
+  }
+
+  const saveSearchTemplate = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const name = templateName.trim()
+    const terms = parseSearchTerms(templateTerms)
+    if (!name) { setTemplateError('템플릿 이름을 입력해 주세요.'); return }
+    if (!terms.length) { setTemplateError('저장할 검색어를 먼저 입력해 주세요.'); return }
+    if (templates.some(template => template.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      setTemplateError('같은 이름의 템플릿이 이미 있습니다. 다른 이름을 입력해 주세요.')
+      return
+    }
+    const updated = [...templates, { name, terms: terms.join(', ') }]
+    try {
+      localStorage.setItem(SEARCH_TEMPLATES_KEY, JSON.stringify(updated))
+      setTemplates(updated)
+      setSelectedTemplate(name)
+      setTemplateDialogOpen(false)
+      setTemplateName('')
+      setTemplateError('')
+      setTemplateMessage(`'${name}' 템플릿을 이 브라우저에 저장했습니다.`)
+    } catch {
+      setTemplateError('템플릿을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.')
+    }
   }
 
   const runComparison = async () => {
@@ -472,8 +538,18 @@ export function OcrABCompare() {
           <div className="ocr-ab-upload-title"><strong>A안 검색어</strong><span>쉼표로 여러 개 입력</span></div>
           <label htmlFor="ocr-ab-search-terms">찾을 단어 또는 문구</label>
           <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="제품명, 중량, 전성분, 제조번호 및 사용기한"
-            onChange={event => { setSearchInput(event.target.value); setComparison(null); setError(''); setNotice('') }} />
+            onChange={event => { setSearchInput(event.target.value); setComparison(null); setError(''); setNotice(''); setTemplateMessage('') }} />
           <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 입력한 문구가 A안 이미지에 있으면 표시합니다.</p>
+          <div className="ocr-ab-template-tools">
+            <select aria-label="저장된 검색어 템플릿" value={selectedTemplate} onChange={event => setSelectedTemplate(event.target.value)} disabled={!templates.length}>
+              <option value="">{templates.length ? '저장된 템플릿 선택' : '저장된 템플릿 없음'}</option>
+              {templates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}
+            </select>
+            <Button small disabled={!selectedTemplate} onClick={loadSelectedTemplate}>템플릿 불러오기</Button>
+            <Button small onClick={() => { setTemplateName(''); setTemplateTerms(searchInput); setTemplateError(''); setTemplateDialogOpen(true) }}>템플릿 만들기</Button>
+          </div>
+          <p className="ocr-ab-template-note">불러온 검색어는 입력란에 추가됩니다. 다른 템플릿을 선택해 이어서 불러올 수 있습니다.</p>
+          {templateMessage && <p className="ocr-ab-template-message" role="status">{templateMessage}</p>}
         </div>
         return <div className="ocr-ab-upload" key={side} onDragOver={event => event.preventDefault()}
           onDrop={event => { event.preventDefault(); selectFile(side, event.dataTransfer.files[0]) }}>
@@ -573,5 +649,21 @@ export function OcrABCompare() {
         ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
         : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
     </div>}
+    {templateDialogOpen && <Dialog title="검색어 템플릿 만들기" onClose={() => { setTemplateDialogOpen(false); setTemplateError('') }}>
+      <form className="ocr-ab-template-form" onSubmit={saveSearchTemplate}>
+        <label htmlFor="ocr-ab-template-name">템플릿 이름</label>
+        <input id="ocr-ab-template-name" autoFocus maxLength={40} value={templateName} placeholder="예: 화장품"
+          onChange={event => { setTemplateName(event.target.value); setTemplateError('') }} />
+        <label htmlFor="ocr-ab-template-terms">찾을 단어 또는 문구</label>
+        <textarea id="ocr-ab-template-terms" rows={5} value={templateTerms} placeholder="제품명, 전성분, 화장품책임판매업자"
+          onChange={event => { setTemplateTerms(event.target.value); setTemplateError('') }} />
+        <p>쉼표 또는 줄바꿈으로 항목을 구분합니다. 저장 후 드롭다운에서 선택해 불러올 수 있습니다.</p>
+        {templateError && <Alert kind="error">{templateError}</Alert>}
+        <div className="ocr-ab-template-actions">
+          <Button onClick={() => { setTemplateDialogOpen(false); setTemplateError('') }}>취소</Button>
+          <Button primary type="submit">저장</Button>
+        </div>
+      </form>
+    </Dialog>}
   </section>
 }

@@ -522,6 +522,16 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-upload p b { color: #34485b; }
 .ocr-ab-search-upload label { display: block; margin-top: .5rem; color: #586b7f; font-size: .76rem; }
 .ocr-ab-search-upload textarea { display: block; box-sizing: border-box; width: 100%; min-height: 4.5rem; margin-top: .3rem; padding: .5rem; border: 1px solid #cbd5df; border-radius: 4px; background: #fff; color: #25384a; font: inherit; resize: vertical; }
+.ocr-ab-template-tools { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .55rem; }
+.ocr-ab-template-tools select { flex: 1 1 12rem; min-width: 10rem; min-height: 2rem; padding: .3rem .5rem; border: 1px solid #cbd5df; border-radius: 4px; background: #fff; color: #34485b; font: inherit; font-size: .78rem; }
+.ocr-ab-search-upload p.ocr-ab-template-note, .ocr-ab-search-upload p.ocr-ab-template-message { min-height: 0; margin: .4rem 0 0; font-size: .73rem; }
+.ocr-ab-search-upload p.ocr-ab-template-message { color: #3974a7; }
+.ocr-ab-template-form > label { display: block; margin-bottom: .3rem; color: #586b7f; font-size: .82rem; }
+.ocr-ab-template-form > input { box-sizing: border-box; width: 100%; min-height: 2.4rem; padding: .5rem; border: 1px solid #cbd5df; border-radius: 4px; color: #25384a; font: inherit; }
+.ocr-ab-template-form > label:not(:first-child) { margin-top: .8rem; }
+.ocr-ab-template-form > textarea { box-sizing: border-box; display: block; width: 100%; min-height: 7rem; padding: .5rem; border: 1px solid #cbd5df; border-radius: 4px; color: #25384a; font: inherit; resize: vertical; }
+.ocr-ab-template-form > p { margin: .65rem 0; color: #68798b; font-size: .8rem; }
+.ocr-ab-template-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
 .ocr-ab-controls { margin-top: .75rem; flex-wrap: wrap; }
 .ocr-ab-controls > span { color: #728195; font-size: .75rem; }
 .ocr-ab-mode { display: flex; align-items: center; gap: .45rem; color: #586b7f; font-size: .78rem; }
