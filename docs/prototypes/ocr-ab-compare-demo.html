@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>이미지 OCR A/B 비교 검토 · 시연</title>
+  <style>
+    :root{font-family:"Malgun Gothic","Apple SD Gothic Neo",Arial,sans-serif;color:#263445;background:#f4f6f8;font-synthesis:none;--blue:#1688e8;--line:#dce3ea;--muted:#68798b;--red:#d84a3a;--amber:#f0b429}
+    *{box-sizing:border-box}body{margin:0}.page{max-width:1440px;margin:auto;padding:26px 32px 56px}.brand{font-size:11px;letter-spacing:.16em;color:#8594a3;font-weight:700}.masthead{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin:6px 0 23px}.masthead h1{font-size:25px;line-height:1.3;margin:0;color:#1e2b39}.masthead p{margin:7px 0 0;color:var(--muted);font-size:14px}.version{border:1px solid var(--line);border-radius:18px;background:#fff;padding:7px 12px;color:#657587;font-size:12px;white-space:nowrap}.tabs{display:flex;gap:25px;align-items:center;overflow:auto;border-bottom:1px solid var(--line);margin-bottom:19px;color:#58697a;font-size:14px;white-space:nowrap}.tabs span{padding:0 0 12px}.tabs .active{color:var(--blue);font-weight:700;border-bottom:2px solid var(--blue)}
+    .card{background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 1px 3px #12263a08}.intro{padding:20px 22px;margin-bottom:16px}.intro h2{font-size:18px;margin:0 0 5px}.intro p{margin:0;color:var(--muted);font-size:13px}.demo-tag{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:12px;background:#fff3d6;color:#946200;font-size:11px;font-weight:700;vertical-align:2px}.steps{display:flex;gap:8px;margin-top:17px;color:#8090a0;font-size:12px}.step{padding:7px 11px;background:#f4f6f8;border-radius:5px}.step.on{background:#eaf4ff;color:#0879d2;font-weight:700}
+    .uploads{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}.upload{padding:15px 17px;min-height:115px}.upload-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.upload h3{font-size:14px;margin:0}.pill{font-size:11px;padding:4px 8px;border-radius:14px;background:#edf4fc;color:#3974a7}.drop{border:1px dashed #bdcad7;background:#fafbfd;border-radius:6px;display:flex;align-items:center;justify-content:space-between;padding:11px 12px;color:#788898;font-size:12px}.fake-button{border:1px solid #ccd5df;background:#fff;border-radius:4px;padding:6px 10px;color:#405264;font-size:12px}.fileline{font-size:11px;color:#607387;margin:8px 0 0}.fileline b{color:#2f4154}
+    .results{padding:16px 18px 18px}.results-head{display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:13px}.results-head h2{font-size:17px;margin:0}.result-actions{display:flex;gap:8px;align-items:center}.button{border-radius:5px;padding:8px 12px;font-size:12px;font-weight:600;border:1px solid #cbd5df;background:#fff;color:#425467}.button.primary{background:#1688e8;border-color:#1688e8;color:white}.score{color:#6c7c8c;font-size:12px}
+    .compare{display:grid;grid-template-columns:1fr 1fr;gap:13px}.pane{border:1px solid var(--line);border-radius:7px;overflow:hidden;background:#fff}.pane-head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafbfd}.pane-head strong{font-size:13px}.pane-head small{font-size:11px;color:#778797}.preview{height:312px;padding:15px;background:#eef1f4;display:flex;justify-content:center;align-items:center;overflow:hidden}.label-art{width:min(100%,390px);height:100%;background:#fff;border:1px solid #d8dce1;box-shadow:0 2px 8px #192a391c;position:relative;padding:17px 19px;color:#384550}.label-brand{font-family:Georgia,serif;font-size:9px;letter-spacing:.2em;color:#71857d}.product{position:absolute;right:22px;top:38px;width:91px;height:157px;border:1px solid #d3c6ac;border-radius:22px 22px 13px 13px;background:linear-gradient(90deg,#eee4d5,#fffaf2 45%,#e8dcc9);box-shadow:inset -9px 0 14px #bba98a30}.product:before{content:"";position:absolute;top:-18px;left:30px;width:30px;height:19px;background:#d7c9b2;border:1px solid #c3b69f;border-radius:5px 5px 0 0}.product:after{content:"GLOW\A CARE";white-space:pre;position:absolute;left:0;right:0;top:56px;text-align:center;font:9px/1.5 Georgia,serif;letter-spacing:.12em;color:#836e55}.art-title{font:22px/1.35 Georgia,"Malgun Gothic",serif;margin:53px 110px 8px 0;color:#42534c}.art-sub{font-size:10px;line-height:1.65;margin:0 104px 15px 0;color:#6e7872}.art-rule{width:43px;border-top:1px solid #b1a184;margin:10px 0}.art-copy{font-size:10px;line-height:1.65;width:100%;max-width:280px;color:#4d5d55}.art-foot{position:absolute;bottom:13px;left:19px;font-size:8px;color:#969c98}.diff-box{position:absolute;left:16px;right:111px;top:163px;height:30px;border:2px solid #e35648;background:#fae9e6a8;border-radius:3px}.diff-box span{position:absolute;right:-3px;top:-19px;background:#d84a3a;color:white;border-radius:3px;padding:2px 5px;font-size:9px;white-space:nowrap}.diff-box.add{top:164px;height:46px}.text-mark{background:#ffdfa0;color:#392b12;padding:0 1px;border-radius:2px}
+    .compare-legend{display:flex;gap:15px;align-items:center;padding:9px 12px;color:#6c7c8a;font-size:11px}.legend{display:inline-flex;align-items:center;gap:5px}.swatch{width:12px;height:12px;border:2px solid var(--red);border-radius:2px}.swatch.amber{border:0;background:#ffdfa0}
+    .lower{display:grid;grid-template-columns:1.05fr .95fr;gap:13px;margin-top:14px}.diff-list,.recommend{padding:14px 16px}.lower h3{font-size:14px;margin:0 0 10px}.diff-row{display:grid;grid-template-columns:65px 1fr 1fr;gap:9px;padding:9px 0;border-top:1px solid #edf0f3;font-size:12px;line-height:1.5}.diff-row:first-of-type{border-top:0}.diff-kind{color:#b94c40;font-weight:700}.diff-row .a{color:#738292}.diff-row .b{color:#3d4b58}.recommend{background:#fffdf7;border-color:#eadfbf}.recommend h3{color:#785c17}.recommend ol{margin:0;padding-left:19px;font-size:12px;line-height:1.75;color:#526171}.recommend li+li{margin-top:4px}.notice{margin-top:13px;padding:10px 12px;border-radius:5px;background:#eef6ff;color:#426785;font-size:11px;line-height:1.6}.feasibility{margin-top:16px;padding:15px 18px}.feasibility h3{margin:0 0 8px;font-size:14px}.feasibility-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.feasibility p{margin:0;color:#647487;font-size:12px;line-height:1.65}.feasibility b{color:#33475c}.footer{margin-top:12px;color:#98a3ad;font-size:10px;text-align:right}
+    @media(max-width:780px){.page{padding:19px 14px 35px}.masthead{margin-bottom:16px}.masthead h1{font-size:21px}.tabs{gap:19px}.uploads,.compare,.lower{grid-template-columns:1fr}.preview{height:280px}.results-head{align-items:flex-start;flex-direction:column}.feasibility-grid{grid-template-columns:1fr}.diff-row{grid-template-columns:58px 1fr 1fr;font-size:11px}}
+    @media print{body{background:#fff}.page{max-width:none;padding:0}.brand,.tabs,.uploads,.steps,.result-actions,.footer{display:none!important}.intro,.results,.pane,.diff-list,.recommend,.feasibility{box-shadow:none;break-inside:avoid}.intro{padding:0 0 14px;border:0}.preview{height:270px;-webkit-print-color-adjust:exact;print-color-adjust:exact}.notice{-webkit-print-color-adjust:exact;print-color-adjust:exact}.lower{break-inside:avoid}.feasibility{margin-top:9px}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="brand">KEYWORD RISK WORKSPACE</div>
+    <header class="masthead"><div><h1>🔎 광고심의 자동화 솔루션</h1><p>A/B 이미지 비교 · 대조 검토 <span class="demo-tag">시연 화면 · 샘플 데이터</span></p></div><span class="version">기능 검토용</span></header>
+    <nav class="tabs" aria-label="주요 메뉴"><span>스크립트 분석</span><span class="active">이미지 OCR분석</span><span>미매칭 후보군</span><span>키워드 문의</span><span>심의 Chat-bot</span><span>분석리포트</span><span>키워드 관리</span></nav>
+
+    <section class="card intro">
+      <h2>A/B 이미지 비교 검토 <span class="demo-tag">구현 전 UI 시안</span></h2>
+      <p>A안을 기준으로 B안에서 달라진 문구와 위치를 찾고, 변경점을 확인해 수정 안내를 작성하는 흐름입니다.</p>
+      <div class="steps"><span class="step on">1&nbsp; A/B 자료 등록</span><span class="step on">2&nbsp; 차이 검토</span><span class="step">3&nbsp; 결과 PDF 출력</span></div>
+    </section>
+
+    <section class="uploads" aria-label="비교 자료">
+      <div class="card upload"><div class="upload-top"><h3>A안 · 원안</h3><span class="pill">기준 이미지</span></div><div class="drop"><span>이미지 또는 PDF를 여기에 놓으세요</span><button class="fake-button" type="button">파일 선택</button></div><p class="fileline"><b>원안_제품광고.jpg</b> · 2.4 MB · 1600 × 1200</p></div>
+      <div class="card upload"><div class="upload-top"><h3>B안 · 대조안</h3><span class="pill">수정 이미지</span></div><div class="drop"><span>이미지 또는 PDF를 여기에 놓으세요</span><button class="fake-button" type="button">파일 선택</button></div><p class="fileline"><b>수정안_제품광고.jpg</b> · 2.6 MB · 1600 × 1200</p></div>
+    </section>
+
+    <section class="card results">
+      <div class="results-head"><div><h2>비교 결과 <span class="demo-tag">예시: 차이 2곳</span></h2><span class="score">문구 비교 · OCR 신뢰도 96% · 파일 해시: 서로 다름</span></div><div class="result-actions"><button class="button" type="button">변경점 목록</button><button class="button primary" type="button">PDF로 출력</button></div></div>
+      <div class="compare">
+        <article class="pane"><div class="pane-head"><strong>A안 · 원안</strong><small>원안_제품광고.jpg</small></div><div class="preview"><div class="label-art"><div class="label-brand">BOTANICAL LAB · DAILY CARE</div><div class="product"></div><h3 class="art-title">피부에 편안한<br>수분 케어</h3><p class="art-sub">매일 가볍게 사용하는<br>보습 에센스</p><div class="art-rule"></div><p class="art-copy">사용 후 피부가 <span class="text-mark">촉촉해집니다.</span><br>산뜻한 사용감을 경험해 보세요.</p><div class="art-foot">화장품 · 제품 표시 예시</div><div class="diff-box"><span>문구 변경 위치</span></div></div></div><div class="compare-legend"><span class="legend"><i class="swatch"></i> 변경 위치</span><span>기준 문안</span></div></article>
+        <article class="pane"><div class="pane-head"><strong>B안 · 대조안</strong><small>수정안_제품광고.jpg</small></div><div class="preview"><div class="label-art"><div class="label-brand">BOTANICAL LAB · DAILY CARE</div><div class="product"></div><h3 class="art-title">피부에 편안한<br>수분 케어</h3><p class="art-sub">매일 가볍게 사용하는<br>보습 에센스</p><div class="art-rule"></div><p class="art-copy">사용 후 피부장벽을 <span class="text-mark">개선하고</span><br><span class="text-mark">주름을 완화합니다.</span><br>산뜻한 사용감을 경험해 보세요.</p><div class="art-foot">화장품 · 제품 표시 예시</div><div class="diff-box add"><span>추가·변경 문구</span></div></div></div><div class="compare-legend"><span class="legend"><i class="swatch"></i> 변경 문단 영역</span><span class="legend"><i class="swatch amber"></i> 변경 문구</span></div></article>
+      </div>
+      <div class="lower">
+        <section class="card diff-list"><h3>찾은 차이</h3><div class="diff-row"><span class="diff-kind">변경</span><span class="a">A안: 피부가 촉촉해집니다.</span><span class="b">B안: 피부장벽을 개선하고 주름을 완화합니다.</span></div><div class="diff-row"><span class="diff-kind">추가</span><span class="a">해당 문구 없음</span><span class="b">“주름을 완화합니다” 문구가 추가됨</span></div></section>
+        <section class="card recommend"><h3>수정 안내 초안</h3><ol><li>B안에 새로 추가된 “피부장벽 개선”, “주름 완화” 표현을 확인해 주세요.</li><li>해당 표현을 뒷받침하는 근거 자료와 허용 범위를 확인한 뒤 문구를 확정하세요.</li><li>검토 완료 후 수정본을 다시 비교해 남은 차이를 확인할 수 있습니다.</li></ol></section>
+      </div>
+      <div class="notice"><b>검토 참고:</b> 화면의 강조 표시는 OCR 문구 차이를 보여주는 예시입니다. 차이가 있다는 사실만으로 위반 여부나 수정의무를 자동 판정하지 않으며, 최종 안내는 담당자가 근거를 확인해 확정해야 합니다.</div>
+    </section>
+
+    <section class="card feasibility">
+      <h3>가능성 검토</h3>
+      <div class="feasibility-grid">
+        <p><b>구현 가능성 높음</b><br>현재 OCR 응답에 텍스트와 좌표 정보가 있어, 변경된 문구를 이미지 위의 위치로 표시할 수 있습니다.</p>
+        <p><b>해시의 역할</b><br>SHA-256은 파일이 완전히 같은지 빠르게 확인하는 데 적합합니다. 이미지 안의 변경 위치를 찾아주지는 않으므로 OCR 차이와 함께 써야 합니다.</p>
+        <p><b>초기 범위 권장</b><br>기존 OCR 형식인 PNG/JPG/JPEG/WEBP/BMP부터 시작하고, PDF는 페이지별 이미지 변환·좌표 정합 처리가 추가로 필요합니다.</p>
+      </div>
+      <div class="notice"><b>정확도 한계:</b> 크기 조정·회전·잘림·압축·배경 변화가 크면 좌표가 어긋나거나 OCR 결과가 달라질 수 있습니다. “A안을 기준으로 B안의 변경을 확인”하는 검토 보조 기능으로 설계하는 것이 안전합니다. 실제 법적 수정 지시는 별도 기준과 사람의 검토가 필요합니다.</div>
+    </section>
+    <div class="footer">정적 UI 시안 · 실제 업로드, OCR 비교, 원본 저장, PDF 보고서 생성은 실행되지 않습니다.</div>
+  </main>
+</body>
+</html>
