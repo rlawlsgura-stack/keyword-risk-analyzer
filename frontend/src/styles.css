@@ -520,6 +520,8 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-upload-title strong { font-size: .88rem; }
 .ocr-ab-upload p { min-height: 1.2rem; margin: .55rem 0; color: #718194; font-size: .78rem; overflow-wrap: anywhere; }
 .ocr-ab-upload p b { color: #34485b; }
+.ocr-ab-search-upload label { display: block; margin-top: .5rem; color: #586b7f; font-size: .76rem; }
+.ocr-ab-search-upload textarea { display: block; box-sizing: border-box; width: 100%; min-height: 4.5rem; margin-top: .3rem; padding: .5rem; border: 1px solid #cbd5df; border-radius: 4px; background: #fff; color: #25384a; font: inherit; resize: vertical; }
 .ocr-ab-controls { margin-top: .75rem; flex-wrap: wrap; }
 .ocr-ab-controls > span { color: #728195; font-size: .75rem; }
 .ocr-ab-mode { display: flex; align-items: center; gap: .45rem; color: #586b7f; font-size: .78rem; }
@@ -528,6 +530,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-report { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5eaf0; }
 .ocr-ab-report-title { margin-bottom: .8rem; }
 .ocr-ab-panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.ocr-ab-panes.single { grid-template-columns: minmax(0, 1fr); }
 .ocr-ab-pane { min-width: 0; overflow: hidden; border: 1px solid #dce3ea; border-radius: 6px; background: #fff; }
 .ocr-ab-pane header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .55rem .7rem; border-bottom: 1px solid #e5eaf0; background: #fafbfd; }
 .ocr-ab-pane header strong { font-size: .82rem; }

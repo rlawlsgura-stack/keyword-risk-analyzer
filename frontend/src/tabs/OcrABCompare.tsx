@@ -16,13 +16,11 @@ type Side = 'a' | 'b'
 type TextHighlight = TextRange & { kind: MarkKind }
 type MarkKind = Difference['kind'] | 'matched'
 type TextAlignment = { aMatches: TextRange[]; bMatches: TextRange[]; aChanges: TextRange[]; bChanges: TextRange[] }
-type RequirementEvidence = { bIndex: number; text: string; highlights: TextHighlight[] }
-type RequirementStatus = 'found' | 'missing'
-type RequirementCheck = { aText: string; status: RequirementStatus; evidence: RequirementEvidence[] }
-type RequirementAnalysis = { checks: RequirementCheck[]; marks: Array<{ bIndex: number; highlights: TextHighlight[] }> }
+type SearchTermCheck = { term: string; occurrences: number }
+type SearchTermAnalysis = { checks: SearchTermCheck[]; marks: Array<{ aIndex: number; highlights: TextHighlight[] }> }
 type Comparison = {
   a: OCRFileResult | null; b: OCRFileResult | null; differences: Difference[]; matches: Match[]
-  requirements: RequirementCheck[]; requirementMarks: RequirementAnalysis['marks']
+  searchTerms: SearchTermCheck[]; searchMarks: SearchTermAnalysis['marks']
   hashes: [string | null, string | null]; identical: boolean; approximate: boolean
 }
 
@@ -255,76 +253,53 @@ function findMatchingLines(a: OCRLine[], b: OCRLine[]): Match[] {
   })
 }
 
-function requirementTokens(value: string) {
-  const tokens: Array<{ value: string; key: string; range: TextRange }> = []
-  for (const match of value.matchAll(/[\p{L}\p{N}]+/gu)) {
-    const token = match[0]
-    if (/^\p{N}$/u.test(token)) continue
-    const start = Array.from(value.slice(0, match.index ?? 0)).length
-    tokens.push({ value: token, key: token.normalize('NFKC').toLocaleLowerCase(), range: { start, end: start + Array.from(token).length } })
+function parseSearchTerms(value: string): string[] {
+  const unique = new Map<string, string>()
+  for (const raw of value.split(/[,，;；\n]+/)) {
+    const term = raw.trim()
+    const key = normalizeMappedText(term).chars.join('').replace(/\s/gu, '')
+    if (key && !unique.has(key)) unique.set(key, term)
   }
-  return tokens
+  return [...unique.values()]
 }
 
-function findRequirementChecks(a: OCRLine[], b: OCRLine[]): RequirementAnalysis {
-  const aTerms = [...new Map(a.flatMap(line => requirementTokens(line.text)).map(token => [token.key, token])).values()]
-  const aKeys = new Set(aTerms.map(token => token.key))
-  const bWords = b.flatMap((line, bIndex) => requirementTokens(line.text).map(token => ({ ...token, bIndex })))
-  const bKeys = new Set(bWords.map(token => token.key))
-  const missingA = aTerms.filter(token => !bKeys.has(token.key))
-  const missingAKeys = new Set(missingA.map(token => token.key))
-  const marksByLine = new Map<number, TextHighlight[]>()
-  const closestByA = new Map<string, { word: typeof bWords[number]; score: number; highlights: TextHighlight[] }>()
-
-  bWords.forEach(word => {
-    let highlights: TextHighlight[]
-    if (aKeys.has(word.key)) {
-      highlights = [{ ...word.range, kind: 'matched' }]
-    } else {
-      let best: { term: typeof missingA[number]; alignment: TextAlignment; score: number } | undefined
-      for (const term of aTerms) {
-        if (!missingAKeys.has(term.key) && !word.key.includes(term.key) && !term.key.includes(word.key)) continue
-        const alignment = alignText(term.value, word.value)
-        const commonLength = alignment.bMatches.reduce((sum, range) => sum + range.end - range.start, 0)
-        const shortest = Math.min(Array.from(term.value).length, Array.from(word.value).length)
-        const score = shortest ? commonLength / shortest : 0
-        if (commonLength >= 2 && score >= .4 && (!best || score > best.score)) best = { term, alignment, score }
-      }
-      highlights = best
-        ? [
-          ...best.alignment.bMatches.map(range => ({ start: word.range.start + range.start, end: word.range.start + range.end, kind: 'matched' as const })),
-          ...best.alignment.bChanges.map(range => ({ start: word.range.start + range.start, end: word.range.start + range.end, kind: 'changed' as const })),
-        ].sort((left, right) => left.start - right.start)
-        : [{ ...word.range, kind: 'changed' }]
-      if (best) {
-        const previous = closestByA.get(best.term.key)
-        if (!previous || best.score > previous.score) closestByA.set(best.term.key, { word, score: best.score, highlights })
-      }
-    }
-    marksByLine.set(word.bIndex, [...(marksByLine.get(word.bIndex) ?? []), ...highlights])
+function findSearchTermMatches(lines: OCRLine[], terms: string[]): SearchTermAnalysis {
+  const combinedText = lines.map(line => line.text).join('\n')
+  const sourcePositions: Array<{ line: number; index: number } | null> = []
+  lines.forEach((line, lineIndex) => {
+    Array.from(line.text).forEach((_, index) => sourcePositions.push({ line: lineIndex, index }))
+    if (lineIndex < lines.length - 1) sourcePositions.push(null)
   })
-
-  const checks = aTerms.map(term => {
-    const found = bKeys.has(term.key)
-    const evidenceByLine = new Map<number, TextHighlight[]>()
-    if (found) {
-      for (const word of bWords.filter(candidate => candidate.key === term.key)) {
-        evidenceByLine.set(word.bIndex, [
-          ...(evidenceByLine.get(word.bIndex) ?? []), { ...word.range, kind: 'matched' },
-        ])
-      }
-    } else {
-      const closest = closestByA.get(term.key)
-      if (closest) evidenceByLine.set(closest.word.bIndex, closest.highlights)
-    }
-    const evidence = [...evidenceByLine]
-      .sort(([left], [right]) => left - right)
-      .map(([bIndex, highlights]) => ({ bIndex, text: b[bIndex].text, highlights: highlights.sort((left, right) => left.start - right.start) }))
-    return { aText: term.value, status: found ? 'found' as const : 'missing' as const, evidence }
+  const mapped = normalizeMappedText(combinedText)
+  const text: string[] = [], positions: Array<{ line: number; index: number }> = []
+  mapped.chars.forEach((character, index) => {
+    if (/\s/u.test(character)) return
+    const source = sourcePositions[mapped.sourceIndexes[index]]
+    if (!source) return
+    text.push(character)
+    positions.push(source)
   })
-  const marks = [...marksByLine]
+  const searchable = text.join('')
+  const indexesByLine = new Map<number, number[]>()
+  const checks = terms.map(term => {
+    const needle = normalizeMappedText(term).chars.filter(character => !/\s/u.test(character)).join('')
+    let occurrences = 0
+    let matchIndex = needle ? searchable.indexOf(needle) : -1
+    while (matchIndex >= 0) {
+      occurrences++
+      positions.slice(matchIndex, matchIndex + needle.length).forEach(source => {
+        indexesByLine.set(source.line, [...(indexesByLine.get(source.line) ?? []), source.index])
+      })
+      matchIndex = searchable.indexOf(needle, matchIndex + needle.length)
+    }
+    return { term, occurrences }
+  })
+  const marks = [...indexesByLine]
     .sort(([left], [right]) => left - right)
-    .map(([bIndex, highlights]) => ({ bIndex, highlights: highlights.sort((left, right) => left.start - right.start) }))
+    .map(([aIndex, indexes]) => ({
+      aIndex,
+      highlights: rangesFromIndexes(indexes).map(range => ({ ...range, kind: 'matched' as const })),
+    }))
   return { checks, marks }
 }
 
@@ -369,6 +344,7 @@ export function OcrABCompare() {
   const [urlB, setUrlB] = useState('')
   const [comparison, setComparison] = useState<Comparison | null>(null)
   const [mode, setMode] = useState<ComparisonMode>('differences')
+  const [searchInput, setSearchInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -401,32 +377,35 @@ export function OcrABCompare() {
   }
 
   const runComparison = async () => {
-    if (!fileA || !fileB || busy) return
+    const terms = parseSearchTerms(searchInput)
+    if (!fileA || busy || (mode === 'requirements' ? !terms.length : !fileB)) return
     setBusy(true)
     setError('')
     setNotice('')
     setComparison(null)
     try {
-      const [hashA, hashB] = await Promise.all([sha256(fileA), sha256(fileB)])
-      const identical = Boolean(hashA && hashA === hashB)
+      let hashes: [string | null, string | null] = [null, null]
+      if (mode !== 'requirements') hashes = await Promise.all([sha256(fileA), sha256(fileB!)])
+      const [hashA, hashB] = hashes
+      const identical = Boolean(hashA && hashB && hashA === hashB)
       if (identical && mode === 'differences') {
-        setComparison({ a: null, b: null, differences: [], matches: [], requirements: [], requirementMarks: [], hashes: [hashA, hashB], identical: true, approximate: false })
+        setComparison({ a: null, b: null, differences: [], matches: [], searchTerms: [], searchMarks: [], hashes, identical: true, approximate: false })
         return
       }
-      const result = await extractOCR([fileA, fileB])
+      const result = await extractOCR(mode === 'requirements' ? [fileA] : [fileA, fileB!])
       const a = result.files.find(file => file.index === 0)
-      const b = result.files.find(file => file.index === 1)
-      if (!a || !b || a.error || b.error) {
-        throw new Error([a?.error, b?.error].filter(Boolean).join(' / ') || '두 이미지의 OCR 결과를 받지 못했습니다.')
+      const b = mode === 'requirements' ? null : result.files.find(file => file.index === 1) ?? null
+      if (!a || a.error || (mode !== 'requirements' && (!b || b.error))) {
+        throw new Error([a?.error, b?.error].filter(Boolean).join(' / ') || (mode === 'requirements' ? 'A안 이미지의 OCR 결과를 받지 못했습니다.' : '두 이미지의 OCR 결과를 받지 못했습니다.'))
       }
       const lineComparison = mode === 'requirements'
         ? { differences: [] as Difference[], approximate: false }
-        : compareLines(a.lines, b.lines)
+        : compareLines(a.lines, b!.lines)
       const compared = lineComparison
       const lineDifferences = lineComparison.differences.map(withTextRanges)
       const differences = mode === 'differences' ? lineDifferences : []
       const matches = mode === 'matches' ? [
-        ...findMatchingLines(a.lines, b.lines),
+        ...findMatchingLines(a.lines, b!.lines),
         ...lineDifferences.flatMap(difference => {
           if (difference.kind !== 'changed' || difference.aIndex === undefined || difference.bIndex === undefined) return []
           if (!difference.aMatches?.length && !difference.bMatches?.length) return []
@@ -437,14 +416,14 @@ export function OcrABCompare() {
           }]
         }),
       ] : []
-      const requirementAnalysis = mode === 'requirements' ? findRequirementChecks(a.lines, b.lines) : { checks: [], marks: [] }
-      setComparison({ a, b, differences, matches, requirements: requirementAnalysis.checks, requirementMarks: requirementAnalysis.marks,
-        hashes: [hashA, hashB], identical, approximate: compared.approximate })
+      const searchAnalysis = mode === 'requirements' ? findSearchTermMatches(a.lines, terms) : { checks: [], marks: [] }
+      setComparison({ a, b, differences, matches, searchTerms: searchAnalysis.checks, searchMarks: searchAnalysis.marks,
+        hashes, identical, approximate: compared.approximate })
       const notices = []
-      if (!a.lines.some(line => line.bbox) || !b.lines.some(line => line.bbox)) notices.push('OCR 위치 정보를 얻지 못한 문구는 아래 결과 목록에서만 확인할 수 있습니다.')
+      if (!a.lines.some(line => line.bbox) || (b && !b.lines.some(line => line.bbox))) notices.push('OCR 위치 정보를 얻지 못한 문구는 아래 결과 목록에서만 확인할 수 있습니다.')
       if (compared.approximate) notices.push('인식 문구가 많아 순서 기준으로 간략 대조했습니다. 하이라이트를 확인해 주세요.')
-      if (a.truncated || b.truncated) notices.push(mode === 'requirements'
-        ? 'OCR 결과가 2,000줄에서 잘려 A안 단어 또는 B안 검색 위치가 일부 누락될 수 있습니다.'
+      if (a.truncated || b?.truncated) notices.push(mode === 'requirements'
+        ? 'A안 OCR 결과가 2,000줄에서 잘려 일부 검색 결과가 누락될 수 있습니다.'
         : mode === 'matches' ? 'OCR 결과가 2,000줄에서 잘려 일부 일치 문구가 누락될 수 있습니다.'
           : 'OCR 결과가 2,000줄에서 잘려 일부 차이는 누락될 수 있습니다.')
       setNotice(notices.join(' '))
@@ -457,7 +436,7 @@ export function OcrABCompare() {
 
   const differences = comparison?.differences ?? []
   const matches = comparison?.matches ?? []
-  const requirements = comparison?.requirements ?? []
+  const searchTerms = comparison?.searchTerms ?? []
   const marksA = new Map<number, TextHighlight[]>()
   const marksB = new Map<number, TextHighlight[]>()
   const addRanges = (marks: Map<number, TextHighlight[]>, index: number, ranges: TextRange[], kind: MarkKind) =>
@@ -465,22 +444,23 @@ export function OcrABCompare() {
   if (mode === 'matches') {
     for (const match of matches) addRanges(marksB, match.bIndex, match.bRanges, 'matched')
   } else if (mode === 'requirements') {
-    for (const mark of comparison?.requirementMarks ?? []) marksB.set(mark.bIndex, mark.highlights)
+    for (const mark of comparison?.searchMarks ?? []) marksA.set(mark.aIndex, mark.highlights)
   } else {
     for (const difference of differences) {
       const ranges = differenceTextRanges(difference)
       if (difference.bIndex !== undefined) addRanges(marksB, difference.bIndex, ranges.bRanges, difference.kind)
     }
   }
-  const canCompare = Boolean(fileA && fileB && !busy)
-  const requirementCounts = {
-    found: requirements.filter(item => item.status === 'found').length,
-    missing: requirements.filter(item => item.status === 'missing').length,
+  const searchTermsInput = parseSearchTerms(searchInput)
+  const canCompare = Boolean(fileA && !busy && (mode === 'requirements' ? searchTermsInput.length : fileB))
+  const searchCounts = {
+    found: searchTerms.filter(item => item.occurrences > 0).length,
+    missing: searchTerms.filter(item => item.occurrences === 0).length,
   }
 
   return <section className="ocr-ab-section">
     <div className="ocr-ab-heading">
-      <div><h3>A/B 이미지 비교 검토</h3><p>비교 모드에 따라 문구 차이·일치 또는 A안 단어를 기준으로 B안을 대조합니다.</p></div>
+      <div><h3>A/B 이미지 비교 검토</h3><p>검색 모드에서는 A안 이미지에서 입력한 단어를 찾고, 비교 모드에서는 A안과 B안을 대조합니다.</p></div>
       <span className="ocr-ab-badge">OCR + SHA-256</span>
     </div>
     <div className="ocr-ab-inputs ocr-ab-no-print">
@@ -488,6 +468,13 @@ export function OcrABCompare() {
         const file = side === 'a' ? fileA : fileB
         const ref = side === 'a' ? inputA : inputB
         const title = side === 'a' ? 'A안 · 원안' : 'B안 · 대조안'
+        if (side === 'b' && mode === 'requirements') return <div className="ocr-ab-upload ocr-ab-search-upload" key={side}>
+          <div className="ocr-ab-upload-title"><strong>A안 검색어</strong><span>쉼표로 여러 개 입력</span></div>
+          <label htmlFor="ocr-ab-search-terms">찾을 단어 또는 문구</label>
+          <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="제품명, 중량, 전성분, 제조번호 및 사용기한"
+            onChange={event => { setSearchInput(event.target.value); setComparison(null); setError(''); setNotice('') }} />
+          <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 입력한 문구가 A안 이미지에 있으면 표시합니다.</p>
+        </div>
         return <div className="ocr-ab-upload" key={side} onDragOver={event => event.preventDefault()}
           onDrop={event => { event.preventDefault(); selectFile(side, event.dataTransfer.files[0]) }}>
           <div className="ocr-ab-upload-title"><strong>{title}</strong><span>{side === 'a' ? '비교 기준' : '변경 확인 대상'}</span></div>
@@ -508,37 +495,36 @@ export function OcrABCompare() {
         }}>
           <option value="differences">A안 대비 B안의 차이 찾기</option>
           <option value="matches">A안과 일치하는 B안 내용 찾기</option>
-          <option value="requirements">A안 단어별 B안 대조</option>
+          <option value="requirements">A안 이미지에서 단어 찾기</option>
         </select>
       </label>
       <span>지원 형식 PNG, JPG, JPEG, WEBP, BMP · 파일별 최대 20MB</span>
       <Button primary disabled={!canCompare} onClick={() => void runComparison()}>
-        {busy ? '비교 중…' : mode === 'requirements' ? '단어 대조' : mode === 'matches' ? '일치 내용 찾기' : '차이 분석'}
+        {busy ? '비교 중…' : mode === 'requirements' ? 'A안에서 단어 찾기' : mode === 'matches' ? '일치 내용 찾기' : '차이 분석'}
       </Button>
     </div>
     {error && <Alert kind="error">{error}</Alert>}
     {busy && <Spinner text={mode === 'requirements'
-      ? 'A안 단어를 B안 전체에서 대조하고 있습니다…'
+      ? 'A안 이미지를 OCR 분석하고 검색어를 찾고 있습니다…'
       : mode === 'matches' ? '두 이미지를 OCR 분석하고 일치 문구를 찾고 있습니다…' : '두 이미지를 OCR 분석하고 변경 문구를 대조하고 있습니다…'} />}
     {notice && <div className="ocr-ab-notice">{notice}</div>}
 
     {comparison && <div className="ocr-ab-report">
       <div className="ocr-ab-report-title"><div><h4>비교 검토 결과</h4><span>{mode === 'requirements'
-        ? `A안 단어 ${requirements.length}개 · 모두 찾음 ${requirementCounts.found} · 미발견 ${requirementCounts.missing}`
+        ? `검색어 ${searchTerms.length}개 · 발견 ${searchCounts.found} · 미발견 ${searchCounts.missing}`
         : mode === 'matches' ? `A안과 일치하는 B안 문구 ${matches.length}건`
           : comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
         <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
       </div>
       {comparison.identical && mode === 'differences' && <Alert kind="success">A안과 B안은 파일 내용이 완전히 같습니다. OCR 분석은 생략했습니다.</Alert>}
       {comparison.identical && mode === 'matches' && <Alert kind="info">A안과 B안은 동일한 파일입니다. OCR 문구를 대조해 일치 위치를 표시했습니다.</Alert>}
-      {mode === 'requirements' && requirements.length === 0 && <Alert kind="info">A안에서 비교할 OCR 단어를 찾지 못했습니다.</Alert>}
       {mode === 'differences' && !comparison.identical && differences.length === 0 && <Alert kind="info">이미지 해시는 다르지만 OCR 문구 차이는 찾지 못했습니다. 이미지 색상·배치 차이는 이 대조 범위에 포함되지 않습니다.</Alert>}
       {mode === 'matches' && matches.length === 0 && <Alert kind="info">OCR 문구가 A안과 완전히 일치하는 B안 내용을 찾지 못했습니다.</Alert>}
-      <div className="ocr-ab-panes">
+      <div className={`ocr-ab-panes${mode === 'requirements' ? ' single' : ''}`}>
         <article className="ocr-ab-pane"><header><strong>A안 · 원안</strong><span>{fileA?.name}</span></header>
           {urlA && <DifferencePreview fileUrl={urlA} result={comparison.a} side="a" highlighted={marksA} />}</article>
-        <article className="ocr-ab-pane"><header><strong>B안 · 대조안</strong><span>{fileB?.name}</span></header>
-          {urlB && <DifferencePreview fileUrl={urlB} result={comparison.b} side="b" highlighted={marksB} />}</article>
+        {mode !== 'requirements' && <article className="ocr-ab-pane"><header><strong>B안 · 대조안</strong><span>{fileB?.name}</span></header>
+          {urlB && <DifferencePreview fileUrl={urlB} result={comparison.b} side="b" highlighted={marksB} />}</article>}
       </div>
       {mode === 'differences' && !comparison.identical && differences.length > 0 && <>
           <div className="ocr-ab-legend"><span><i className="ocr-ab-dot changed" />변경 문구</span><span><i className="ocr-ab-dot added" />추가 문구</span><span><i className="ocr-ab-dot removed" />삭제 문구</span></div>
@@ -561,37 +547,28 @@ export function OcrABCompare() {
           </article>)}
         </div>
       </>}
-      {mode === 'requirements' && requirements.length > 0 && <>
+      {mode === 'requirements' && searchTerms.length > 0 && <>
         <div className="ocr-ab-legend">
-          <span><i className="ocr-ab-dot matched" />A안과 같은 문자</span>
-          <span><i className="ocr-ab-dot changed" />A안과 다른 문자</span>
+          <span><i className="ocr-ab-dot matched" />A안에서 찾은 검색어</span>
         </div>
         <div className="ocr-ab-requirements">
-          <h5>A안 단어별 B안 대조</h5>
-          <p className="caption">A안 이미지는 원본 그대로 표시하고, B안에서 같은 단어는 초록색으로, 비슷한 단어의 다른 문자는 빨간색으로 표시합니다. 단어의 위치와 순서는 비교하지 않으며 의미가 비슷한 표현은 판정하지 않습니다.</p>
-          {requirements.map((requirement, index) => <article className={'ocr-ab-requirement ' + requirement.status} key={requirement.aText}>
+          <h5>검색어별 A안 포함 여부</h5>
+          <p className="caption">입력한 단어와 문구가 A안 OCR 텍스트에 포함된 위치를 이미지에 표시합니다. 쉼표나 줄바꿈으로 여러 검색어를 입력할 수 있습니다.</p>
+          {searchTerms.map((item, index) => <article className={'ocr-ab-requirement ' + (item.occurrences ? 'found' : 'missing')} key={item.term}>
             <header className="ocr-ab-requirement-head">
               <strong>{index + 1}</strong>
-              <span className={'ocr-ab-requirement-status ' + requirement.status}>
-                {requirement.status === 'found' ? '모두 찾음' : '미발견'}
+              <span className={'ocr-ab-requirement-status ' + (item.occurrences ? 'found' : 'missing')}>
+                {item.occurrences ? `발견 ${item.occurrences}회` : '미발견'}
               </span>
             </header>
             <div className="ocr-ab-requirement-body">
-              <div><small>A안 단어</small><p>{requirement.aText}</p></div>
-              <div><small>B안 대응 위치 ({requirement.evidence.length}줄)</small>
-                {requirement.evidence.length
-                  ? requirement.evidence.map((evidence, evidenceIndex) => (
-                    <p key={evidence.bIndex + '-' + evidenceIndex}>
-                      <HighlightedText text={evidence.text} ranges={evidence.highlights} />
-                    </p>
-                  ))
-                  : <p>B안에서 대응하는 단어를 찾지 못했습니다.</p>}
-              </div>
+              <div><small>검색어</small><p>{item.term}</p></div>
+              <div><small>A안 결과</small><p>{item.occurrences ? `A안 이미지에서 ${item.occurrences}회 찾았습니다.` : 'A안 OCR 텍스트에서 찾지 못했습니다.'}</p></div>
             </div>
           </article>)}
         </div>
       </>}
-      {mode === 'requirements' && <p className="ocr-ab-disclaimer">단어와 문자 구간을 대조하는 보조 기능이며, 의미가 비슷한 동의어 또는 법령 준수 여부는 판정하지 않습니다. 결과는 OCR 인식 품질에 따라 달라질 수 있습니다.</p>}
+      {mode === 'requirements' && <p className="ocr-ab-disclaimer">검색은 입력한 글자와 OCR 인식 문구의 포함 여부를 확인합니다. 결과는 이미지의 OCR 인식 품질에 따라 달라질 수 있습니다.</p>}
       {mode !== 'requirements' && !comparison.identical && <p className="ocr-ab-disclaimer">{mode === 'matches'
         ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
         : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
