@@ -471,7 +471,15 @@ export function OcrABCompare() {
       setEditingTemplateName(null)
       setTemplateName('')
       setTemplateError('')
-      setTemplateMessage(`'${name}' 템플릿을 ${editingTemplateName ? '수정했습니다.' : '이 브라우저에 저장했습니다.'}`)
+      if (!editingTemplateName) {
+        setSearchInput(current => appendSearchTerms(current, savedTemplate.terms))
+        setComparison(null)
+        setError('')
+        setNotice('')
+      }
+      setTemplateMessage(editingTemplateName
+        ? `'${name}' 템플릿을 수정했습니다.`
+        : `'${name}' 템플릿을 저장하고 검색어를 입력란에 추가했습니다.`)
     } catch {
       setTemplateError('템플릿을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.')
     }
@@ -599,11 +607,23 @@ export function OcrABCompare() {
         if (side === 'b' && mode === 'requirements') return <div className="ocr-ab-upload ocr-ab-search-upload" key={side}>
           <div className="ocr-ab-upload-title"><strong>A안 검색어</strong><span>쉼표로 여러 개 입력</span></div>
           <label htmlFor="ocr-ab-search-terms">찾을 단어 또는 문구</label>
-          <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="제품명, 중량, 전성분, 제조번호 및 사용기한"
+          <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="예: 제품명, 중량, 전성분, 제조번호 및 사용기한"
             onChange={event => { setSearchInput(event.target.value); setComparison(null); setOcrTextResults(null); setOcrTextDialogOpen(false); setError(''); setNotice(''); setTemplateMessage('') }} />
-          <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 입력한 문구가 A안 이미지에 있으면 표시합니다.</p>
+          <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 검색어를 입력하거나 템플릿을 선택하면 검색 버튼이 활성화됩니다.</p>
           <div className="ocr-ab-template-tools">
-            <select aria-label="저장된 검색어 템플릿" value={selectedTemplate} onChange={event => setSelectedTemplate(event.target.value)} disabled={!templates.length}>
+            <select aria-label="저장된 검색어 템플릿" value={selectedTemplate} onChange={event => {
+              const name = event.target.value
+              setSelectedTemplate(name)
+              const template = templates.find(item => item.name === name)
+              if (!template) return
+              setSearchInput(current => appendSearchTerms(current, template.terms))
+              setComparison(null)
+              setOcrTextResults(null)
+              setOcrTextDialogOpen(false)
+              setError('')
+              setNotice('')
+              setTemplateMessage(`'${template.name}' 템플릿의 검색어를 입력란에 추가했습니다.`)
+            }} disabled={!templates.length}>
               <option value="">{templates.length ? '저장된 템플릿 선택' : '저장된 템플릿 없음'}</option>
               {templates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}
             </select>
