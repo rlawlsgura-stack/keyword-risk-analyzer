@@ -359,6 +359,7 @@ export function OcrABCompare() {
   const [templates, setTemplates] = useState<SearchTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
+  const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null)
   const [templateName, setTemplateName] = useState('')
   const [templateTerms, setTemplateTerms] = useState('')
   const [templateError, setTemplateError] = useState('')
@@ -418,25 +419,53 @@ export function OcrABCompare() {
     setTemplateMessage(`'${template.name}' 템플릿의 검색어를 추가했습니다. 이미 입력된 검색어는 중복해서 넣지 않았습니다.`)
   }
 
+  const editSelectedTemplate = () => {
+    const template = templates.find(item => item.name === selectedTemplate)
+    if (!template) return
+    setEditingTemplateName(template.name)
+    setTemplateName(template.name)
+    setTemplateTerms(template.terms)
+    setTemplateError('')
+    setTemplateDialogOpen(true)
+  }
+
+  const deleteSelectedTemplate = () => {
+    const template = templates.find(item => item.name === selectedTemplate)
+    if (!template || !window.confirm(`'${template.name}' 템플릿을 삭제할까요?`)) return
+    const updated = templates.filter(item => item.name !== template.name)
+    try {
+      localStorage.setItem(SEARCH_TEMPLATES_KEY, JSON.stringify(updated))
+      setTemplates(updated)
+      setSelectedTemplate('')
+      setTemplateMessage(`'${template.name}' 템플릿을 삭제했습니다.`)
+    } catch {
+      setTemplateMessage('템플릿을 삭제하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.')
+    }
+  }
+
   const saveSearchTemplate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const name = templateName.trim()
     const terms = parseSearchTerms(templateTerms)
     if (!name) { setTemplateError('템플릿 이름을 입력해 주세요.'); return }
     if (!terms.length) { setTemplateError('저장할 검색어를 먼저 입력해 주세요.'); return }
-    if (templates.some(template => template.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+    if (templates.some(template => template.name !== editingTemplateName && template.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
       setTemplateError('같은 이름의 템플릿이 이미 있습니다. 다른 이름을 입력해 주세요.')
       return
     }
-    const updated = [...templates, { name, terms: terms.join(', ') }]
+    const savedTemplate = { name, terms: terms.join(', ') }
+    const updated = editingTemplateName
+      ? templates.map(template => template.name === editingTemplateName ? savedTemplate : template)
+      : [...templates, savedTemplate]
     try {
       localStorage.setItem(SEARCH_TEMPLATES_KEY, JSON.stringify(updated))
       setTemplates(updated)
       setSelectedTemplate(name)
       setTemplateDialogOpen(false)
+      setEditingTemplateName(null)
       setTemplateName('')
       setTemplateError('')
-      setTemplateMessage(`'${name}' 템플릿을 이 브라우저에 저장했습니다.`)
+      setTemplateMessage(`'${name}' 템플릿을 ${editingTemplateName ? '수정했습니다.' : '이 브라우저에 저장했습니다.'}`)
     } catch {
       setTemplateError('템플릿을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.')
     }
@@ -546,7 +575,9 @@ export function OcrABCompare() {
               {templates.map(template => <option key={template.name} value={template.name}>{template.name}</option>)}
             </select>
             <Button small disabled={!selectedTemplate} onClick={loadSelectedTemplate}>템플릿 불러오기</Button>
-            <Button small onClick={() => { setTemplateName(''); setTemplateTerms(searchInput); setTemplateError(''); setTemplateDialogOpen(true) }}>템플릿 만들기</Button>
+            <Button small onClick={() => { setEditingTemplateName(null); setTemplateName(''); setTemplateTerms(searchInput); setTemplateError(''); setTemplateDialogOpen(true) }}>템플릿 만들기</Button>
+            <Button small disabled={!selectedTemplate} onClick={editSelectedTemplate}>수정</Button>
+            <Button small disabled={!selectedTemplate} onClick={deleteSelectedTemplate}>삭제</Button>
           </div>
           <p className="ocr-ab-template-note">불러온 검색어는 입력란에 추가됩니다. 다른 템플릿을 선택해 이어서 불러올 수 있습니다.</p>
           {templateMessage && <p className="ocr-ab-template-message" role="status">{templateMessage}</p>}
@@ -649,7 +680,7 @@ export function OcrABCompare() {
         ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
         : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
     </div>}
-    {templateDialogOpen && <Dialog title="검색어 템플릿 만들기" onClose={() => { setTemplateDialogOpen(false); setTemplateError('') }}>
+    {templateDialogOpen && <Dialog title={editingTemplateName ? '검색어 템플릿 수정' : '검색어 템플릿 만들기'} onClose={() => { setTemplateDialogOpen(false); setEditingTemplateName(null); setTemplateError('') }}>
       <form className="ocr-ab-template-form" onSubmit={saveSearchTemplate}>
         <label htmlFor="ocr-ab-template-name">템플릿 이름</label>
         <input id="ocr-ab-template-name" autoFocus maxLength={40} value={templateName} placeholder="예: 화장품"
@@ -660,8 +691,8 @@ export function OcrABCompare() {
         <p>쉼표 또는 줄바꿈으로 항목을 구분합니다. 저장 후 드롭다운에서 선택해 불러올 수 있습니다.</p>
         {templateError && <Alert kind="error">{templateError}</Alert>}
         <div className="ocr-ab-template-actions">
-          <Button onClick={() => { setTemplateDialogOpen(false); setTemplateError('') }}>취소</Button>
-          <Button primary type="submit">저장</Button>
+          <Button onClick={() => { setTemplateDialogOpen(false); setEditingTemplateName(null); setTemplateError('') }}>취소</Button>
+          <Button primary type="submit">{editingTemplateName ? '변경 내용 저장' : '템플릿 저장'}</Button>
         </div>
       </form>
     </Dialog>}

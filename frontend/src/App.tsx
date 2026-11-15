@@ -14,7 +14,7 @@ import { ReportTab } from './tabs/ReportTab.tsx'
 import { KeywordAdminTab } from './tabs/KeywordAdminTab.tsx'
 import { UsersTab } from './tabs/UsersTab.tsx'
 
-export const APP_VERSION = '1.0.14'
+export const APP_VERSION = '1.0.15'
 const TITLE = '🔎 광고심의 자동화 솔루션'
 
 /** The recovery hash is read before supabase-js consumes it (L1660-1686). */
