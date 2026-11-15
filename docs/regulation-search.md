@@ -25,7 +25,7 @@
 
 심의챗봇은 **AI 근거 검토 및 부족한 공식 출처 추가 검색** 옵션을 제공하며 기본값은 꺼져 있습니다. 서버에서 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정하면 사용자가 옵션을 켰을 때 검색된 근거의 충분성과 충돌을 검토합니다. 중요한 사실이나 값이 빠졌거나 근거가 충돌할 때 OpenAI Responses API의 웹 검색을 사용해 법령, 정부·규제기관 등 공식 도메인에서 추가 근거를 찾습니다. 공식 출처에서 확인할 수 없는 사내 고유 정책이나 값은 추정하지 않고 미확인으로 표시합니다.
 
-별도 **GPT LLM** 검색 모드는 질문과 대화 기록, 사용자가 선택해 연결한 OCR·텍스트 자료를 모델에 직접 전달해 일반 답변을 생성합니다. 이 모드는 법령·사내 문서·키워드 DB 검색과 웹 검색을 실행하지 않으며, 검색 출처를 인용하지 않습니다. 최신 법령·사실 확인이 필요한 답변은 공식 자료에서 별도로 검증해야 합니다. 이 모드도 위 서버 모델 설정이 필요하며, 선택하면 OpenAI 토큰을 사용합니다. 이는 검색 근거를 검토하는 옵션과 별개의 호출 경로입니다.
+별도 **GPT LLM** 검색 모드는 질문과 대화 기록, 사용자가 선택해 연결한 OCR·텍스트 자료를 모델에 직접 전달해 일반 답변을 생성합니다. 이 모드는 법령·사내 문서·키워드 DB 검색과 웹 검색을 실행하지 않으며, 검색 출처를 인용하지 않습니다. 최신 법령·사실 확인이 필요한 답변은 공식 자료에서 별도로 검증해야 합니다. GPT LLM 모드에서 모델 드롭다운을 사용할 수 있으며, 서버의 `REGULATION_LLM_MODEL`은 초기 선택값으로 사용됩니다. 이 값이 없으면 `gpt-6-luna`가 기본 선택됩니다. 실제 응답에는 `REGULATION_LLM_ENABLED=true`와 API 서버의 `OPENAI_API_KEY`가 필요하고, 모델 접근 권한은 OpenAI API 계정에 따라 다를 수 있습니다. 선택한 모델은 GPT LLM 질문에만 적용되며, OpenAI 토큰을 사용합니다. 이는 검색 근거를 검토하는 옵션과 별개의 호출 경로입니다.
 
 AI 답변은 항상 심의 권고이며 위반·적합의 최종 판정이 아닙니다. 내부·검색 근거는 기존 출처 ID로, 웹 검색 근거는 `[WEB1]` 형식으로 답변과 출처 카드에 연결합니다. 웹 검색 인용은 허용된 공식 도메인의 URL만 표시하며, 답변의 각 설명 문단이 실제 검색된 출처 ID를 인용해야 요약을 반환합니다. 이 검증을 통과하지 못하면 생성 답변을 보류하고 추가 확인을 권고합니다. 사내 문서의 검색 문단과 질문은 기존과 같이 외부 AI API에 전송됩니다. AI 요약을 끄면 검색 결과만 표시합니다.
 
@@ -51,6 +51,6 @@ API 서비스의 비밀 환경변수로 `OPENAI_API_KEY`와 `REGULATION_LLM_MODE
 
 `LEGISLATION_API_KEY`는 국가법령정보센터 조회에 필요합니다. `VITE_API_BASE_URL`은 React에서 FastAPI 주소를 가리킵니다. `REGULATION_EMBEDDINGS_ENABLED`와 `REGULATION_LLM_ENABLED`의 기본값은 모두 `false`이므로 AI 근거 검토·추가 검색을 운영에서 사용하려면 API 서비스에 `REGULATION_LLM_ENABLED=true`, `REGULATION_LLM_MODEL`, `OPENAI_API_KEY`를 설정해야 합니다. 비밀 키는 API 서비스에만 둡니다. `REGULATION_MCP_URL`은 사용하지 않습니다.
 
-심의챗봇 아래의 월간 OpenAI 사용량 표시에는 `supabase/migrations/20261112112545_openai_usage_meter.sql`과 `supabase/migrations/20261112112622_openai_usage_service_role_policy.sql`을 적용해야 합니다. 이 집계는 심의챗봇의 LLM 및 사내 문서 임베딩 호출만 포함합니다. 요금 추정에는 설정된 모델의 1M 토큰당 입력·출력 가격을 `REGULATION_LLM_INPUT_USD_PER_1M`, `REGULATION_LLM_OUTPUT_USD_PER_1M`에 입력하고, 선택적으로 캐시 입력 가격을 `REGULATION_LLM_CACHED_INPUT_USD_PER_1M`에 입력합니다. 월 예산을 표시하려면 `REGULATION_CHAT_MONTHLY_BUDGET_USD`를 설정합니다. 사내 문서 임베딩은 고정 모델 `text-embedding-3-small`을 사용하며, `OPENAI_EMBEDDING_INPUT_USD_PER_1M`에 가격을 설정합니다.
+심의챗봇 아래의 월간 OpenAI 사용량 표시에는 `supabase/migrations/20261112112545_openai_usage_meter.sql`과 `supabase/migrations/20261112112622_openai_usage_service_role_policy.sql`을 적용해야 합니다. 이 집계는 심의챗봇의 LLM 및 사내 문서 임베딩 호출만 포함합니다. 선택 가능한 GPT 모델의 표준 토큰 단가를 사용해 비용을 추정합니다. 현재 서버 기본 모델의 입력·출력·캐시 단가는 `REGULATION_LLM_INPUT_USD_PER_1M`, `REGULATION_LLM_OUTPUT_USD_PER_1M`, `REGULATION_LLM_CACHED_INPUT_USD_PER_1M`으로 재정의할 수 있습니다. 다른 모델의 단가를 조정할 때는 모델 ID의 영문 대문자화 및 구분자 치환값을 사용해 `REGULATION_LLM_MODEL_<MODEL>_INPUT_USD_PER_1M`, `REGULATION_LLM_MODEL_<MODEL>_OUTPUT_USD_PER_1M`, `REGULATION_LLM_MODEL_<MODEL>_CACHED_INPUT_USD_PER_1M`을 설정합니다. 월 예산을 표시하려면 `REGULATION_CHAT_MONTHLY_BUDGET_USD`를 설정합니다. 사내 문서 임베딩은 고정 모델 `text-embedding-3-small`을 사용하며, `OPENAI_EMBEDDING_INPUT_USD_PER_1M`에 가격을 설정합니다.
 
-표시 비용은 응답의 토큰 수와 위 단가로 계산한 예상치입니다. OpenAI 웹 검색 도구 요금은 합산하지 않습니다. 단가를 설정하지 않으면 토큰 누계만 표시하고 비용 및 잔여 예산은 계산하지 않습니다. OpenAI API 키는 API 서버에만 보관합니다.
+표시 비용은 응답의 토큰 수와 설정 단가로 계산한 예상치입니다. OpenAI 웹 검색 도구 요금, 장문맥·지역 처리 추가 요금은 합산하지 않습니다. 내장 모델의 표준 단가는 OpenAI 가격 변경에 맞춰 갱신해야 합니다. 지원 목록에 없는 서버 기본 모델은 단가를 설정하지 않으면 토큰 누계만 표시하고 비용 및 잔여 예산은 계산하지 않습니다. OpenAI API 키는 API 서버에만 보관합니다.

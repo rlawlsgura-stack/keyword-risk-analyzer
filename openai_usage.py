@@ -3,11 +3,21 @@ from __future__ import annotations
 
 import os
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
+
+# Standard OpenAI text-token prices, USD per 1M tokens, reviewed 2026-11-15.
+_MODEL_PRICES = {
+    "gpt-4.1-mini": ("0.40", "1.60", "0.10"),
+    "gpt-6-luna": ("0.10", "0.50", "0.01"),
+    "gpt-6.1-terra": ("1.00", "5.00", "0.05"),
+    "gpt-6.1-sol": ("2.00", "10.00", "0.10"),
+    "gpt-6-astra": ("10.00", "50.00", "1.00"),
+}
 
 
 def _price(name: str) -> Decimal | None:
@@ -19,6 +29,19 @@ def _price(name: str) -> Decimal | None:
     except InvalidOperation:
         return None
     return parsed if parsed >= 0 else None
+
+
+def _model_rate(model: str, component: str, legacy_setting: str,
+                default_rate: str | None) -> Decimal | None:
+    model_key = re.sub(r"[^A-Z0-9]+", "_", model.upper()).strip("_")
+    specific = _price(f"REGULATION_LLM_MODEL_{model_key}_{component}_USD_PER_1M")
+    if specific is not None:
+        return specific
+    if model == os.getenv("REGULATION_LLM_MODEL", "").strip():
+        configured = _price(legacy_setting)
+        if configured is not None:
+            return configured
+    return Decimal(default_rate) if default_rate is not None else None
 
 
 def usage_event(model: str, usage: dict, *, embedding: bool = False) -> dict:
@@ -33,9 +56,10 @@ def usage_event(model: str, usage: dict, *, embedding: bool = False) -> dict:
         output_rate = Decimal(0)
         cached_rate = input_rate
     else:
-        input_rate = _price("REGULATION_LLM_INPUT_USD_PER_1M")
-        output_rate = _price("REGULATION_LLM_OUTPUT_USD_PER_1M")
-        cached_rate = _price("REGULATION_LLM_CACHED_INPUT_USD_PER_1M")
+        defaults = _MODEL_PRICES.get(model, (None, None, None))
+        input_rate = _model_rate(model, "INPUT", "REGULATION_LLM_INPUT_USD_PER_1M", defaults[0])
+        output_rate = _model_rate(model, "OUTPUT", "REGULATION_LLM_OUTPUT_USD_PER_1M", defaults[1])
+        cached_rate = _model_rate(model, "CACHED_INPUT", "REGULATION_LLM_CACHED_INPUT_USD_PER_1M", defaults[2])
         if cached_rate is None:
             cached_rate = input_rate
 

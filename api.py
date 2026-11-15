@@ -25,7 +25,8 @@ from app_config import configure, cloud_enabled
 from repository import COUNT_COL, LAST_COL, ConflictError, StorageError, SupabaseRepository
 from service import analyze, analyze_current, load_matching_config
 from matching_engine import DB_COLS, MatchingConfig, _KO_SUFFIX_WHITELIST
-from regulation_assistant import RegulationSearchError, answer_regulation_question
+from regulation_assistant import (RegulationSearchError, answer_regulation_question,
+                                  regulation_gpt_model_catalog, regulation_gpt_model_ids)
 from openai_usage import current_month_start, monthly_budget, record_usage
 from keyword_suggestion import SuggestionProviderError, suggest_keyword
 from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documents,
@@ -35,7 +36,7 @@ from regulation_corpus import (MAX_DOCUMENT_BYTES, create_document, list_documen
                                reindex_embeddings, save_turn)
 
 configure()
-app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.1',
+app = FastAPI(title='Keyword Risk Analyzer API', version='1.1.2',
               docs_url='/docs' if os.getenv('API_DOCS_ENABLED') == 'true' else None,
               redoc_url=None)
 app.add_middleware(
@@ -120,6 +121,7 @@ class RegulationQuestionRequest(BaseModel):
     include_keyword_candidates: bool = False
     thread_id: UUID | None = None
     as_of: date = Field(default_factory=date.today)
+    model: str | None = Field(default=None, max_length=100)
 
     @field_validator('conversation_history')
     @classmethod
@@ -127,6 +129,13 @@ class RegulationQuestionRequest(BaseModel):
         if sum(len(message.content) for message in messages) > 20000:
             raise ValueError('conversation history must not exceed 20000 characters')
         return messages
+
+    @field_validator('model')
+    @classmethod
+    def validate_gpt_model(cls, model):
+        if model is not None and model not in regulation_gpt_model_ids():
+            raise ValueError('Select a supported GPT model')
+        return model
 
     @field_validator('scope')
     @classmethod
@@ -1604,6 +1613,11 @@ def reset_report_data(scope: Literal['all', 'last-7-days'], actor=Depends(curren
         repository.reset_counts()
         return {'scope': scope, 'reset': True}
     return {'scope': scope, 'removed': repository.reset_week()}
+
+
+@app.get('/api/v1/regulation/models')
+def regulation_models(actor=Depends(current_actor)):
+    return regulation_gpt_model_catalog()
 
 
 @app.post('/api/v1/regulation/questions')

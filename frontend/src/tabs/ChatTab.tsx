@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, downloadRegulationDocumentOriginal, listRegulationThreads, loadRegulationDocumentFullText, loadRegulationThread, loadRegulationUsage, type RegulationConversationMessage, type RegulationScope, type RegulationThread } from '../lib/api.ts'
+import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, downloadRegulationDocumentOriginal, listRegulationThreads, loadRegulationDocumentFullText, loadRegulationModels, loadRegulationThread, loadRegulationUsage, type RegulationConversationMessage, type RegulationModelCatalog, type RegulationScope, type RegulationThread } from '../lib/api.ts'
 import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
 import type { RegulationResult, RegulationUsageSummary } from '../lib/types.ts'
 import { useStore } from '../store.tsx'
@@ -8,6 +8,7 @@ import { RegulationDocuments } from './RegulationDocuments.tsx'
 
 type Direction = 'keyword_to_law' | 'law_to_keywords'
 type Turn = { question: string; result: RegulationResult; failed?: boolean }
+const GPT_MODEL_STORAGE_KEY = 'regulation-chat-gpt-model'
 const DIRECTIONS: Direction[] = ['keyword_to_law', 'law_to_keywords']
 const DIRECTION_LABELS: Record<Direction, string> = {
   keyword_to_law: '광고 문구·키워드에서 법령 찾기',
@@ -141,6 +142,8 @@ export function ChatTab() {
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
   const [threadId, setThreadId] = useState<string | null>(null)
   const [threads, setThreads] = useState<RegulationThread[]>([])
+  const [gptModelCatalog, setGptModelCatalog] = useState<RegulationModelCatalog | null>(null)
+  const [selectedModel, setSelectedModel] = useState('')
   const [corpusReady, setCorpusReady] = useState<boolean | null>(null)
   const [question, setQuestion] = useState('')
   const [ocrTerms, setOcrTerms] = useState<string[]>([])
@@ -172,6 +175,15 @@ export function ChatTab() {
     void listRegulationThreads().then(data => { setThreads(data.items); setCorpusReady(true) }).catch(() => setCorpusReady(false))
     void loadRegulationUsage().then(setUsageSummary).catch(() => setUsageSummary({ available: false }))
   }, [])
+  useEffect(() => {
+    if (!gptMode || gptModelCatalog) return
+    void loadRegulationModels().then(data => {
+      setGptModelCatalog(data)
+      let storedModel = ''
+      try { storedModel = window.localStorage.getItem(GPT_MODEL_STORAGE_KEY) ?? '' } catch { /* storage can be disabled */ }
+      setSelectedModel(data.items.some(item => item.id === storedModel) ? storedModel : data.default_model)
+    }).catch(() => setGptModelCatalog({ items: [], default_model: '' }))
+  }, [gptMode, gptModelCatalog])
 
   const openThread = async (id: string) => {
     if (!id) { setThreadId(null); setHistory([]); return }
@@ -210,6 +222,7 @@ export function ChatTab() {
     const q = question.trim()
     if (q.length < 2 || q.length > 500) { setWarning('질문은 2~500자로 입력해 주세요.'); return }
     if (!scope.length) { setWarning('검색 모드를 하나 이상 선택해 주세요.'); return }
+    if (gptMode && !selectedModel) { setWarning('GPT 모델 목록을 불러온 뒤 모델을 선택해 주세요.'); return }
     if (contextText.length > 20000) { setWarning(`연결 자료가 ${contextText.length.toLocaleString()}자입니다. 최대 20,000자까지 연결할 수 있습니다.`); return }
     setBusy(true)
     const conversation: RegulationConversationMessage[] = []
@@ -230,7 +243,8 @@ export function ChatTab() {
         ? await askRegulation({ direction, scope: requestedScope, use_llm: useLlm,
                                 include_keyword_candidates: includeKeywordCandidates,
                                 thread_id: threadId, as_of: asOf,
-                                query: q, context_text: contextText, category, conversation_history: conversation })
+                                query: q, context_text: contextText, category, conversation_history: conversation,
+                                model: gptMode ? selectedModel : undefined })
         : await askRegulationLegacy({ direction, query: q, context_text: contextText,
                                      category, conversation_history: conversation })
       if (result.usage_summary) setUsageSummary(result.usage_summary)
@@ -273,6 +287,19 @@ export function ChatTab() {
               if (!nextScope.includes('law')) setDirection('keyword_to_law')
             }}
             placeholder="검색 모드 선택" />
+          {gptMode && <div className="chat-gpt-model-picker">
+            {gptModelCatalog?.items.length ? <>
+              <Select label="GPT 모델" help="선택한 모델이 GPT LLM 답변 생성에 사용됩니다. 모델 접근 권한은 OpenAI API 계정에 따라 다를 수 있습니다."
+                value={selectedModel || gptModelCatalog.default_model} options={gptModelCatalog.items.map(item => item.id)}
+                format={id => gptModelCatalog.items.find(item => item.id === id)?.label ?? id}
+                onChange={model => {
+                  setSelectedModel(model)
+                  try { window.localStorage.setItem(GPT_MODEL_STORAGE_KEY, model) } catch { /* storage can be disabled */ }
+                }} disabled={busy} />
+              <small>{gptModelCatalog.items.find(item => item.id === selectedModel)?.description}</small>
+              <small className="chat-gpt-model-note">모델 선택은 GPT LLM 모드에만 적용됩니다. 사용량 비용은 선택한 모델 기준으로 추정합니다.</small>
+            </> : <p className="chat-gpt-model-note" role="status">{gptModelCatalog === null ? 'GPT 모델 목록을 불러오는 중입니다.' : 'GPT 모델 목록을 불러오지 못했습니다. API 연결을 확인해 주세요.'}</p>}
+          </div>}
         </div></div>}
         {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
         <details className="chat-options"><summary className="chat-control-title">검색 옵션</summary>
@@ -284,7 +311,7 @@ export function ChatTab() {
               {ocrOptions.length > 0 && <MultiSelect label={gptMode ? "현재 OCR 키워드 참고" : "\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} disabled={!contextOptionsEnabled} />}
               <div className="chat-option-checks">
                 {corpusReady && !gptMode && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} help="검색된 근거를 AI가 검토하고, 근거가 부족하면 공식 출처를 추가로 검색합니다. 켜면 OpenAI 모델을 호출해 토큰을 사용합니다. 예: 사내 지침과 법령 내용이 다르면 차이를 검토하고 공식 자료를 더 찾습니다." checked={useLlm} onChange={setUseLlm} />}
-                {corpusReady && gptMode && <p className="chat-gpt-mode-note">GPT LLM 모드는 질문에 직접 답변합니다. 서버 모델 설정이 필요하며 OpenAI 토큰을 사용합니다.</p>}
+                {corpusReady && gptMode && <p className="chat-gpt-mode-note">GPT LLM 모드는 질문에 직접 답변하며 선택한 모델을 사용합니다. OpenAI API 토큰이 사용됩니다.</p>}
                 {corpusReady && <Checkbox label="임베딩 기반 의미 유사도 검색 (위험 판정에 반영하지 않음)" help="문구와 키워드의 의미를 벡터로 비교해 비슷한 등록 키워드 후보를 찾습니다. 위험 등급이나 자동 판정은 바꾸지 않습니다. 예: ‘피부를 환하게’와 ‘미백’처럼 표현이 달라도 후보로 찾을 수 있습니다. 서버 설정에 따라 임베딩 API를 호출하며 별도 사용량이 발생할 수 있습니다." checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={!keywordSemanticsEnabled} />}
                 <Checkbox label={gptMode ? "현재 OCR 키워드를 GPT에 참고자료로 전달" : "현재 OCR 분석 키워드 검색 포함"} help={gptMode ? "선택한 OCR 키워드는 검색하지 않고 GPT 답변의 참고자료로 전달합니다." : "현재 OCR 분석에서 추출한 키워드를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다."} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0 || !contextOptionsEnabled} />
                 <Checkbox label={gptMode ? "현재 텍스트를 GPT에 참고자료로 전달" : "현재 텍스트 분석 키워드 검색 포함"} help={gptMode ? "현재 텍스트 분석 화면의 문구를 검색하지 않고 GPT 답변의 참고자료로 전달합니다." : "현재 텍스트 분석 화면의 문구 전체를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다."} checked={includeText} onChange={setIncludeText} disabled={!contextOptionsEnabled} />

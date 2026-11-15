@@ -19,6 +19,33 @@ class RegulationSearchError(RuntimeError):
     pass
 
 
+GPT_MODEL_CHOICES = (
+    {"id": "gpt-6-luna", "label": "GPT-6 Luna · 빠르고 효율적",
+     "description": "짧은 질문과 자주 쓰는 대화에 적합한 효율형 모델입니다."},
+    {"id": "gpt-6.1-terra", "label": "GPT-6.1 Terra · 균형형",
+     "description": "일반적인 설명과 문서 기반 질문에 균형 있게 답합니다."},
+    {"id": "gpt-6.1-sol", "label": "GPT-6.1 Sol · 고성능",
+     "description": "복잡한 질문과 여러 조건을 함께 다루는 작업에 적합합니다."},
+    {"id": "gpt-6-astra", "label": "GPT-6 Astra · 최고 성능",
+     "description": "복잡한 분석과 높은 답변 품질이 필요한 작업에 적합합니다."},
+)
+DEFAULT_GPT_MODEL = "gpt-6-luna"
+
+
+def regulation_gpt_model_catalog() -> dict[str, Any]:
+    default_model = os.getenv("REGULATION_LLM_MODEL", "").strip() or DEFAULT_GPT_MODEL
+    items = [dict(option) for option in GPT_MODEL_CHOICES]
+    if default_model not in {item["id"] for item in items}:
+        label = {"gpt-4.1-mini": "GPT-4.1 mini"}.get(default_model, default_model)
+        items.insert(0, {"id": default_model, "label": f"{label} · 현재 기본값",
+                         "description": "서버에서 기본 모델로 설정된 모델입니다."})
+    return {"items": items, "default_model": default_model}
+
+
+def regulation_gpt_model_ids() -> set[str]:
+    return {item["id"] for item in regulation_gpt_model_catalog()["items"]}
+
+
 def _search_legislation_many(calls: list[tuple[str, dict[str, Any]]]) -> list[str]:
     try:
         return _law_api_search_many(calls)
@@ -266,14 +293,16 @@ def _llm_research_recommendation(
 
 def _answer_gpt_mode(request: dict[str, Any]) -> dict[str, Any]:
     if (os.getenv("REGULATION_LLM_ENABLED", "false").lower() != "true"
-            or not os.getenv("OPENAI_API_KEY", "").strip()
-            or not os.getenv("REGULATION_LLM_MODEL", "").strip()):
+            or not os.getenv("OPENAI_API_KEY", "").strip()):
         raise RegulationSearchError(
-            "GPT LLM 모드를 사용하려면 API 서버에 REGULATION_LLM_ENABLED=true, "
-            "REGULATION_LLM_MODEL, OPENAI_API_KEY를 설정해 주세요."
+            "GPT LLM 모드를 사용하려면 API 서버에 REGULATION_LLM_ENABLED=true와 "
+            "OPENAI_API_KEY를 설정해 주세요."
         )
 
-    model = os.getenv("REGULATION_LLM_MODEL", "").strip()
+    model = str(request.get("model") or os.getenv("REGULATION_LLM_MODEL", "").strip()
+                or DEFAULT_GPT_MODEL).strip()
+    if model not in regulation_gpt_model_ids():
+        raise RegulationSearchError("지원하지 않는 GPT 모델입니다. 모델 선택을 다시 확인해 주세요.")
     history = [item for item in request.get("conversation_history", [])[-12:]
                if item.get("role") in {"user", "assistant"}]
     system = (
@@ -310,6 +339,14 @@ def _answer_gpt_mode(request: dict[str, Any]) -> dict[str, Any]:
         )
         response.raise_for_status()
         result = response.json()
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code in {400, 403, 404}:
+            raise RegulationSearchError(
+                "선택한 모델을 OpenAI API 계정에서 사용할 수 없습니다. 모델 접근 권한을 확인해 주세요."
+            ) from exc
+        raise RegulationSearchError(
+            "GPT LLM 응답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        ) from exc
     except requests.RequestException as exc:
         raise RegulationSearchError("GPT LLM 응답을 가져오지 못했습니다. 잠시 후 다시 시도해 주세요.") from exc
 

@@ -106,9 +106,12 @@ export const resetReport = (scope: 'all' | 'last-7-days') =>
 export type RegulationConversationMessage = { role: 'user' | 'assistant'; content: string }
 export type RegulationScope = 'law' | 'internal' | 'keyword' | 'all' | 'gpt'
 export type RegulationScopeSelection = RegulationScope | ('law' | 'internal' | 'keyword')[]
+export type RegulationModelOption = { id: string; label: string; description: string }
+export type RegulationModelCatalog = { items: RegulationModelOption[]; default_model: string }
 export type RegulationDocument = { id: string; source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string | null; status: string; original_name: string; approved_at: string | null }
 export type RegulationThread = { id: string; mode: string; created_at: string; updated_at: string }
-export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScopeSelection; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
+export const loadRegulationModels = () => request<RegulationModelCatalog>('/api/v1/regulation/models')
+export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScopeSelection; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[]; model?: string }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })
 export const askRegulationLegacy = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>
   request<RegulationResult>('/api/v1/regulation/questions', { method: 'POST', body: json(body) })

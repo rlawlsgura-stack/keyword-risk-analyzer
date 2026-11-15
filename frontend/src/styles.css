@@ -403,6 +403,9 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-scope-picker .ms-box input::placeholder { color: #727b86; opacity: 1; }
 .chat-scope-picker .ms-chip { padding: .05rem .4rem; border: 1px solid #d0e8fa; border-radius: 4px; background: #eaf5ff; color: #164a72; font-family: inherit; font-size: .8rem; line-height: 1.4; }
 .chat-scope-picker .ms-chip button { color: #164a72; }
+.chat-gpt-model-picker { margin-top: .65rem; }
+.chat-gpt-model-picker > small { display: block; margin-top: .3rem; color: #64748b; font-size: .76rem; line-height: 1.4; }
+.chat-gpt-model-note { margin: .45rem 0 0; color: #586777; font-size: .78rem; line-height: 1.45; }
 .chat-scope-all.btn.small { min-height: 1.65rem; padding: .1rem .5rem; border-color: #d4dde6; border-radius: 4px; color: #526273; font-size: .78rem; font-weight: 600; }
 .chat-scope-all.btn.small:hover:not(:disabled) { border-color: #6ba9dc; color: #176fae; }
 .search-mode-help-trigger { position: relative; display: inline-grid; place-items: center; width: 1.2rem; height: 1.2rem; padding: 0; border: 1px solid #74808d; border-radius: 50%; color: #5f6b77; background: #fff; font-family: inherit; font-size: .75rem; font-weight: 700; line-height: 1; cursor: help; }

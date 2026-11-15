@@ -1,3 +1,8 @@
+## React 1.0.20 / API 1.1.2
+
+- Add a GPT LLM model dropdown, defaulting to the server-configured model.
+- Send the selected model only for direct GPT LLM questions and estimate usage by model.
+
 ## React 1.0.13 / API 1.1.1
 
 - Replace the third A/B review mode's B image upload with comma- or line-separated search terms for the A image.
