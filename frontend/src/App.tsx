@@ -14,7 +14,7 @@ import { ReportTab } from './tabs/ReportTab.tsx'
 import { KeywordAdminTab } from './tabs/KeywordAdminTab.tsx'
 import { UsersTab } from './tabs/UsersTab.tsx'
 
-export const APP_VERSION = '1.0.16'
+export const APP_VERSION = '1.0.17'
 const TITLE = '🔎 광고심의 자동화 솔루션'
 
 /** The recovery hash is read before supabase-js consumes it (L1660-1686). */
@@ -494,8 +494,12 @@ function Shell() {
       }
     }
     const onDragStart = (event: DragEvent) => {
-      if (!(event.target instanceof Element)) return
-      const header = event.target.closest('table.grid thead th') as HTMLTableCellElement | null
+      const target = event.target instanceof Element
+        ? event.target
+        : event.target instanceof Node ? event.target.parentElement : null
+      if (!target) return
+      if (target.closest('.ocr-ab-ocr-results pre')) return
+      const header = target.closest('table.grid thead th') as HTMLTableCellElement | null
       const table = header?.closest('table.grid') as HTMLTableElement | null
       if (!header || !table || !header.classList.contains('table-movable')) { event.preventDefault(); return }
       const rect = header.getBoundingClientRect()
@@ -520,6 +524,9 @@ function Shell() {
       if (event.target instanceof Element) event.target.closest('th')?.classList.remove('column-dragging')
     }
     const onCopy = (event: ClipboardEvent) => {
+      const anchor = window.getSelection()?.anchorNode
+      const selectionTarget = anchor instanceof Element ? anchor : anchor?.parentElement
+      if (selectionTarget?.closest('.ocr-ab-ocr-results pre')) return
       if (!activeRange || !event.clipboardData) return
       const { table, startRow, endRow, startCol, endCol } = activeRange
       const rows = Array.from(table.tBodies[0]?.rows ?? [])

@@ -546,7 +546,8 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .ocr-ab-ocr-results article { min-width: 0; }
 .ocr-ab-ocr-results h4 { display: flex; justify-content: space-between; gap: .6rem; margin: 0 0 .45rem; color: #34485b; font-size: .88rem; }
 .ocr-ab-ocr-results h4 span { overflow: hidden; color: #718194; font-size: .74rem; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.ocr-ab-ocr-results pre { box-sizing: border-box; max-height: 65vh; min-height: 12rem; overflow: auto; margin: 0; padding: .8rem; border: 1px solid #dce3ea; border-radius: 5px; background: #f7f9fb; color: #25384a; font-family: inherit; font-size: .84rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ocr-ab-ocr-results pre { box-sizing: border-box; max-height: 65vh; min-height: 12rem; overflow: auto; margin: 0; padding: .8rem; border: 1px solid #dce3ea; border-radius: 5px; background: #f7f9fb; color: #25384a; cursor: text; font-family: inherit; font-size: .84rem; line-height: 1.55; user-select: text; -webkit-user-select: text; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ocr-ab-ocr-results pre::selection { background: #b9d7ff; color: #14283c; }
 .ocr-ab-ocr-note { margin: 0 0 .4rem; color: #785c17; font-size: .75rem; }
 .ocr-ab-panes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
 .ocr-ab-panes.single { grid-template-columns: minmax(0, 1fr); }
