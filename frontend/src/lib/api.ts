@@ -104,8 +104,8 @@ export const resetReport = (scope: 'all' | 'last-7-days') =>
 
 /* ---------- regulation ---------- */
 export type RegulationConversationMessage = { role: 'user' | 'assistant'; content: string }
-export type RegulationScope = 'law' | 'internal' | 'keyword' | 'all'
-export type RegulationScopeSelection = RegulationScope | Exclude<RegulationScope, 'all'>[]
+export type RegulationScope = 'law' | 'internal' | 'keyword' | 'all' | 'gpt'
+export type RegulationScopeSelection = RegulationScope | ('law' | 'internal' | 'keyword')[]
 export type RegulationDocument = { id: string; source_key: string; version: string; title: string; category: string; effective_from: string; effective_to: string | null; status: string; original_name: string; approved_at: string | null }
 export type RegulationThread = { id: string; mode: string; created_at: string; updated_at: string }
 export const askRegulation = (body: { direction: 'keyword_to_law' | 'law_to_keywords'; scope: RegulationScopeSelection; use_llm: boolean; include_keyword_candidates: boolean; thread_id: string | null; as_of: string; query: string; context_text: string; category: string; conversation_history: RegulationConversationMessage[] }) =>

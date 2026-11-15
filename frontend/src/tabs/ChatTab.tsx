@@ -14,16 +14,19 @@ const DIRECTION_LABELS: Record<Direction, string> = {
   law_to_keywords: '법령·조항에서 등록 키워드 찾기',
 }
 const MATCH_COLUMNS = ['kwd_no', '키워드명', '상품카테고리', '리스크 등급', '대체키워드', '리스크 등급별 검토 의견']
-type SearchScope = Exclude<RegulationScope, 'all'>
+type SourceScope = Exclude<RegulationScope, 'all' | 'gpt'>
+type SearchScope = SourceScope | 'gpt'
 const SCOPES: SearchScope[] = ['law', 'internal', 'keyword']
-const SCOPE_LABELS: Record<RegulationScope, string> = { all: '통합 검색', law: '국가법령정보센터', internal: '사내 규정 문서', keyword: '키워드 DB' }
+const CHAT_SCOPES: SearchScope[] = [...SCOPES, 'gpt']
+const SCOPE_LABELS: Record<RegulationScope, string> = { all: '통합 검색', law: '국가법령정보센터', internal: '사내 규정 문서', keyword: '키워드 DB', gpt: 'GPT LLM' }
 const ALL_SCOPES: SearchScope[] = ['law', 'internal', 'keyword']
 const scopeLabel = (mode: string) => {
+  if (mode === 'gpt') return SCOPE_LABELS.gpt
   const selected = mode.split(',').filter((scope): scope is SearchScope => SCOPES.includes(scope as SearchScope))
   if (mode === 'all' || (selected.length === SCOPES.length && new Set(selected).size === SCOPES.length)) return SCOPE_LABELS.all
   return selected.length ? selected.map(scope => SCOPE_LABELS[scope]).join(' + ') : SCOPE_LABELS[mode as RegulationScope] ?? mode
 }
-const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미', official_web: '\uACF5\uC2DD \uC6F9 \uCD94\uAC00 \uAC80\uC0C9' }
+const METHOD_LABELS: Record<string, string> = { hybrid: 'Kiwi·전문·유사 문자열·의미', lexical_fuzzy: 'Kiwi·전문·유사 문자열', lexical_fuzzy_embedding_unavailable: 'Kiwi·전문·유사 문자열 (의미 검색 장애)', lexical: '전문', fuzzy: '유사 문자열', semantic: '의미', official_web: '\uACF5\uC2DD \uC6F9 \uCD94\uAC00 \uAC80\uC0C9', gpt_llm: 'GPT LLM 직접 답변' }
 
 function SearchModeHelp() {
   const [open, setOpen] = useState(false)
@@ -41,12 +44,13 @@ function SearchModeHelp() {
     <span aria-hidden>?</span>
     <span className={`search-mode-tooltip${open ? ' open' : ''}`} role="tooltip">
       <strong>검색 모드별 범위와 기법</strong>
-      <span className="search-mode-tooltip-note">검색 모드는 여러 범위를 함께 선택할 수 있습니다. 세 개별 범위를 모두 선택하면 기존 통합 검색과 같습니다.</span>
+      <span className="search-mode-tooltip-note">법령·사내 문서·키워드 DB 범위는 함께 선택할 수 있습니다. 세 범위를 모두 선택하면 기존 통합 검색과 같습니다. GPT LLM은 별도 단독 모드입니다.</span>
       <span className="search-mode-tooltip-item"><b>통합 검색</b><br /><b>사용:</b> 국가법령정보센터 검색 + 사내 문서 하이브리드 검색 + 키워드 DB 검색. 키워드 의미 후보는 별도 옵션을 켰을 때 추가됩니다.<br /><b>사용하지 않음:</b> 모든 문서 전체를 읽거나 검색 점수로 위험도를 판정하지 않습니다.<br /><b>예:</b> ‘미백 광고 문구’를 법령·사내 지침·등록 키워드 범위에서 함께 찾습니다.</span>
       <span className="search-mode-tooltip-item"><b>국가법령정보센터</b><br /><b>사용:</b> 질문의 단어로 법령·행정규칙·판례를 검색합니다. 질문 방향을 ‘법령에서 키워드 찾기’로 바꾸면 법령 조문을 키워드 DB와 대조합니다.<br /><b>사용하지 않음:</b> 사내 문서 하이브리드 검색은 하지 않습니다.<br /><b>예:</b> ‘미백 표시 광고’를 검색해 관련 공식 법령과 판례를 찾습니다.</span>
       <span className="search-mode-tooltip-item"><b>사내 규정 문서</b><br /><b>사용:</b> 기준일·카테고리에 맞는 승인 문서에서 Kiwi 토큰·전문·문자열 유사도를 결합해 관련 문단을 찾습니다. 임베딩 의미 검색은 서버 설정과 문서 색인에 따라 추가됩니다.<br /><b>사용하지 않음:</b> 국가법령정보센터 및 키워드 DB 검색은 하지 않습니다.<br /><b>예:</b> ‘미백 표현 검토’를 검색해 적용 중인 사내 광고 지침의 관련 문단을 찾습니다.</span>
       <span className="search-mode-tooltip-item"><b>키워드 DB</b><br /><b>사용:</b> 질문 문구와 등록 키워드의 문자열 일치를 찾습니다. 의미가 비슷한 키워드 후보는 별도 임베딩 옵션을 켰을 때 추가됩니다.<br /><b>사용하지 않음:</b> 법령 및 사내 규정 문서를 검색하지 않습니다.<br /><b>예:</b> ‘피부를 환하게’를 검색해 등록어 ‘미백’과 일치하거나 유사한 후보를 찾습니다.</span>
-      <span className="search-mode-tooltip-note">AI 근거 검토는 별도 옵션입니다. 켜져 있고 서버에 모델이 설정된 경우에만 검색 결과를 LLM이 검토합니다. 사내 문서 검색 결과는 관련도순 최대 5개 문단입니다.</span>
+      <span className="search-mode-tooltip-item"><b>GPT LLM</b><br /><b>사용:</b> 질문과 이어지는 대화, 선택한 연결 자료를 GPT에 보내 일반 답변을 생성합니다. 법령·사내 문서·키워드 DB를 검색하지 않습니다.<br /><b>사용하지 않음:</b> 공식 출처 추가 검색과 검색 근거 인용은 수행하지 않습니다.<br /><b>예:</b> ‘화장품 제품 설명을 쉽게 풀어줘’처럼 폭넓은 질문을 이어서 할 수 있습니다.</span>
+      <span className="search-mode-tooltip-note">GPT LLM 모드는 단독으로 선택합니다. 질문·이전 대화와 선택한 연결 자료가 OpenAI에 전송되며, 답변은 공식 출처로 확인된 심의 판단이 아닙니다. 자료 검색 모드에서는 AI 근거 검토 옵션을 별도로 켤 수 있고, 사내 문서는 최대 5개 관련 문단을 검토합니다.</span>
     </span>
   </button>
 }
@@ -152,13 +156,15 @@ export function ChatTab() {
   const [downloadingOriginalId, setDownloadingOriginalId] = useState('')
   const [originalDocumentError, setOriginalDocumentError] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
-  const directionEnabled = scope.includes('law')
-  const contextOptionsEnabled = scope.some(item => item !== 'law') || direction === 'law_to_keywords' || useLlm
-  const categoryEnabled = scope.some(item => item !== 'law') || direction === 'law_to_keywords' || useLlm
-  const keywordSemanticsEnabled = scope.includes('keyword') || scope.includes('internal') || (scope.includes('law') && direction === 'law_to_keywords')
-  const asOfEnabled = scope.includes('internal') || useLlm
+  const gptMode = scope.includes('gpt')
+  const directionEnabled = !gptMode && scope.includes('law')
+  const contextOptionsEnabled = gptMode || scope.some(item => item !== 'law') || direction === 'law_to_keywords' || useLlm
+  const categoryEnabled = gptMode || scope.some(item => item !== 'law') || direction === 'law_to_keywords' || useLlm
+  const keywordSemanticsEnabled = !gptMode && (scope.includes('keyword') || scope.includes('internal') || (scope.includes('law') && direction === 'law_to_keywords'))
+  const asOfEnabled = !gptMode && (scope.includes('internal') || useLlm)
   const ocrOptions = useMemo(() => pySorted(new Set(ocr.candidates.map(c => c.term.trim()).filter(Boolean))), [ocr.candidates])
   const categories = useMemo(() => ['', ...koSorted(uniqueValues(catalog?.rows ?? [], '\uC0C1\uD488\uCE74\uD14C\uACE0\uB9AC'))], [catalog])
+  const allSourceScopesSelected = scope.length === SCOPES.length && SCOPES.every(item => scope.includes(item))
   const contextText = contextOptionsEnabled
     ? [...(includeOcr ? ocrTerms.filter(t => ocrOptions.includes(t)) : []), ...(includeText && analysisText.trim() ? [analysisText] : [])].join('\n')
     : ''
@@ -178,6 +184,7 @@ export function ChatTab() {
         if (user.role === 'user' && assistant.role === 'assistant') restored.push({ question: user.content,
           result: { answer: assistant.content, sources: assistant.evidence as RegulationResult['sources'], keyword_matches: [] } })
       }
+      if (threads.find(thread => thread.id === id)?.mode === 'gpt') setScope(['gpt'])
       setThreadId(id); setHistory(restored); setWarning('')
     } catch (cause) { setWarning(cause instanceof Error ? cause.message : '대화를 불러오지 못했습니다.') }
   }
@@ -217,8 +224,8 @@ export function ChatTab() {
     let result: RegulationResult
     let failed = false
     try {
-      const requestedScope = scope.length === SCOPES.length ? 'all'
-        : scope.length === 1 ? scope[0] : scope
+      const requestedScope = gptMode ? 'gpt' : allSourceScopesSelected ? 'all'
+        : scope.length === 1 ? scope[0] as SourceScope : scope.filter((item): item is SourceScope => item !== 'gpt')
       result = corpusReady
         ? await askRegulation({ direction, scope: requestedScope, use_llm: useLlm,
                                 include_keyword_candidates: includeKeywordCandidates,
@@ -247,18 +254,24 @@ export function ChatTab() {
 
   return (
     <section className="chat-workspace">
-      <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.</span></div></header>
+      <header className="chat-header"><div><h2>심의 Chat-bot</h2><span>{gptMode ? 'GPT LLM에 다양한 질문을 할 수 있습니다. 법령·사내 문서는 별도로 검색하지 않습니다.' : '공식 자료를 바탕으로 키워드·법령 문의를 이어서 상담합니다.'}</span></div></header>
       <div className="chat-controls">
         {corpusReady && <div className="chat-saved-threads"><label><span className="chat-control-title">저장된 대화</span><select value={threadId ?? ''} onChange={e => void openThread(e.target.value)} disabled={busy}><option value="">새 대화</option>{threads.map(thread => <option key={thread.id} value={thread.id}>{new Date(thread.updated_at).toLocaleString('ko-KR')} · {scopeLabel(thread.mode)}</option>)}</select></label><button type="button" className="chat-thread-delete" onClick={() => void removeThread()} disabled={!threadId || busy}>선택 대화 삭제</button></div>}
         {corpusReady && <div className="chat-scope-bar"><div className="chat-scope-picker">
           <div className="chat-scope-label">
             <span className="chat-scope-heading"><span className="chat-control-title">검색 모드</span><SearchModeHelp /></span>
-            <button type="button" className="btn small chat-scope-all" onClick={() => setScope(scope.length === SCOPES.length ? [] : ALL_SCOPES)} disabled={busy}>
-              {scope.length === SCOPES.length ? '선택 해제' : '전체 선택'}
+            <button type="button" className="btn small chat-scope-all" onClick={() => setScope(allSourceScopesSelected ? [] : ALL_SCOPES)} disabled={busy}>
+              {allSourceScopesSelected ? '선택 해제' : '전체 선택'}
             </button>
           </div>
-          <MultiSelect value={scope} options={SCOPES} optionLabels={SCOPE_LABELS}
-            onChange={next => { setScope(next as SearchScope[]); if (!next.includes('law')) setDirection('keyword_to_law') }}
+          <MultiSelect value={scope} options={CHAT_SCOPES} optionLabels={SCOPE_LABELS}
+            onChange={next => {
+              const nextScope = next.includes('gpt') && !scope.includes('gpt')
+                ? ['gpt'] as SearchScope[]
+                : next.filter((item): item is SearchScope => item !== 'gpt' || next.length === 1)
+              setScope(nextScope)
+              if (!nextScope.includes('law')) setDirection('keyword_to_law')
+            }}
             placeholder="검색 모드 선택" />
         </div></div>}
         {corpusReady === false && <div className="chat-warning" role="alert">검색 모드를 불러오지 못했습니다. API 연결을 확인한 뒤 새로고침해 주세요.</div>}
@@ -268,12 +281,13 @@ export function ChatTab() {
               <Select label={<>질문 방향<Help text={"광고 문구·키워드에서 법령 찾기\n사용: 입력한 광고 문구나 키워드로 법령·행정규칙·판례를 검색합니다.\n예: ‘미백 광고 문구’ → 관련 법령과 판례 검색\n\n법령에서 등록 키워드 찾기\n사용: 법령명과 조항을 검색해 조문 본문을 현재 키워드 DB와 대조합니다.\n예: ‘화장품법 제13조’ → 조문에 포함된 등록 키워드 검색"} /></>} value={direction} options={DIRECTIONS} format={d => DIRECTION_LABELS[d]} onChange={setDirection} disabled={!directionEnabled} />
               <Select label="상품 카테고리" value={category} options={categories} format={c => c || '전체 카테고리'} onChange={setCategory} disabled={!categoryEnabled} />
               {corpusReady && <label className="chat-option-date">사내문서 기준일<Help text="선택한 날짜에 유효한 사내 문서를 검색합니다. 문서 등록일 기준이 아닙니다. 예: 2026-11-14를 선택하면 해당 날짜가 문서의 시행일~종료일 안에 드는 승인 문서를 찾습니다." /><input type="date" value={asOf} onChange={e => setAsOf(e.target.value)} disabled={!asOfEnabled} /></label>}
-              {ocrOptions.length > 0 && <MultiSelect label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} disabled={!contextOptionsEnabled} />}
+              {ocrOptions.length > 0 && <MultiSelect label={gptMode ? "현재 OCR 키워드 참고" : "\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC"} value={ocrTerms} options={ocrOptions} onChange={setOcrTerms} disabled={!contextOptionsEnabled} />}
               <div className="chat-option-checks">
-                {corpusReady && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} help="검색된 근거를 AI가 검토하고, 근거가 부족하면 공식 출처를 추가로 검색합니다. 켜면 OpenAI 모델을 호출해 토큰을 사용합니다. 예: 사내 지침과 법령 내용이 다르면 차이를 검토하고 공식 자료를 더 찾습니다." checked={useLlm} onChange={setUseLlm} />}
+                {corpusReady && !gptMode && <Checkbox label={"AI \uADFC\uAC70 \uAC80\uD1A0 \uBC0F \uBD80\uC871\uD55C \uACF5\uC2DD \uCD9C\uCC98 \uCD94\uAC00 \uAC80\uC0C9"} help="검색된 근거를 AI가 검토하고, 근거가 부족하면 공식 출처를 추가로 검색합니다. 켜면 OpenAI 모델을 호출해 토큰을 사용합니다. 예: 사내 지침과 법령 내용이 다르면 차이를 검토하고 공식 자료를 더 찾습니다." checked={useLlm} onChange={setUseLlm} />}
+                {corpusReady && gptMode && <p className="chat-gpt-mode-note">GPT LLM 모드는 질문에 직접 답변합니다. 서버 모델 설정이 필요하며 OpenAI 토큰을 사용합니다.</p>}
                 {corpusReady && <Checkbox label="임베딩 기반 의미 유사도 검색 (위험 판정에 반영하지 않음)" help="문구와 키워드의 의미를 벡터로 비교해 비슷한 등록 키워드 후보를 찾습니다. 위험 등급이나 자동 판정은 바꾸지 않습니다. 예: ‘피부를 환하게’와 ‘미백’처럼 표현이 달라도 후보로 찾을 수 있습니다. 서버 설정에 따라 임베딩 API를 호출하며 별도 사용량이 발생할 수 있습니다." checked={includeKeywordCandidates} onChange={setIncludeKeywordCandidates} disabled={!keywordSemanticsEnabled} />}
-                <Checkbox label={"\uD604\uC7AC OCR \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} help="현재 OCR 분석에서 추출한 키워드를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다. 예: 질문이 ‘표현을 검토해줘’이고 OCR 키워드가 ‘미백’이면 미백 관련 근거와 키워드도 찾습니다." checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0 || !contextOptionsEnabled} />
-                <Checkbox label={"\uD604\uC7AC \uD14D\uC2A4\uD2B8 \uBD84\uC11D \uD0A4\uC6CC\uB4DC \uAC80\uC0C9 \uD3EC\uD568"} help="현재 텍스트 분석 화면의 문구 전체를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다. 예: 질문이 ‘이 광고를 검토해줘’이면 분석 중인 광고 문구도 검색 대상으로 포함합니다." checked={includeText} onChange={setIncludeText} disabled={!contextOptionsEnabled} />
+                <Checkbox label={gptMode ? "현재 OCR 키워드를 GPT에 참고자료로 전달" : "현재 OCR 분석 키워드 검색 포함"} help={gptMode ? "선택한 OCR 키워드는 검색하지 않고 GPT 답변의 참고자료로 전달합니다." : "현재 OCR 분석에서 추출한 키워드를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다."} checked={includeOcr} onChange={setIncludeOcr} disabled={ocrOptions.length === 0 || !contextOptionsEnabled} />
+                <Checkbox label={gptMode ? "현재 텍스트를 GPT에 참고자료로 전달" : "현재 텍스트 분석 키워드 검색 포함"} help={gptMode ? "현재 텍스트 분석 화면의 문구를 검색하지 않고 GPT 답변의 참고자료로 전달합니다." : "현재 텍스트 분석 화면의 문구 전체를 질문 문맥에 추가해 사내 문서·키워드 검색에 함께 사용합니다."} checked={includeText} onChange={setIncludeText} disabled={!contextOptionsEnabled} />
               </div>
             </div>
             <div className={contextText.length > 20000 ? 'chat-context-count over' : 'chat-context-count'}>연결 자료 {contextText.length.toLocaleString()} / 20,000자</div>
@@ -282,7 +296,7 @@ export function ChatTab() {
         {isAdmin && corpusReady && <RegulationDocuments />}
       </div>
       <main className="chat-thread" aria-live="polite">
-        {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.</div></div>}
+        {history.length === 0 && <div className="chat-welcome"><div className="chat-bot-avatar">AI</div><div className="chat-bubble assistant"><strong>안녕하세요!</strong><br />{gptMode ? 'GPT LLM에 궁금한 내용을 자유롭게 질문해 주세요.' : '법령 근거와 키워드 정보를 확인해 드릴게요. 궁금한 내용을 입력해 주세요.'}</div></div>}
         {history.map((turn, i) => {
           const highlightTerms = matchedQuestionTerms(
             turn.question,

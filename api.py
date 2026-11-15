@@ -114,7 +114,7 @@ class RegulationQuestionRequest(BaseModel):
     context_text: str = Field(default='', max_length=20000)
     category: str = Field(default='', max_length=100)
     conversation_history: list[RegulationConversationMessage] = Field(default_factory=list, max_length=12)
-    scope: (Literal['legacy', 'law', 'internal', 'keyword', 'all']
+    scope: (Literal['legacy', 'law', 'internal', 'keyword', 'all', 'gpt']
             | list[Literal['law', 'internal', 'keyword']]) = 'legacy'
     use_llm: bool = False
     include_keyword_candidates: bool = False
