@@ -443,7 +443,9 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-source { padding: .65rem 0; border-bottom: 1px solid #e6e8eb; }
 .chat-source:last-child { border-bottom: 0; }
 .chat-source-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .75rem; }
+.chat-source-title { min-width: 0; }
 .chat-source-heading strong { min-width: 0; }
+.chat-source-categories { display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: .2rem; color: #3974a7; font-size: .75rem; font-weight: 600; }
 .chat-source-heading .btn { flex: 0 0 auto; }
 .chat-source-group { padding: .25rem .65rem .4rem; margin: .25rem 0 .65rem; border: 1px solid #e0e5eb; border-radius: .5rem; background: #fff; }
 .chat-source-group h4 { margin: .5rem 0 .15rem; padding-bottom: .4rem; border-bottom: 1px solid #e6e8eb; color: #26384a; font-size: .95rem; }

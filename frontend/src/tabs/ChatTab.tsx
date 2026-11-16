@@ -334,7 +334,9 @@ export function ChatTab() {
           const sourceKeywords = [...new Set((turn.result.keyword_matches ?? [])
             .map(row => String(row[MATCH_COLUMNS[1]] ?? row.keyword ?? row.term ?? '').trim())
             .filter(Boolean))]
-          const sourceGroups = sourceKeywords.map(keyword => ({
+          const questionKeywords = turn.question.split(/[,，;；\n]+/).map(keyword => keyword.trim()).filter(Boolean)
+          const categoryKeywords = [...new Set([...questionKeywords, ...sourceKeywords])]
+          const sourceGroups = categoryKeywords.map(keyword => ({
             keyword,
             sources: sources.filter(source => `${source.label}\n${source.text}`.toLocaleLowerCase().includes(keyword.toLocaleLowerCase())),
           })).filter(group => group.sources.length > 0)
@@ -345,8 +347,13 @@ export function ChatTab() {
           const renderSource = (source: typeof sources[number], j: number) => {
             const sourceId = String(source.id ?? j + 1)
             const isInternal = sourceId.startsWith('INT')
+            const searchableSource = `${source.label}\n${source.text}`.toLocaleLowerCase()
+            const sourceCategories = categoryKeywords.filter(keyword => searchableSource.includes(keyword.toLocaleLowerCase()))
             return <div className="chat-source" key={`${sourceId}-${j}`}>
-              <div className="chat-source-heading"><strong>[{sourceId}] <HighlightedText text={source.label} terms={highlightTerms} /></strong>
+              <div className="chat-source-heading"><div className="chat-source-title">
+                {isInternal && sourceCategories.length > 0 && <div className="chat-source-categories">{sourceCategories.map(keyword => <span key={keyword}>&lt;{keyword}&gt;</span>)}</div>}
+                <strong>[{sourceId}] <HighlightedText text={source.label} terms={highlightTerms} /></strong>
+              </div>
                 {isInternal && <button type="button" className="btn small" onClick={() => setFullEvidence({ id: sourceId, label: source.label, version: String(source.version ?? ''), text: String(source.text ?? ''), terms: highlightTerms })}>크게 보기</button>}
                 {isInternal && typeof source.document_id === 'string' && <button type="button" className="btn small" disabled={loadingOriginalId === source.document_id} onClick={() => {
                   const documentId = source.document_id as string
