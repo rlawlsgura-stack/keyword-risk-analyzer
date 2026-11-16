@@ -320,8 +320,8 @@ async function sha256(file: File): Promise<string | null> {
   return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-function DifferencePreview({ fileUrl, result, side, highlighted }: {
-  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, TextHighlight[]>
+function DifferencePreview({ fileUrl, result, side, highlighted, expanded = false }: {
+  fileUrl: string; result: OCRFileResult | null; side: Side; highlighted: Map<number, TextHighlight[]>; expanded?: boolean
 }) {
   const src = result?.preview_data || fileUrl
   const width = result?.image_width || 1, height = result?.image_height || 1
@@ -341,7 +341,7 @@ function DifferencePreview({ fileUrl, result, side, highlighted }: {
       return [{ index: [index, start, end, range.kind].join('-'), text: chars.slice(start, end).join(''), kind: range.kind, x1, y1, x2, y2 }]
     })
   })
-  return <div className="ocr-ab-image-scroll"><div className="ocr-ab-image-stage">
+  return <div className={`ocr-ab-image-scroll${expanded ? ' expanded' : ''}`}><div className="ocr-ab-image-stage">
     <img src={src} alt={`${side === 'a' ? 'A안' : 'B안'} 미리보기`} />
     {boxes.map(box => <span key={box.index} className={`ocr-ab-mark ${box.kind}`} title={box.text}
       style={{ left: `${box.x1 / width * 100}%`, top: `${box.y1 / height * 100}%`, width: `${(box.x2 - box.x1) / width * 100}%`, height: `${(box.y2 - box.y1) / height * 100}%` }} />)}
@@ -365,6 +365,7 @@ export function OcrABCompare() {
   const [templateError, setTemplateError] = useState('')
   const [templateMessage, setTemplateMessage] = useState('')
   const [ocrTextDialogOpen, setOcrTextDialogOpen] = useState(false)
+  const [imageExpanded, setImageExpanded] = useState(false)
   const [ocrTextBusy, setOcrTextBusy] = useState(false)
   const [ocrTextError, setOcrTextError] = useState('')
   const [ocrTextResults, setOcrTextResults] = useState<{ a: OCRFileResult | null; b: OCRFileResult | null } | null>(null)
@@ -400,6 +401,13 @@ export function OcrABCompare() {
     setUrlB(url)
     return () => URL.revokeObjectURL(url)
   }, [fileB])
+
+  useEffect(() => {
+    if (!imageExpanded) return
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setImageExpanded(false) }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [imageExpanded])
 
   const selectFile = (side: Side, file?: File) => {
     if (!file) return
@@ -658,6 +666,7 @@ export function OcrABCompare() {
           : comparison.identical ? '두 파일의 SHA-256이 일치합니다.' : `텍스트 차이 ${differences.length}건${comparison.hashes[0] && comparison.hashes[1] ? ' · 파일 해시는 서로 다름' : ''}`}</span></div>
         <div className="ocr-ab-report-actions">
           <Button className="ocr-ab-no-print" disabled={ocrTextBusy} onClick={() => void openOCRText()}>{ocrTextBusy ? 'OCR 분석 중…' : 'OCR 분석'}</Button>
+          <Button className="ocr-ab-no-print" onClick={() => setImageExpanded(true)}>크게 보기</Button>
           <Button className="ocr-ab-no-print" onClick={() => window.print()}>PDF로 저장</Button>
         </div>
       </div>
@@ -717,6 +726,17 @@ export function OcrABCompare() {
       {mode !== 'requirements' && !comparison.identical && <p className="ocr-ab-disclaimer">{mode === 'matches'
         ? '일치 결과는 공백과 영문 대소문자를 정규화한 뒤 OCR 문구 전체가 같은 줄을 찾은 검토 보조 자료입니다. 이미지 색상이나 배치의 일치는 판단하지 않습니다.'
         : '이 결과는 문구 차이를 찾는 검토 보조 자료입니다. 하이라이트만으로 위반 여부나 법적 수정 지시를 판정하지 않으며, 최종 판단은 담당자가 근거를 확인해야 합니다.'}</p>}
+    </div>}
+    {imageExpanded && comparison && <div className="ocr-ab-image-overlay" role="dialog" aria-modal="true" aria-label="비교 결과 이미지 크게 보기" onMouseDown={event => { if (event.target === event.currentTarget) setImageExpanded(false) }}>
+      <div className="ocr-ab-image-overlay-content">
+        <div className="ocr-ab-image-overlay-heading"><strong>비교 검토 결과 이미지</strong><Button onClick={() => setImageExpanded(false)}>닫기</Button></div>
+        <div className={`ocr-ab-panes${mode === 'requirements' ? ' single' : ''}`}>
+          <article className="ocr-ab-pane"><header><strong>A안 · 원안</strong><span>{fileA?.name}</span></header>
+            {urlA && <DifferencePreview fileUrl={urlA} result={comparison.a} side="a" highlighted={marksA} expanded />}</article>
+          {mode !== 'requirements' && <article className="ocr-ab-pane"><header><strong>B안 · 대조안</strong><span>{fileB?.name}</span></header>
+            {urlB && <DifferencePreview fileUrl={urlB} result={comparison.b} side="b" highlighted={marksB} expanded />}</article>}
+        </div>
+      </div>
     </div>}
     {ocrTextDialogOpen && <Dialog title="OCR 추출 텍스트" onClose={() => setOcrTextDialogOpen(false)} wide>
       <p className="ocr-ab-ocr-intro">첨부 이미지에서 OCR로 인식한 문구입니다. 텍스트를 선택해 복사할 수 있습니다.</p>
