@@ -389,7 +389,6 @@ export function ChatTab() {
             {(turn.result.related_candidates ?? []).length > 0 && <Expander title="임베딩 기반 의미 유사 후보 · 심의자 검토용"><DataTable rows={turn.result.related_candidates as unknown as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={[{ key: 'kwd_no' }, { key: 'keyword', render: row => <HighlightedText text={String(row.keyword ?? '')} terms={highlightTerms} /> }, { key: 'similarity' }]} showIndex={false} /></Expander>}
             {sources.length > 0 && <div className="chat-sources"><Expander title={`${sources.some(source => String(source.id ?? '').startsWith('WEB')) ? '\uCD94\uAC00 \uAC80\uC0C9 \uCD9C\uCC98\uC640 \uADFC\uAC70' : '\uAC80\uC0C9 \uCD9C\uCC98 \uBC0F \uADFC\uAC70'} (${sources.length})`}>
               {groupedSources.map((group, groupIndex) => <section className="chat-source-group" key={group.keyword || `ungrouped-${groupIndex}`}>
-                {group.keyword && <h4><HighlightedText text={group.keyword} terms={highlightTerms} /></h4>}
                 {group.sources.map((source, j) => renderSource(source, j))}
               </section>)}
             </Expander></div>}
