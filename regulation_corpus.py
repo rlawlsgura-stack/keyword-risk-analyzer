@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import math
 import os
 import re
 import secrets
@@ -144,13 +145,13 @@ def _neighbor_context(repository, rows: list[dict]) -> list[dict]:
 
 
 def search_tokens(text: str) -> str:
-    words = re.findall(r'[가-힣A-Za-z0-9]{2,}', text)[:160]
+    words = re.findall(r'[가-힣A-Za-z0-9]{2,}', text)
     try:
         with tokenization_lock:
             morphemes = get_kiwi().tokenize(text)
         words.extend([token.form for token in morphemes
                       if token.tag.startswith(('N', 'V', 'M', 'SL', 'SN'))
-                      and len(token.form) >= 2][:160])
+                      and len(token.form) >= 2])
     except (ImportError, RuntimeError):
         pass
     return ' '.join(dict.fromkeys(word.casefold() for word in words))
@@ -162,20 +163,41 @@ def _embed(texts: list[str], repository=None) -> list[list[float]] | None:
     key = os.getenv('OPENAI_API_KEY', '').strip()
     if not key:
         raise RuntimeError('임베딩 사용 설정에는 OPENAI_API_KEY가 필요합니다.')
+    # 2,000 Unicode characters have at most 8,000 UTF-8 bytes/tokens. Batches
+    # of 32 stay below the API's 300,000-token aggregate limit as well.
+    parts = [[text[i:i + 2000] for i in range(0, len(text), 2000)] for text in texts]
+    if any(not pieces for pieces in parts):
+        raise ValueError('임베딩할 본문이 비어 있습니다.')
+    inputs = [part for pieces in parts for part in pieces]
     vectors = []
-    for start in range(0, len(texts), 50):
+    for start in range(0, len(inputs), 32):
         response = requests.post('https://api.openai.com/v1/embeddings',
                                  headers={'Authorization': f'Bearer {key}'},
-                                 json={'model': EMBEDDING_MODEL, 'input': texts[start:start + 50]},
+                                 json={'model': EMBEDDING_MODEL, 'input': inputs[start:start + 32]},
                                  timeout=60)
         response.raise_for_status()
         result = response.json()
         record_usage(repository, usage_event(EMBEDDING_MODEL, result.get('usage') or {}, embedding=True))
         batch = sorted(result['data'], key=lambda item: item['index'])
-        if len(batch) != len(texts[start:start + 50]):
+        if [item['index'] for item in batch] != list(range(len(inputs[start:start + 32]))):
             raise RuntimeError('임베딩 응답 개수가 일치하지 않습니다.')
         vectors.extend(item['embedding'] for item in batch)
-    return vectors
+    pooled, offset = [], 0
+    for pieces in parts:
+        group = vectors[offset:offset + len(pieces)]
+        offset += len(pieces)
+        if len(group) == 1:
+            pooled.append(group[0])
+            continue
+        # ponytail: length-weighted pooling keeps long clauses intact without
+        # a tokenizer dependency; validate semantic quality with reviewed cases.
+        average = [sum(value * len(part) for value, part in zip(values, pieces))
+                   for values in zip(*group, strict=True)]
+        norm = math.sqrt(sum(value * value for value in average))
+        if not norm:
+            raise RuntimeError('유효한 임베딩 벡터를 생성하지 못했습니다.')
+        pooled.append([value / norm for value in average])
+    return pooled
 
 
 def create_document(repository, *, source_key: str, version: str, title: str,
@@ -320,21 +342,34 @@ def reindex_embeddings(repository, document_id: str) -> int:
 
 def search_documents(repository, query: str, category: str, as_of: date,
                      strategy: str = 'hybrid') -> tuple[list[dict], str]:
-    tokens = query if strategy == 'raw' else search_tokens(query)
-    if not tokens:
+    # Keep the question in every window and cover the entire supplied context.
+    queries = ([query] if len(query) <= 2000 else
+               [query[:500] + '\n' + query[start:start + 1500]
+                for start in range(500, len(query), 1500)])
+    token_queries = [item if strategy == 'raw' else search_tokens(item) for item in queries]
+    if not any(token_queries):
         return [], 'none'
     embedding_unavailable = False
     try:
-        vectors = _embed([query], repository) if strategy in {'hybrid', 'semantic'} else None
+        vectors = _embed(queries, repository) if strategy in {'hybrid', 'semantic'} else None
     except (requests.RequestException, RuntimeError, ValueError, KeyError):
         if strategy != 'hybrid':
             raise
         vectors = None
         embedding_unavailable = True
-    rows = repository.rpc('search_regulation_chunks',
-        p_tokens=tokens, p_embedding=str(vectors[0]) if vectors else None,
-        p_category=category, p_as_of=as_of.isoformat(), p_limit=5,
-        p_strategy=strategy) or []
+    ranked, scores = {}, {}
+    for index, tokens in enumerate(token_queries):
+        if not tokens:
+            continue
+        rows = repository.rpc('search_regulation_chunks',
+            p_tokens=tokens, p_embedding=str(vectors[index]) if vectors else None,
+            p_category=category, p_as_of=as_of.isoformat(), p_limit=5,
+            p_strategy=strategy) or []
+        for rank, row in enumerate(rows, 1):
+            key = row['chunk_id']
+            ranked.setdefault(key, row)
+            scores[key] = scores.get(key, 0) + 1 / (60 + rank)
+    rows = [ranked[key] for key in sorted(ranked, key=lambda key: -scores[key])[:5]]
     method = ('lexical_fuzzy_embedding_unavailable' if embedding_unavailable else
               'hybrid' if vectors and any(row.get('semantic_rank') is not None for row in rows)
               else 'lexical_fuzzy') if strategy == 'hybrid' else strategy
@@ -347,6 +382,7 @@ def save_turn(repository, thread_id: str | None, owner_id: str, mode: str,
                  'chunk_id': source.get('chunk_id'),
                  'version': source.get('version'), 'content_sha256': source.get('content_sha256'),
                  'context_chunks': source.get('context_chunks'),
+                 'reviewed_by_llm': source.get('reviewed_by_llm'),
                  'label': source.get('label'), 'text': str(source.get('text') or ''),
                  'url': source.get('url')}
                 for source in sources]

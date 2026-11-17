@@ -1,5 +1,7 @@
 import io
+import os
 import unittest
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -7,7 +9,7 @@ from zipfile import ZipFile
 
 import requests
 
-from regulation_corpus import _neighbor_context, extract_text, split_chunks
+from regulation_corpus import _embed, _neighbor_context, extract_text, search_documents, search_tokens, split_chunks
 
 
 class RegulationStructureTests(unittest.TestCase):
@@ -72,6 +74,48 @@ class RegulationStructureTests(unittest.TestCase):
             raise requests.ConnectionError('offline')
         result = _neighbor_context(SimpleNamespace(request=unavailable), [dict(hit)])
         self.assertTrue(result[0]['context_unavailable'])
+
+    def test_retrieval_covers_context_tail_and_batches_embedding_inputs(self):
+        query = '검토 질문\n' + '앞부분 ' * 600 + '뒤쪽예외조건'
+        calls = []
+        def rpc(name, **params):
+            calls.append(params)
+            return ([{'chunk_id': 'exception', 'document_id': 'v1', 'ordinal': 2,
+                      'content': '뒤쪽예외조건', 'semantic_rank': 1}]
+                    if '뒤쪽예외조건' in params['p_tokens'] else [])
+        repository = SimpleNamespace(rpc=rpc, request=lambda *args: [])
+        with patch('regulation_corpus.search_tokens', side_effect=lambda value: value), \
+                patch('regulation_corpus._embed', side_effect=lambda texts, repo: [[1.0]] * len(texts)) as embed:
+            rows, method = search_documents(repository, query, '화장품', date(2026, 11, 17))
+        self.assertEqual([r['chunk_id'] for r in rows], ['exception'])
+        self.assertEqual(method, 'hybrid')
+        embed.assert_called_once()
+        self.assertTrue(any('뒤쪽예외조건' in c['p_tokens'] for c in calls))
+        self.assertTrue(all(c['p_category'] == '화장품' and c['p_as_of'] == '2026-11-17' for c in calls))
+        self.assertTrue(all('검토 질문' in c['p_tokens'] for c in calls))
+
+    def test_long_paragraph_tail_is_not_dropped_from_lexical_index(self):
+        text = ' '.join(f'표현{i}' for i in range(200)) + ' 꼬리예외조건'
+        self.assertIn('꼬리예외조건', search_tokens(text).split())
+
+    def test_long_embedding_covers_all_parts_without_oversized_inputs(self):
+        calls = []
+        def post(url, **kwargs):
+            inputs = kwargs['json']['input']
+            calls.extend(inputs)
+            return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {
+                'data': [{'index': i, 'embedding': [1.0, 0.0] if len(value) == 2000 else [0.0, 1.0]}
+                         for i, value in enumerate(inputs)]})
+        text = '😀' * 3000
+        with patch.dict(os.environ, {'REGULATION_EMBEDDINGS_ENABLED': 'true', 'OPENAI_API_KEY': 'offline-test'}), \
+                patch('regulation_corpus.requests.post', side_effect=post), \
+                patch('regulation_corpus.record_usage'):
+            vectors = _embed([text])
+        self.assertEqual(''.join(calls), text)
+        self.assertTrue(all(len(value.encode('utf-8')) <= 8000 for value in calls))
+        self.assertEqual(len(vectors), 1)
+        self.assertAlmostEqual(vectors[0][0], 2 / 5**0.5)
+        self.assertAlmostEqual(vectors[0][1], 1 / 5**0.5)
 
 
 if __name__ == '__main__':

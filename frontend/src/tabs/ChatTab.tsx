@@ -130,8 +130,9 @@ function HighlightedText({ text, terms }: { text: string; terms: HighlightTerms 
 function MarkdownText({ text, highlightTerms }: { text: string; highlightTerms: HighlightTerms }) {
   const highlight = (value: string) => <HighlightedText text={value} terms={highlightTerms} />
   const inline = (value: string, key: string) => {
-    const parts = value.split(/(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<>()]+)/g)
+    const parts = value.split(/(「[^「」]+」|\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<>()]+)/g)
     return parts.map((part, i) => {
+      if (part.startsWith('「') && part.endsWith('」')) return <span key={`${key}-${i}`} className="chat-evidence-quote" title="인용 원문 · 출처와 함께 확인하세요">{highlight(part)}</span>
       const markdownLink = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/)
       const bareUrl = markdownLink ? null : part.match(/^(https?:\/\/[^\s<>()]+?)([.,!?;:。）》】]*)$/)
       const href = markdownLink?.[2] ?? bareUrl?.[1]
@@ -367,6 +368,8 @@ export function ChatTab() {
               <div className="chat-source-heading"><div className="chat-source-title">
                 {isInternal && sourceCategories.length > 0 && <div className="chat-source-categories">{sourceCategories.map(keyword => <span key={keyword}>&lt;{keyword}&gt;</span>)}</div>}
                 <strong>[{sourceId}] <HighlightedText text={source.label} terms={highlightTerms} /></strong>
+                {typeof source.reviewed_by_llm === 'boolean' && <small> · {source.reviewed_by_llm ? 'AI 검토에 전달' : '검색 결과만 · AI 검토 제외'}</small>}
+                {Array.isArray(source.context_chunks) && source.context_chunks.length > 1 && <small> · 인접 문단 포함</small>}
               </div>
                 {isInternal && <button type="button" className="btn small" onClick={() => setFullEvidence({ id: sourceId, label: source.label, version: String(source.version ?? ''), text: String(source.text ?? ''), terms: highlightTerms })}>크게 보기</button>}
                 {isInternal && typeof source.document_id === 'string' && <button type="button" className="btn small" disabled={loadingOriginalId === source.document_id} onClick={() => {
@@ -396,6 +399,7 @@ export function ChatTab() {
             {turn.result.recommendation_only && <small className="caption">{'AI \uAD8C\uACE0\uC548 \u00B7 \uCD5C\uC885 \uD310\uC815 \uC544\uB2D8'}</small>}
             <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'}
               highlightTerms={highlightTerms} />
+            {sources.length > 0 && <small className="chat-highlight-mode">검색된 관련 근거 {sources.length}건 · 전체 문서 검토가 아닙니다. 강조된 검색어는 위험 판정이나 인용 근거 일치 여부를 뜻하지 않습니다.</small>}
             {highlightTerms.relaxed && <small className="chat-highlight-mode">강조 범위 확대 · 부분 문자열 표시 (검색 조건은 변경되지 않음) {highlightTerms.partial.length ? `· 추가 강조: ${highlightTerms.partial.join(' · ')}` : '· 추가 부분 일치 항목 없음'}</small>}
             {(turn.result.search_methods ?? []).length > 0 && <small>{'\uAC80\uC0C9 \uBC29\uC2DD: '}{(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}

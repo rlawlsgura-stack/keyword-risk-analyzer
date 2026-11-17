@@ -123,8 +123,11 @@ def suggest_keyword(repository, term: str, category: str, context: str, as_of: d
     try:
         documents, _ = search_documents(repository, f"{term} {context}".strip(), category, as_of)
         for index, row in enumerate(documents[:4], 1):
+            context_chunks = row.get('context_chunks') or []
             sources.append({"id": f"INT{index}", "label": f"{row['title']} v{row['version']} · {row['ordinal']}번 문단",
-                            "text": str(row["content"])[:1800], "document_id": row["document_id"],
+                            "text": '\n\n'.join(f"[{item['ordinal']}번 문단] {item['content']}" for item in context_chunks)
+                                    if context_chunks else str(row['content']),
+                            "context_chunks": context_chunks, "document_id": row["document_id"],
                             "chunk_id": row["chunk_id"], "version": row["version"]})
     except (requests.RequestException, RuntimeError, ValueError, KeyError):
         stages.append({"name": "사내 규정 문서", "status": "error", "result_count": 0, "detail": "문서 검색 오류"})

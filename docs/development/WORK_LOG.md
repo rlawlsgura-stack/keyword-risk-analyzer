@@ -69,3 +69,15 @@
 - 실행/검증: Python unittest의 test_approved_matching 6개, test_matching_regression 7개, test_current_analysis 5개 통과. 관리자·일반회원 API 실제 응답 검사에서 Pydantic 응답 필드 누락을 발견·수정한 뒤 재검증. npm test 16개, npm run build 통과. 기존 매칭 범위·중복·코드 회귀검사는 유지. README의 React 운영 진입점과 App.tsx/ChatTab의 역할별 분기를 확인했으며 공통 화면에 동일 적용. 서비스 시작·포트 변경 없음.
 - 커밋/푸시: diff·공백 검사 후 3단계 변경 main 커밋·푸시.
 - 후속: 근거·적용 범위·조건·예외를 보존하는 요약 및 검토 범위 표시.
+
+## 2026-11-17 — 4단계 근거 요약·검토 범위 및 최종 검증
+
+- 요청: 권장 마지막 단계인 조건·예외 보존 요약을 적용하고 전체 변경을 검증·커밋·푸시.
+- 변경 파일: `regulation_assistant.py`, `regulation_corpus.py`, `keyword_suggestion.py`, `frontend/src/tabs/ChatTab.tsx`, `frontend/src/styles.css`, `docs/regulation-search.md`, `tests/test_evidence_integrity.py`, `tests/test_regulation_structure.py`, `tests/test_regulation_corpus_api.py`, 이 기록.
+- 변경: 요약에 적용 대상·시행일·조건·예외·부정을 함께 유지하도록 요청. 내부 출처 인용 문단마다 실제 원문 구절을 대조하며 미검증/미완성 응답은 보류. 이전 LLM 경로도 검증된 주장·원문으로만 답변 구성. GPT 직접 요약도 미완성 출력을 보류. 근거 유형을 번갈아 선택하고 최대 8건/본문 48,000자 내에서 문단을 자르지 않고 전달. 제외 여부·인접 문단·전체 문서 검토가 아니라는 범위를 관리자·회원 공통 화면과 저장 근거에 표시. 검색어 강조와 인용 구절 밑줄을 구별.
+- 검색/색인: 연결 자료 전체를 검색 단위로 나누고 질문을 반복해 뒤쪽도 처리. 단위별 결과의 순위를 합쳐 최대 5개 선택. 어휘 색인의 앞 160단어 제한을 제거해 긴 문단의 뒤쪽 단서도 색인. 긴 문단 임베딩은 2,000자 단위/배치 32개로 요청하고 길이 가중 평균 후 정규화해 원문을 잘라 버리지 않음. OpenAI 공식 입력 한도는 https://developers.openai.com/api/reference/python/resources/embeddings/methods/create 에서 확인. 긴 연결 자료의 검색·임베딩 사용량 증가를 문서에 명시. 기존 검색 요약 경로에서 사용량 이벤트가 최종 API 기록까지 전달되지 않던 부분도 수정·검증.
+- 실행/검증: `.venv/review314/Scripts/python.exe -m unittest discover -s tests -p "test_*.py"` 총 138개 중 137개 통과, 운영 초기화 opt-in 검사 1개 제외. 처음 전체 검사에서 검증 환경의 Pillow 누락을 확인해 lockfile과 같은 12.3.0 설치 후 통과. `pip check` 통과. `npm test` 16개, `npm run build` 통과. 기존 번들 크기 경고는 남아 있으나 빌드 성공. 실제 관리자·회원 API 경로에서 매칭 메타데이터와 인접 예외를 포함한 AI 근거·저장 스냅샷·사용량 전달 검증. 외부 AI/운영 DB 호출·서비스 시작·포트 변경 없음.
+- 문서 검토: GitBook prerequisite-gap-checker 지침에 따라 별도 검토 에이전트가 운영 안내만 읽음. 등록보다 뒤에 있던 SQL 준비 안내 1건(Late/Blocks)을 등록 앞에 이동하고 원본 Storage 준비 문서도 사전에 연결. AI 가독성의 설명·첫 두 문장·구체적 제목·빈 제목·원문 값·링크 확인. description 길이, 로컬 링크 파일, 빈 제목 자동 검사와 docs diff·git diff --check 통과. 영어 단어 수 목표는 한국어에 기계 적용하지 않음. SUMMARY.md 검사는 해당 없음.
+- 완료 확인: 1단계 cf9204e, 2단계 504e5d7, 3단계 1995505를 main에 push 완료. 4단계도 아래 검증한 변경만 커밋·푸시하며 기존 미추적 스킬 파일은 제외.
+- 한계: 실제 사내 문서의 의미적 정확도는 심의자 정답 자료로 별도 측정해야 함. 원문 인용 존재 검사는 해석의 정확성을 자동 보증하지 않음. 이미 저장된 대화의 누락 자료·이전 매칭 경로는 재생성하지 않음. 복잡한 병합 표·전체 문서 검토는 원본 확인 필요. 운영 배포 완료 여부는 이번 로컬 구현·푸시의 검증 범위에 포함하지 않음.
+- 커밋/푸시: 최종 diff·체크 검토 후 4단계 변경을 main에 커밋·푸시하고 원격 HEAD 일치 확인.

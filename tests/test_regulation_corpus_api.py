@@ -2,6 +2,7 @@
 import os
 import hashlib
 import unittest
+from types import SimpleNamespace
 from datetime import datetime
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -111,6 +112,41 @@ class RegulationCorpusApiTests(unittest.TestCase):
         self.assertEqual(saved['p_evidence'][0]['document_id'], 'document-1')
         self.assertEqual(saved['p_evidence'][0]['chunk_id'], 'chunk-1')
         self.assertEqual(saved['p_evidence'][0]['content_sha256'], 'a' * 64)
+
+    def test_ai_review_preserves_neighbor_exception_and_delivery_metadata_for_both_roles(self):
+        for role in ('admin', 'member'):
+            with self.subTest(role=role):
+                repository = FakeRepository(role)
+                repository.chunk_results = [
+                    {'id': 'before', 'ordinal': 1, 'content': '제1조 적용 대상'},
+                    {'id': 'chunk-1', 'ordinal': 2, 'content': '광고 문구 심의 기준입니다.'},
+                    {'id': 'after', 'ordinal': 3, 'content': '다만 승인된 시험자료가 있으면 예외이다.'}]
+                repository.search_results = [{'chunk_id': 'chunk-1', 'document_id': 'document-1',
+                    'title': '심의 지침', 'version': 'v1', 'ordinal': 2,
+                    'content': '광고 문구 심의 기준입니다.', 'content_sha256': 'a' * 64}]
+                response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {
+                    'usage': {'input_tokens': 100, 'output_tokens': 25},
+                    'output': [{'type': 'message', 'content': [{'type': 'output_text',
+                        'text': '「다만 승인된 시험자료가 있으면 예외이다.」를 함께 검토해야 합니다. [INT1]'}]}]})
+                with patch.dict(os.environ, {'REGULATION_EMBEDDINGS_ENABLED': 'false',
+                        'REGULATION_LLM_ENABLED': 'true', 'REGULATION_LLM_MODEL': 'test-model',
+                        'OPENAI_API_KEY': 'offline-test'}), \
+                        patch('regulation_assistant.requests.post', return_value=response), \
+                        patch('api.record_usage') as usage:
+                    result = self.client(repository).post('/api/v1/regulation/questions',
+                        json={'direction': 'keyword_to_law', 'scope': 'internal', 'use_llm': True,
+                              'query': '광고 문구 조건', 'as_of': '2026-11-17'},
+                        headers={'Authorization': 'Bearer test'})
+                self.assertEqual(result.status_code, 200, result.text)
+                self.assertEqual(result.json()['status'], 'recommendation')
+                self.assertEqual(usage.call_args.args[1]['input_tokens'], 100)
+                source = result.json()['sources'][0]
+                self.assertTrue(source['reviewed_by_llm'])
+                self.assertIn('예외이다', source['text'])
+                saved = next(params for name, params in repository.calls if name == 'save_regulation_turn')
+                self.assertEqual(saved['p_evidence'][0]['context_chunks'], repository.chunk_results)
+                self.assertTrue(saved['p_evidence'][0]['reviewed_by_llm'])
+                self.assertIn('[INT1]', saved['p_answer'])
 
     def test_integration_token_cannot_read_conversations(self):
         client = self.client(FakeRepository(), actor='integration')
