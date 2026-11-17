@@ -42,10 +42,35 @@ def extract_text(filename: str, payload: bytes) -> str:
                 xml = archive.read('word/document.xml')
             root = ElementTree.fromstring(xml)
             namespace = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+            def paragraph_text(paragraph):
+                value = ''.join(node.text or '' for node in paragraph.iter(namespace + 't'))
+                style = paragraph.find(f'{namespace}pPr/{namespace}pStyle')
+                if style is not None:
+                    heading = re.fullmatch(r'Heading([1-6])', style.get(namespace + 'val', ''), re.I)
+                    if heading:
+                        value = '#' * int(heading[1]) + ' ' + value
+                return value
+
             paragraphs = []
-            for paragraph in root.iter(namespace + 'p'):
-                paragraphs.append(''.join(node.text or '' for node in paragraph.iter(namespace + 't')))
-            text = '\n'.join(paragraphs)
+            body = root.find(namespace + 'body')
+            if body is None:
+                raise ValueError('DOCX 본문을 읽을 수 없습니다.')
+            for block in body:
+                if block.tag == namespace + 'p':
+                    paragraphs.append(paragraph_text(block))
+                elif block.tag == namespace + 'tbl':
+                    rows = [['\n'.join(paragraph_text(p) for p in cell.iter(namespace + 'p')).strip()
+                              for cell in row.findall(namespace + 'tc')]
+                            for row in block.findall(namespace + 'tr')]
+                    if rows:
+                        headers = rows[0]
+                        paragraphs.extend('\n'.join(
+                            f'{(headers[i] if i < len(headers) else "") or f"열 {i + 1}"}: {cell or "(빈 셀)"}'
+                            for i, cell in enumerate(row))
+                            for row in rows[1:])
+                        if len(rows) == 1:
+                            paragraphs.append(' | '.join(headers))
+            text = '\n\n'.join(paragraphs)
         except (BadZipFile, KeyError, ElementTree.ParseError) as exc:
             raise ValueError('DOCX 본문을 읽을 수 없습니다.') from exc
     elif ext == 'pdf':
@@ -54,7 +79,9 @@ def extract_text(filename: str, payload: bytes) -> str:
             pages = PdfReader(io.BytesIO(payload)).pages
             if len(pages) > 200:
                 raise ValueError('PDF는 200페이지 이하로 등록해 주세요.')
-            text = '\n\n'.join(page.extract_text() or '' for page in pages)
+            text = '\n\n'.join(f'[원문 {index}쪽]\n{content}'
+                               for index, page in enumerate(pages, 1)
+                               if (content := (page.extract_text() or '').strip()))
         except ValueError:
             raise
         except Exception as exc:
@@ -68,13 +95,22 @@ def extract_text(filename: str, payload: bytes) -> str:
 
 
 def split_chunks(text: str) -> list[str]:
-    """Keep paragraphs together and retain headings next to the following provision."""
-    parts = [part.strip() for part in re.split(r'\n\s*\n|(?=제\s*\d+(?:의\d+)?\s*조)', text) if part.strip()]
+    """Prefer whole paragraphs and sentences; never cut a normal clause at 1,500 chars."""
+    parts = [part.strip() for part in re.split(
+        r'\n\s*\n|(?=제\s*\d+(?:의\d+)?\s*조)|\n(?=#{1,6}\s)', text) if part.strip()]
     chunks: list[str] = []
     current = ''
     for part in parts:
-        for segment in (part[i:i + 1500] for i in range(0, len(part), 1500)):
-            if current and len(current) + len(segment) + 2 > 1500:
+        # A long paragraph remains intact up to 6,000 chars. Above that, prefer
+        # sentence boundaries; only an oversized single sentence needs a hard cut.
+        segments = [part] if len(part) <= 6000 else re.split(r'(?<=[.!?。])\s+|\n', part)
+        for segment in (sentence[i:i + 6000] for sentence in segments
+                        for i in range(0, len(sentence), 6000)):
+            boundary = re.match(r'^(?:#{1,6}\s|제\s*\d+(?:의\d+)?\s*[장절조])', segment)
+            qualification = re.match(r'^(?:다만|단[,，\s]|예외|제외|그러나|단서)', segment)
+            heading_only = re.fullmatch(r'(?:#{1,6}\s[^\n]+|제\s*\d+(?:의\d+)?\s*[장절조][^\n]{0,100})', current)
+            limit = 6000 if qualification or heading_only else 1500
+            if current and (boundary or len(current) + len(segment) + 2 > limit):
                 chunks.append(current)
                 current = ''
             current = f'{current}\n\n{segment}'.strip() if current else segment
@@ -83,6 +119,28 @@ def split_chunks(text: str) -> list[str]:
     if len(chunks) > 300:
         raise ValueError('문서가 너무 길어 300개 이상의 검색 단위가 생성됩니다.')
     return chunks
+
+
+def _neighbor_context(repository, rows: list[dict]) -> list[dict]:
+    """Expand only within the already eligible version; keep every original chunk ID."""
+    by_document: dict[str, list[dict]] = {}
+    for row in rows:
+        by_document.setdefault(row['document_id'], []).append(row)
+    for document_id, hits in by_document.items():
+        ordinals = sorted({i for row in hits for i in range(max(1, row['ordinal'] - 1), row['ordinal'] + 2)})
+        try:
+            neighbors = repository.request('GET', '/rest/v1/kra_regulation_chunks?' + urlencode({
+                'select': 'id,ordinal,content', 'document_id': f'eq.{document_id}',
+                'ordinal': 'in.(' + ','.join(map(str, ordinals)) + ')', 'order': 'ordinal.asc'})) or []
+        except (requests.RequestException, RuntimeError):
+            for row in hits:
+                row['context_unavailable'] = True
+            continue
+        for row in hits:
+            context = [item for item in neighbors if abs(item['ordinal'] - row['ordinal']) <= 1]
+            if any(item['id'] == row['chunk_id'] for item in context):
+                row['context_chunks'] = context
+    return rows
 
 
 def search_tokens(text: str) -> str:
@@ -280,7 +338,7 @@ def search_documents(repository, query: str, category: str, as_of: date,
     method = ('lexical_fuzzy_embedding_unavailable' if embedding_unavailable else
               'hybrid' if vectors and any(row.get('semantic_rank') is not None for row in rows)
               else 'lexical_fuzzy') if strategy == 'hybrid' else strategy
-    return rows, method
+    return _neighbor_context(repository, rows), method
 
 
 def save_turn(repository, thread_id: str | None, owner_id: str, mode: str,
@@ -288,6 +346,7 @@ def save_turn(repository, thread_id: str | None, owner_id: str, mode: str,
     evidence = [{'id': source.get('id'), 'document_id': source.get('document_id'),
                  'chunk_id': source.get('chunk_id'),
                  'version': source.get('version'), 'content_sha256': source.get('content_sha256'),
+                 'context_chunks': source.get('context_chunks'),
                  'label': source.get('label'), 'text': str(source.get('text') or ''),
                  'url': source.get('url')}
                 for source in sources]

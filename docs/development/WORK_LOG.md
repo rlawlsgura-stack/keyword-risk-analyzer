@@ -51,3 +51,12 @@
 - 커밋/푸시: 1단계 변경을 검증 후 main에 커밋·푸시.
 - 참고: 앞선 NoteCam 요청은 사용자가 취소했으며 자동화 생성·후속 작업 대상에서 제외.
 - 후속: 조항·조건·예외 보존 → 매칭 이유 표시 → 요약 개선.
+
+## 2026-11-17 — 2단계 규정 구조·조건·예외 보존
+
+- 요청: 권장 순서 두 번째인 조항·조건·예외 보존 개선.
+- 변경 파일: `regulation_corpus.py`, `regulation_assistant.py`, `tests/test_regulation_structure.py`, 이 기록.
+- 변경: 새 문서는 1,500자 경계를 넘더라도 보통 문단은 6,000자까지 유지하고 초장문은 문장 경계 우선 분할. 바로 뒤 단서 문단을 함께 유지. DOCX 제목과 표의 항목명·값·빈 셀, PDF 원문 쪽수 보존. 기존 등록 문서는 재작성하지 않으며 검색 시 같은 버전의 인접 문단을 함께 읽고 근거 스냅샷으로 저장. 인접 문단 조회 실패 시 원문 확인 안내.
+- 실행/검증: `.venv/review314/Scripts/python.exe -m unittest discover -s tests -p test_regulation_structure.py` 5개, test_regulation_corpus_api.py 16개, test_keyword_suggestion.py 11개 통과. 초장문 텍스트 무손실·단서 동반·버전 범위·이미지 PDF 거절 검증. 운영 데이터/SQL 변경 없음. diff·공백 검사 후 커밋.
+- 커밋/푸시: 2단계 변경을 검증 후 main에 커밋·푸시.
+- 한계: 한 문장이 6,000자를 초과하면 분할되므로 검색 문단만으로 전체 문서 검토를 주장하지 않음. 복잡한 병합 표의 시각 배치는 원본 파일에서 확인 필요.

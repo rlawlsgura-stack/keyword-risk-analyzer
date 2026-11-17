@@ -588,11 +588,16 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
         if method == 'lexical_fuzzy_embedding_unavailable':
             warnings.append('의미 검색 서버 응답에 문제가 있어 사내문서는 단어·유사 문자열로 검색했습니다.')
         for index, row in enumerate(rows, 1):
+            context_chunks = row.get('context_chunks') or []
             sources.append({'id': f'INT{index}',
                 'label': f"사내 지침: {row['title']} v{row['version']} · {row['ordinal']}번 문단",
-                'text': row['content'], 'url': '',
+                'text': '\n\n'.join(f"[{item['ordinal']}번 문단] {item['content']}" for item in context_chunks)
+                        if context_chunks else row['content'], 'url': '',
+                'context_chunks': context_chunks,
                 'document_id': row['document_id'], 'chunk_id': row['chunk_id'],
                 'version': row['version'], 'content_sha256': row['content_sha256']})
+        if any(row.get('context_unavailable') for row in rows):
+            warnings.append('인접 문단을 불러오지 못했습니다. 조건·예외는 문서 원문에서 확인해 주세요.')
         tool_calls.append({'tool': 'internal_guidance', 'query': query, 'method': method})
 
     if 'law' in scopes and not law_to_keywords:
