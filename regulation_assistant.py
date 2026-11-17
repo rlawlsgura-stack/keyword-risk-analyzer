@@ -142,7 +142,7 @@ def _llm_explanation(question: str, sources: list[dict[str, str]], conversation_
     citations = ', '.join(f"[{claim['source_id']}]" for claim in claims)
     return {"status": "supported", "administrator_review": False,
             "openai_usage": usage,
-            "answer": str(result.get("answer", ""))[:3800] + f"\n\n근거: {citations}"}
+            "answer": str(result.get("answer", "")) + f"\n\n근거: {citations}"}
 
 
 _OFFICIAL_WEB_DOMAINS = (
@@ -196,6 +196,7 @@ def _llm_research_recommendation(
             "filters": {"allowed_domains": list(_OFFICIAL_WEB_DOMAINS)},
         }],
         "tool_choice": "required" if not local_sources else "auto",
+        "max_output_tokens": 3000,
         "include": ["web_search_call.action.sources"],
         "input": [
             {"role": "system", "content": system},
@@ -226,17 +227,18 @@ def _llm_research_recommendation(
             if content.get("type") == "output_text":
                 answer += str(content.get("text", ""))
                 annotations.extend(content.get("annotations", []))
-    if not answer.strip():
+    if not answer.strip() or result.get("status") == "incomplete":
         return {"status": "insufficient", "administrator_review": True,
                 "recommendation_only": True, "answer": "", "sources": [],
                 "openai_usage": usage}
 
-    local_ids = {str(source.get("id", "")) for source in sources}
+    local_ids = {str(source.get("id", "")) for source in local_sources}
     web_sources: list[dict[str, Any]] = []
     web_ids: dict[str, str] = {}
     insertions: list[tuple[int, str]] = []
     for annotation in annotations:
-        citation = annotation.get("url_citation") or {}
+        citation = (annotation if annotation.get("type") == "url_citation"
+                    else annotation.get("url_citation") or {})
         url = str(citation.get("url", "")).strip()
         host = (urlparse(url).hostname or "").lower()
         if not url or not any(host == domain or host.endswith("." + domain)
@@ -285,7 +287,7 @@ def _llm_research_recommendation(
     return {
         "status": "recommendation", "administrator_review": False,
         "recommendation_only": True,
-        "answer": "**AI 권고 의견 · 최종 판정이 아닙니다**\n\n" + answer[:6000],
+        "answer": "**AI 권고 의견 · 최종 판정이 아닙니다**\n\n" + answer,
         "sources": web_sources,
         "openai_usage": usage,
     }
@@ -643,7 +645,7 @@ def _answer_scoped_question(request: dict[str, Any], repository) -> dict[str, An
     if warnings:
         answer += '\n\n' + '\n'.join(warnings)
     return {'status': status, 'administrator_review': needs_admin,
-            'answer': answer, 'sources': sources[:20], 'keyword_matches': matches[:50],
+            'answer': answer, 'sources': sources, 'keyword_matches': matches[:50],
             'related_candidates': related_candidates,
             'tool_calls': tool_calls, 'search_methods': search_methods,
             'llm_used': llm_used, 'recommendation_only': recommendation_only,

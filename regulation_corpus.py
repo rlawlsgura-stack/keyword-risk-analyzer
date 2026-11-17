@@ -288,9 +288,9 @@ def save_turn(repository, thread_id: str | None, owner_id: str, mode: str,
     evidence = [{'id': source.get('id'), 'document_id': source.get('document_id'),
                  'chunk_id': source.get('chunk_id'),
                  'version': source.get('version'), 'content_sha256': source.get('content_sha256'),
-                 'label': source.get('label'), 'text': str(source.get('text') or '')[:3000],
+                 'label': source.get('label'), 'text': str(source.get('text') or ''),
                  'url': source.get('url')}
-                for source in sources[:10]]
+                for source in sources]
     return repository.rpc('save_regulation_turn', p_thread_id=thread_id,
                           p_owner_id=owner_id, p_mode=mode, p_question=question,
                           p_answer=answer, p_evidence=evidence)

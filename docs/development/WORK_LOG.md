@@ -41,3 +41,13 @@
 - 검증 범위: React 운영 진입점 README와 관리자 전용 문서관리/공통 ChatTab 분기 정적 확인. UI·실행 안내 변경이 없어 서비스 시작·포트 변경·운영 접속·추가 설치는 하지 않음. 기존 검색 평가 사례 초안만으로 품질 수치 주장하지 않음.
 - 커밋/푸시: 없음. 검토 결과와 기록만 로컬에 남김. 기존 미추적 파일과 앞선 기록은 보존.
 - 미해결 항목: 실제 승인 사내문서와 심의자 정답으로 조건·예외 동반 검색, 인용 충실도, 의미 후보 오인율 평가 필요. 백엔드 실행환경 복구는 이번 검토 범위에서 제외.
+
+## 2026-11-17 — 1단계 인용 검증·대화 근거 보존
+
+- 요청: 검토 기록 커밋·푸시 후 권장 순서로 개선, Ponytail 적용.
+- 변경 파일: `regulation_assistant.py`, `regulation_corpus.py`, `tests/test_evidence_integrity.py`, 이 기록.
+- 변경: 실제 LLM 전달 출처로만 인용 검증. 현재/이전 웹 인용 응답 형식 지원. 미완성 응답 보류. 검증 후 답변·출처를 잘라내지 않으며 대화에 전체 근거·버전·해시를 보존.
+- 실행/검증: 앞선 검토 기록을 `eaf9c00`으로 main에 push. Python 3.14와 requirements.txt로 무시되는 `.venv/review314` 검증 환경 준비(httpx·python-multipart·python-dotenv·tzdata 포함). 해당 Python으로 unittest discover의 test_evidence_integrity.py 4개, test_regulation_corpus_api.py 16개 통과. 외부 AI·운영 DB 호출 없음. diff 검토·공백 검사 후 커밋.
+- 커밋/푸시: 1단계 변경을 검증 후 main에 커밋·푸시.
+- 참고: 앞선 NoteCam 요청은 사용자가 취소했으며 자동화 생성·후속 작업 대상에서 제외.
+- 후속: 조항·조건·예외 보존 → 매칭 이유 표시 → 요약 개선.
