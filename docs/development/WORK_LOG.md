@@ -19,3 +19,25 @@
 - 검증: GitBook `prerequisite-gap-checker`로 새 Runbook을 다시 읽고 준비사항을 점검함. 도구 설치 링크, Supabase 키·역할·스키마, 일반/격리 포트 쌍, Docker·방화벽 요구사항, 두 역할의 테스트 계정을 안내함. 기존 README의 없는 설계 ZIP 링크도 제거함. 코드 테스트는 수행하지 않음.
 - 커밋/푸시: 변경 검토 후 `main`에 커밋·푸시 완료.
 - 미해결 항목: GitBook MCP 계정 연결은 하지 않음. 저장소의 문서 diff 검토를 반영 경로로 사용.
+
+## 2026-11-17 — NoteCam 원격 변경 모니터링 대상 확인
+
+- 요청: NoteCam origin/upstream의 커밋·브랜치·PR 변화를 정기 확인하고 PC 간 작업 영향, 동기화·충돌 위험, 읽기 전용 명령을 요약. 자동 병합·원격 변경 금지.
+- 변경 파일: `docs/development/WORK_LOG.md`(이 기록만 추가).
+- 실행한 명령과 결과: `Get-Content`로 AGENTS·Runbook·최신 작업 기록 확인, `git status --short`, 인접 저장소 `.git/config` 조회, `git -C D:/back-up/encore/aio-03-p2-team3 remote -v`, README 조회, `rg`로 NoteCam 명칭 검색. GitHub 연결 도구로 저장소 검색, 앱 도구로 프로젝트·채팅 목록과 자동화 기능 확인.
+- 검증: 현재 프로젝트는 keyword-risk-analyzer. 인접 aio-03-p2-team3의 origin/upstream은 확인했으나 NoteCam이라는 근거는 찾지 못함. 기존 로컬 변경은 보존. 대상 확인 질문을 전달했으며 정기 점검은 아직 생성하지 않음.
+- 커밋/푸시: 없음. 사용자의 원격 변경 금지 요청에 따라 push하지 않음.
+- 미해결 항목: NoteCam의 정확한 origin/upstream 주소 확인 후 1시간 주기 읽기 전용 점검 설정 필요.
+
+## 2026-11-17 — AI 가독성·SEO/AEO 관점의 규정 검색·요약·매칭 검토
+
+- 요청: AI Readability Check와 SEO & AEO Documentation을 적용해 사내규정 분석·LLM 요약·키워드 매칭 옵션·하이라이트의 개선점을 면밀히 검토. 구현 변경은 요청되지 않음.
+- 적용 기준: 로컬에는 요청 스킬이 없어 GitbookIO/docs-skills의 `skills/ai-readiness/SKILL.md`(blob 5e3ecb5d06244380c913849b097bd4d487001e0e), `skills/seo-aeo-documentation/SKILL.md`(blob 0ddf7b04eefc4a340d9329b02e928ee7dd15c315)를 GitHub 읽기 도구로 확인·적용. 설치하지 않음. 문서 독립성·조건/예외 보존·인용 추적성을 내부 검색에 적용하며 검색 순위 향상은 주장하지 않음.
+- 변경 파일: `docs/development/WORK_LOG.md`(기록만). 프로그램·환경·운영 데이터 변경 없음.
+- 실행한 명령과 결과: `Get-Content`와 `rg`로 AGENTS·Runbook·README·규정 추출/분할/검색/LLM·매칭·React 강조·평가 코드 검토. `git status --short`, `py -0p`, `node --version`, `Test-Path SUMMARY.md` 확인. `.venv/Scripts/python.exe -m unittest discover -s tests -p ...` 3종은 가상환경이 가리키는 Python 3.13 실행 파일 부재로 실패. `py -3.14 -m unittest discover -s tests -p test_regulation_evaluation.py` 2개 통과. 같은 방식의 test_approved_matching.py와 test_regulation_corpus_api.py는 pandas/FastAPI 미설치로 실행 불가. frontend의 `npm test` 15개 통과.
+- 재현 검증: `py -3.14 -`로 기존 함수 AST만 격리 실행한 합성 사례에서 1,500자 분할 시 예외 문장과 조항 제목 분리 확인. 최초 표준입력 한글 인코딩 문제와 작업 폴더 경로 오류를 수정해 유니코드 이스케이프로 재검증. 모의 응답으로 LLM에 INT1~INT8만 전달했음에도 INT9 인용이 검증 통과함을 확인. save_turn에서 뒤쪽 인용 WEB5가 첫 10개 제한으로 저장되지 않음을 확인. `node --input-type=module -`로 antiaging/ANTIAGING 일치에서 상세 공통 강조 문자열이 비는 사례 확인. 외부 AI·DB 호출 없음.
+- 주요 결과: (1) 실제 전달 출처와 허용 인용 ID 집합 불일치 (2) 인용 출처와 대화 저장 10건 제한 불일치 (3) 문서의 조항·조건·예외 및 표 머리글·페이지 구조 보존 부족 (4) 질문+맥락 2,000자 제한·검색 5건·LLM 앞 8건 선택으로 검토 범위 제한 (5) 출처 표식 존재 검증은 주장 의미의 뒷받침을 보장하지 않음 (6) 매칭 이유를 서버가 반환하지 않아 화면이 추정함 (7) 챗봇 완화 일치는 표시 방식이며 서버 검색 조건을 바꾸지 않음 (8) 근거·조건·예외를 보존하는 요약과 실제 평가 자료 보강 권고.
+- AI 가독성 대표 문서 점검(`docs/regulation-search.md`): A-1 실패(1행, description 없음; 현재 색인에 사용하는지는 별도 확인 필요), A-2 통과(3행), A-3 실패(15·50행의 포괄적 제목), A-4 실패(34행 다음 본문 없이 36행 하위 제목), A-5 보류(한국어·코드 식별자에 영어 단어 수 기준을 기계 적용하지 않음), A-6 해당 없음(표 없음), A-7 통과(7·17·52행에 제한/옵션을 텍스트로 명시), A-8 통과(문단 도입부 검토), A-9 해당 없음(일반 문서 링크 없음), A-10 해당 없음(SUMMARY.md 없음). 등록된 실제 사내규정 원본은 읽지 않았으므로 문서별 합격/불합격 또는 운영 검색 품질은 판단하지 않음.
+- 검증 범위: React 운영 진입점 README와 관리자 전용 문서관리/공통 ChatTab 분기 정적 확인. UI·실행 안내 변경이 없어 서비스 시작·포트 변경·운영 접속·추가 설치는 하지 않음. 기존 검색 평가 사례 초안만으로 품질 수치 주장하지 않음.
+- 커밋/푸시: 없음. 검토 결과와 기록만 로컬에 남김. 기존 미추적 파일과 앞선 기록은 보존.
+- 미해결 항목: 실제 승인 사내문서와 심의자 정답으로 조건·예외 동반 검색, 인용 충실도, 의미 후보 오인율 평가 필요. 백엔드 실행환경 복구는 이번 검토 범위에서 제외.
