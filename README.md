@@ -1,6 +1,6 @@
 # Keyword Risk Analyzer
 
-The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings.
+The React application is the production UI at [keyword-risk-ui.onrender.com](https://keyword-risk-ui.onrender.com), served by Render and connected to the FastAPI service and Supabase. See [frontend/README.md](frontend/README.md) for its build and deployment settings. For local setup and the work-recording workflow, see [development runbook](docs/development/README.md).
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 The optional, evidence-first legal lookup chat and direct Law.go.kr API setup are described in [legal search setup](docs/regulation-search.md). The LLM explanation stage stays disabled unless explicitly enabled on the API service.
 See [keyword inquiry setup and operation](docs/design/10_keyword_requests.md) for the inquiry feature, Supabase SQL setup, conversation history migration, and optional email settings.
@@ -54,8 +54,7 @@ CSV mode is local development only and retains its session-local pool.
 
 ## 설계 문서
 
-[통합 설계서 HTML](docs/design/design_book.html), [개별 설계서 안내](docs/design/README.md),
-[설계 문서 ZIP](docs/keyword_risk_analyzer_design_v1.zip)을 제공합니다.
+[통합 설계서 HTML](docs/design/design_book.html)과 [개별 설계서 안내](docs/design/README.md)를 제공합니다.
 시스템, API, 화면, Supabase, 매칭 로직, 운영 배포와 검증을 현재 구현 기준으로 정리했습니다.
 
 [법령·가이드라인 RAG 도입 설계](docs/design/07_regulation_rag_design.md)는 초기 설계 기록입니다.
@@ -86,26 +85,28 @@ React (Render Static Site) ── FastAPI (Render Web Service) ── service.py
 
 ## 설치와 실행
 
-현재 Windows/Python 3.14 환경에서 검증했습니다. Linux 호스팅에서의 최종 동작은 배포 후 확인해야 합니다.
+현재 Windows/Python 3.14 환경에서 검증했습니다. 일반 로컬 실행에는 Python 3.14와 Node.js/npm이 필요합니다. `npm test`를 실행할 때는 Node.js 22.13 이상을 사용하세요. Linux 호스팅에서의 최종 동작은 배포 후 확인해야 합니다.
 
 ```powershell
 py -3.14 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
-Copy-Item .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+if (!(Test-Path frontend/.env.local)) { Copy-Item frontend/.env.example frontend/.env.local }
 ```
 
-`.env`에서 다음 값을 설정합니다. 비밀 키는 채팅이나 Git에 올리지 않습니다.
+`.env`의 `SUPABASE_URL`과 `SUPABASE_SECRET_KEY`를 설정합니다. React 설정은 `frontend/.env.local`에 저장하며, 프론트엔드와 백엔드의 Supabase URL을 같게 하고 `VITE_API_BASE_URL`을 아래 API 주소에 맞춥니다. 공개용 `VITE_SUPABASE_PUBLISHABLE_KEY`는 Supabase Dashboard의 Project Settings → API Keys에서 가져옵니다. 공개용 키만 `VITE_` 변수에 넣고 서버 비밀 키는 채팅이나 Git에 올리지 않습니다.
 
 ```dotenv
 STORAGE_BACKEND=supabase
-SUPABASE_URL=https://qmhdwfqcihpfjfvcjcwa.supabase.co
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 SUPABASE_SECRET_KEY=실제_서버_비밀_키
-API_ACCESS_TOKEN=별도로_생성한_연동용_토큰
+API_ACCESS_TOKEN=
 API_DOCS_ENABLED=false
 ```
 
 `SUPABASE_SECRET_KEY`는 Supabase Dashboard의 Project Settings → API Keys에서 확인합니다.
 `sb_secret_...` 또는 기존 `service_role` 키를 사용합니다. publishable/anon 키는 이 서버 저장소용 키로 사용할 수 없습니다.
+`API_ACCESS_TOKEN`은 공유 토큰으로 호출하는 외부 연동이 있을 때만 설정합니다. 일반 React 로그인에는 필요하지 않습니다.
 로컬에서는 `.env`, 배포 서버에서는 환경 변수를 사용합니다. 프로세스 환경 변수가 파일보다 우선합니다.
 
 서로 다른 터미널에서 두 프로세스를 실행합니다.
@@ -117,10 +118,14 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
+React는 `frontend/.env.local`을 읽습니다. 프론트엔드 설정 파일이 이미 있다면 덮어쓰지 말고, 세 `VITE_` 값을 직접 확인하세요. UI 전용 공개 키는 Supabase publishable key이며, 서버의 secret/service-role 키를 사용하면 안 됩니다.
+
 ```powershell
 # API: http://localhost:8002 (docs: http://localhost:8002/docs)
 .\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8002
 ```
+
+격리된 로컬 Supabase로 개발하려면 위의 운영 Supabase 연결 절차 대신 [프론트엔드 로컬 테스트 환경](frontend/README.md)을 사용하세요. 두 환경의 포트와 환경 파일은 서로 다릅니다.
 
 `STORAGE_BACKEND=csv`는 기존 CSV를 사용하는 로컬 개발 모드입니다.
 CSV 모드에서 API의 업무 엔드포인트는 503을 반환합니다. 공유 운영 시 CSV로 자동 전환하지 않습니다.

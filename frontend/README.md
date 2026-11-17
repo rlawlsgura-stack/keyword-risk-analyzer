@@ -29,7 +29,9 @@ React (frontend/) ── FastAPI (api.py) ── service / matching_engine / rep
 
 ## 로컬 실행 (운영 DB와 분리된 테스트 환경)
 
-Docker Desktop이 켜져 있어야 합니다. 프로젝트 루트에서 차례대로 실행합니다.
+필요한 도구는 Node.js/npm(Node.js 22.13 이상 권장), Python 3.13, Docker Desktop입니다. API용 Python 환경에는 `requirements.txt`와 `requirements-ocr.txt`를 설치해야 합니다. 저장소 루트 README의 Local OCR 명령으로 `.venv-ocr313`을 준비하세요. Docker Desktop을 실행하고 Windows 방화벽을 활성화해야 합니다. Supabase 시작 스크립트는 Windows 방화벽 프로필이 모두 활성화되고 기본 인바운드 정책이 차단인지 확인하며, 그렇지 않으면 중단됩니다.
+
+아래 명령은 프로젝트 루트에서 실행합니다. 첫 명령은 프론트엔드 의존성을 설치하고, Supabase 시작 스크립트가 로컬 전용 환경 파일과 테스트 관리자 자격을 만듭니다. 이 흐름은 운영 DB를 사용하지 않습니다.
 
 ```powershell
 cd frontend; npm ci; cd ..
@@ -39,6 +41,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_local_test_frontend.ps1
 ```
 
 `http://127.0.0.1:5173`에서 `.local-test-credentials.txt`의 로컬 전용 관리자 계정으로 로그인합니다.
+
+이 테스트 흐름은 로컬 API `127.0.0.1:8000`, 로컬 Supabase `127.0.0.1:54321`, React `127.0.0.1:5173`을 사용합니다. 일반 개발용 API `:8002`와 혼용하지 마세요. 사전 점검 및 공통 작업 기록은 [개발 Runbook](../docs/development/README.md)을 따릅니다.
+
+UI 변경을 관리자와 일반회원 양쪽에서 확인하려면 로컬 Supabase Studio(`http://127.0.0.1:54323`)에서 합성 회원 계정을 추가한 뒤, 앱의 **사용자 관리** 탭에서 해당 계정의 역할을 `member`로 지정합니다. 운영 Supabase에는 테스트 계정을 만들지 않습니다.
 
 ## 검증
 

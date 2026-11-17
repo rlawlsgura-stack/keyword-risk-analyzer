@@ -1,5 +1,22 @@
 # Project workflow
 
+## Work execution and records
+
+- At the start of each task, read this file, `docs/development/README.md`, and
+  the latest entry in `docs/development/WORK_LOG.md` when those files exist.
+- Follow the runbook to inspect prerequisites and environment state before
+  giving commands or starting services. Execute the requested, non-destructive
+  steps when the user asks for the work; report blockers instead of guessing.
+- At the end of each task, append a concise entry to
+  `docs/development/WORK_LOG.md` with the date, request, files changed, commands
+  actually run, results, and commit/push status. Never record secret values,
+  passwords, access tokens, or full credential-bearing URLs.
+- When changing setup or execution instructions, use the GitBook
+  `prerequisite-gap-checker` skill if available and include the review result
+  in the work log. Review documentation diffs before committing.
+- Use repository review (diff review and the project checks below) for changes
+  unless a GitBook change-request workflow is explicitly connected and selected.
+
 The user granted standing authorization on 2026-10-27 to commit and push changes
 made for their requested work in this repository without asking for approval
 again for each commit.
