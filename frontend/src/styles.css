@@ -431,6 +431,7 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 .chat-bot-avatar { width: 2rem; height: 2rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #e8f4ff; color: #167fc6; border: 1px solid #c8e4f8; font-weight: 800; }
 .chat-bubble { max-width: min(88%, 900px); min-width: 0; padding: .75rem .9rem; border-radius: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .chat-bubble.assistant { color: #303740; background: #f7f9fb; border: 1px solid #e1e6ec; }
+.chat-bubble.assistant a { color: #075ea8; text-decoration: underline; text-underline-offset: 2px; }
 .chat-bubble.user { color: #164a72; background: #eaf5ff; border: 1px solid #d0e8fa; border-radius: 12px 12px 3px 12px; }
 .chat-bubble.failed { border-color: #e6aaaa; background: #fff7f7; }
 .chat-bubble .alert { margin-top: .7rem; }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { ApiError, askRegulation, askRegulationLegacy, deleteRegulationThread, downloadRegulationDocumentOriginal, listRegulationThreads, loadRegulationDocumentFullText, loadRegulationModels, loadRegulationThread, loadRegulationUsage, type RegulationConversationMessage, type RegulationModelCatalog, type RegulationScope, type RegulationThread } from '../lib/api.ts'
 import { koSorted, pySorted, uniqueValues } from '../lib/catalog.ts'
 import type { RegulationResult, RegulationUsageSummary } from '../lib/types.ts'
@@ -129,7 +129,21 @@ function HighlightedText({ text, terms }: { text: string; terms: HighlightTerms 
 
 function MarkdownText({ text, highlightTerms }: { text: string; highlightTerms: HighlightTerms }) {
   const highlight = (value: string) => <HighlightedText text={value} terms={highlightTerms} />
-  return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{highlight(part.slice(2, -2))}</strong> : <span key={j}>{highlight(part)}</span>)}</p>)}</div>
+  const inline = (value: string, key: string) => {
+    const parts = value.split(/(\[[^\]]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<>()]+)/g)
+    return parts.map((part, i) => {
+      const markdownLink = part.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/)
+      const bareUrl = markdownLink ? null : part.match(/^(https?:\/\/[^\s<>()]+?)([.,!?;:。）》】]*)$/)
+      const href = markdownLink?.[2] ?? bareUrl?.[1]
+      const label = markdownLink?.[1] ?? bareUrl?.[1]
+      if (!href || !label) return <span key={`${key}-${i}`}>{highlight(part)}</span>
+      return <Fragment key={`${key}-${i}`}>
+        <a href={href} target="_blank" rel="noopener noreferrer">{highlight(label)}</a>
+        {bareUrl?.[2] && <span>{bareUrl[2]}</span>}
+      </Fragment>
+    })
+  }
+  return <div>{text.split(/\n{2,}/).map((para, i) => <p key={i} style={{ margin: '0 0 .6rem' }}>{para.split(/(\*\*[^*]+\*\*)/g).map((part, j) => part.startsWith('**') && part.endsWith('**') ? <strong key={j}>{inline(part.slice(2, -2), `${i}-${j}`)}</strong> : inline(part, `${i}-${j}`))}</p>)}</div>
 }
 
 export function ChatTab() {
