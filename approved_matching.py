@@ -2,7 +2,7 @@
 
 No automatic fragment generation or external API. Legacy engines stay unchanged.
 """
-from dataclasses import replace
+from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
 
 from matching_engine import (Match2, _keyword_variants, _comparison_with_map,
@@ -14,6 +14,26 @@ SETTING_NAME = 'approved_partial_expressions_v272'
 _lock = tokenization_lock
 _CONTENT_TAGS = {'NNG', 'NNP', 'NR', 'NP', 'VV', 'VA', 'MAG', 'MAJ', 'SL', 'SH', 'SN'}
 _MIN_PARTIAL_CHARS = 2
+
+
+@dataclass
+class ExplainedMatch(Match2):
+    match_reason: str = ''
+    matched_expression: str = ''
+    registered_expression: str = ''
+    normalization_options: dict = field(default_factory=dict)
+
+
+def _explain(match, text, config, reason, expression):
+    target, _ = _comparison_with_map(expression, config)
+    registered, positions = _comparison_with_map(match.term, config)
+    offset = registered.find(target) if target else -1
+    surface = (match.term[positions[offset]:positions[offset + len(target) - 1] + 1]
+               if offset >= 0 else '')
+    return ExplainedMatch(**asdict(match), match_reason=reason,
+                          matched_expression=text[match.start:match.end],
+                          registered_expression=surface,
+                          normalization_options=config.normalization_options())
 
 
 def _has_min_partial_chars(value):
@@ -64,7 +84,9 @@ def _keyword_tokens(text):
 
 def match_text(text, keywords, *, config, categories=(), risks=(), approved_partials=None, **options):
     if config.mode != 'similar':
-        return legacy_match_text(text, keywords, config=config, categories=categories, risks=risks, **options)
+        matches = legacy_match_text(text, keywords, config=config, categories=categories, risks=risks, **options)
+        return [_explain(match, text, config, 'exact' if config.mode == 'exact' else 'substring',
+                         text[match.start:match.end]) for match in matches]
     for column, selected in (('상품카테고리', categories), ('리스크 등급', risks)):
         if selected:
             keywords = (keywords.loc[keywords[column].astype(str).str.strip().isin(selected)]
@@ -93,15 +115,18 @@ def match_text(text, keywords, *, config, categories=(), risks=(), approved_part
                  if _has_min_partial_chars(_comparison_with_map(t.form, config)[0])}
         for form in forms:
             for start, end in source_tokens.get(form, ()):
-                matches.append(Match2(term, start, end, str(row.get('상품카테고리', '')),
+                match = Match2(term, start, end, str(row.get('상품카테고리', '')),
                                       str(row.get('리스크 등급', '')),
-                                      str(row.get('리스크 등급별 세부 심의기준', '')), code or None))
+                                      str(row.get('리스크 등급별 세부 심의기준', '')), code or None)
+                matches.append(_explain(match, text, config, 'content_token', form))
         saved = (approved_partials or {}).get(code, {})
+        approved = []
         # Renaming/reusing a keyword ID invalidates its previous approvals.
         if saved.get('term') == term:
             saved_expressions = [expression for expression in saved.get('expressions', [])
                                  if _has_min_partial_chars(_comparison_with_map(expression, config)[0])]
-            expressions.extend(validate_expressions(term, saved_expressions, config))
+            approved = validate_expressions(term, saved_expressions, config)
+            expressions.extend(approved)
         for expression in dict.fromkeys(expressions):
             target, _ = _comparison_with_map(expression, config)
             if not target or not _has_min_partial_chars(target):
@@ -110,8 +135,10 @@ def match_text(text, keywords, *, config, categories=(), risks=(), approved_part
             while (found := normalized.find(target, offset)) >= 0:
                 start, end = index_map[found], index_map[found + len(target) - 1] + 1
                 if start in starts and end in ends:
-                    matches.append(Match2(term, start, end, str(row.get('상품카테고리', '')),
+                    match = Match2(term, start, end, str(row.get('상품카테고리', '')),
                                           str(row.get('리스크 등급', '')),
-                                          str(row.get('리스크 등급별 세부 심의기준', '')), code or None))
+                                          str(row.get('리스크 등급별 세부 심의기준', '')), code or None)
+                    matches.append(_explain(match, text, config,
+                        'approved_expression' if expression in approved else 'literal_expression', expression))
                 offset = found + 1
     return sorted(_maximal_matches(matches), key=lambda m: (m.start, m.end))

@@ -396,7 +396,7 @@ export function ChatTab() {
             {turn.result.recommendation_only && <small className="caption">{'AI \uAD8C\uACE0\uC548 \u00B7 \uCD5C\uC885 \uD310\uC815 \uC544\uB2D8'}</small>}
             <MarkdownText text={turn.result.answer || '검색 결과가 없습니다.'}
               highlightTerms={highlightTerms} />
-            {highlightTerms.relaxed && <small className="chat-highlight-mode">완화 일치: 부분 문자열 포함 {highlightTerms.partial.length ? `· 추가 강조: ${highlightTerms.partial.join(' · ')}` : '· 추가 부분 일치 항목 없음'}</small>}
+            {highlightTerms.relaxed && <small className="chat-highlight-mode">강조 범위 확대 · 부분 문자열 표시 (검색 조건은 변경되지 않음) {highlightTerms.partial.length ? `· 추가 강조: ${highlightTerms.partial.join(' · ')}` : '· 추가 부분 일치 항목 없음'}</small>}
             {(turn.result.search_methods ?? []).length > 0 && <small>{'\uAC80\uC0C9 \uBC29\uC2DD: '}{(turn.result.search_methods ?? []).map(method => METHOD_LABELS[method] ?? method).join(', ')}</small>}
             {Boolean(turn.result.administrator_review) && <Alert kind="warning">근거가 상충하거나 충분히 검증되지 않았습니다. 법적 판단은 관리자에게 문의해 주세요.</Alert>}
             {turn.result.keyword_matches?.length > 0 && <Expander title="관련 키워드 보기"><DataTable rows={turn.result.keyword_matches as Record<string, unknown>[]} rowKey={(_, j) => String(j)} columns={MATCH_COLUMNS.map(key => ({ key, render: row => <HighlightedText text={String(row[key] ?? '')} terms={highlightTerms} /> }))} showIndex={false} /></Expander>}

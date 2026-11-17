@@ -60,3 +60,12 @@
 - 실행/검증: `.venv/review314/Scripts/python.exe -m unittest discover -s tests -p test_regulation_structure.py` 5개, test_regulation_corpus_api.py 16개, test_keyword_suggestion.py 11개 통과. 초장문 텍스트 무손실·단서 동반·버전 범위·이미지 PDF 거절 검증. 운영 데이터/SQL 변경 없음. diff·공백 검사 후 커밋.
 - 커밋/푸시: 2단계 변경을 검증 후 main에 커밋·푸시.
 - 한계: 한 문장이 6,000자를 초과하면 분할되므로 검색 문단만으로 전체 문서 검토를 주장하지 않음. 복잡한 병합 표의 시각 배치는 원본 파일에서 확인 필요.
+
+## 2026-11-17 — 3단계 실제 매칭 이유·원문 강조 표시
+
+- 요청: 매칭 이유를 서버에서 명시하고 화면의 추정 설명을 줄임.
+- 변경 파일: `approved_matching.py`, `api.py`, `frontend/src/lib/types.ts`, `frontend/src/lib/highlight.ts`, `frontend/src/tabs/ChatTab.tsx`, `tests/test_approved_matching.py`, `tests/test_current_analysis.py`, `frontend/tests/parity.test.ts`, 이 기록.
+- 변경: 현재 분석 결과에 실제 경로(완전/내용어/승인/등록표현/부분문자열), 입력·등록 원문 표현, 사용 옵션을 기록·반환. 상세 팝업에 해당 근거와 주변 문맥 표시. 이전 결과의 미저장 경로는 추정하지 않음. 대소문자 무시 결과도 원문 강조. 챗봇의 완화 일치를 검색 변경과 구분해 '강조 범위 확대'로 표시.
+- 실행/검증: Python unittest의 test_approved_matching 6개, test_matching_regression 7개, test_current_analysis 5개 통과. 관리자·일반회원 API 실제 응답 검사에서 Pydantic 응답 필드 누락을 발견·수정한 뒤 재검증. npm test 16개, npm run build 통과. 기존 매칭 범위·중복·코드 회귀검사는 유지. README의 React 운영 진입점과 App.tsx/ChatTab의 역할별 분기를 확인했으며 공통 화면에 동일 적용. 서비스 시작·포트 변경 없음.
+- 커밋/푸시: diff·공백 검사 후 3단계 변경 main 커밋·푸시.
+- 후속: 근거·적용 범위·조건·예외를 보존하는 요약 및 검토 범위 표시.

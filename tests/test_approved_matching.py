@@ -46,7 +46,10 @@ class ApprovedMatchingTests(unittest.TestCase):
             config = replace(self.config, mode=mode)
             expected = legacy_match_text('피부과 티에이 마사지 방법', self.df, config=config)
             actual = match_text('피부과 티에이 마사지 방법', self.df, config=config)
-            self.assertEqual([asdict(m) for m in expected], [asdict(m) for m in actual])
+            self.assertEqual([asdict(m) for m in expected],
+                             [{key: asdict(m)[key] for key in asdict(expected[i])}
+                              for i, m in enumerate(actual)])
+            self.assertTrue(all(m.match_reason == ('exact' if mode == 'exact' else 'substring') for m in actual))
         with patch('approved_matching._kiwi', side_effect=RuntimeError('unavailable')):
             with self.assertRaises(RuntimeError):
                 match_text('티에이', self.df, config=self.config)
@@ -71,6 +74,17 @@ class ApprovedMatchingTests(unittest.TestCase):
         self.assertFalse(match_text('티에이 마사지 방법', self.df, config=self.config))
         repeated = match_text('노화와 노화', df, config=self.config)
         self.assertEqual(len(repeated), len(terms) * 2)
+
+    def test_actual_matching_path_and_original_surfaces_are_recorded(self):
+        hits = match_text('노화와 에이징 관리', pd.DataFrame([
+            {'kwd_no': 'N', '키워드명': '노화방지'}, {'kwd_no': 'A', '키워드명': '안티에이징'}]),
+            config=self.config, approved_partials=self.approved)
+        self.assertEqual([(m.match_reason, m.matched_expression, m.registered_expression) for m in hits],
+                         [('content_token', '노화', '노화'), ('approved_expression', '에이징', '에이징')])
+        config = replace(self.config, mode='exact')
+        hit = match_text('😀 antiaging', pd.DataFrame([{'키워드명': 'ANTIAGING'}]), config=config)[0]
+        self.assertEqual((hit.matched_expression, hit.registered_expression), ('antiaging', 'ANTIAGING'))
+        self.assertTrue(hit.normalization_options['ignore_case'])
 
 if __name__ == '__main__':
     unittest.main()

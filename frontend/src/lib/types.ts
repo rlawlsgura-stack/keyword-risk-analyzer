@@ -37,6 +37,10 @@ export type Match = {
   evidence_type: string
   hit_count: string
   last_search_date: string
+  match_reason?: 'exact' | 'substring' | 'content_token' | 'approved_expression' | 'literal_expression' | null
+  matched_expression?: string
+  registered_expression?: string
+  normalization_options?: Record<string, boolean> | null
 }
 
 export type AnalysisResult = {

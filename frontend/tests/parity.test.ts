@@ -114,7 +114,8 @@ test('highlight segments: merge overlaps, keep all codes, code points, skip trai
 
 test('similar mode reports the approved expression that fired', () => {
   const catalog = [row('B001', '안티에이징')]
-  const segs = buildSegments('에이징 관리', [match(0, 3, 'B001', '안티에이징')], {
+  const segs = buildSegments('에이징 관리', [{ ...match(0, 3, 'B001', '안티에이징'),
+    match_reason: 'approved_expression', matched_expression: '에이징', registered_expression: '에이징' }], {
     catalogRows: catalog, columns: Object.keys(catalog[0]), mode: 'similar', partialMinLen: 2,
     approvedPartials: { B001: { term: '안티에이징', expressions: ['에이징'] } },
   })
@@ -123,6 +124,22 @@ test('similar mode reports the approved expression that fired', () => {
   if (mark.kind !== 'mark') return
   const condition = mark.entries[0].tooltip.find(r => r.label === '매칭 조건')
   assert.ok(condition?.kind === 'plain' && condition.value.includes('‘에이징’'))
+})
+
+test('server evidence wins over current settings and preserves case-insensitive surfaces', () => {
+  const hit: Match = { ...match(2, 11, 'B001', 'ANTIAGING'), match_reason: 'exact',
+    matched_expression: 'antiaging', registered_expression: 'ANTIAGING',
+    normalization_options: { ignore_case: true, strip_bracket_notes: false } }
+  const segments = buildSegments('😀 antiaging 아님', [hit], { catalogRows: [row('B001', 'ANTIAGING')],
+    columns: [], mode: 'similar', partialMinLen: 2, approvedPartials: {} })
+  const mark = segments.find(s => s.kind === 'mark')
+  assert.ok(mark?.kind === 'mark')
+  if (mark?.kind !== 'mark') return
+  const tooltip = mark.entries[0].tooltip
+  assert.ok(tooltip.some(r => r.kind === 'match' && r.matchedCore === 'antiaging' && r.registeredCore === 'ANTIAGING'))
+  assert.ok(tooltip.some(r => r.kind === 'plain' && r.label === '사용한 비교 옵션' && r.value === '대소문자 무시'))
+  assert.ok(tooltip.some(r => r.kind === 'plain' && r.label === '주변 문맥' && r.value.includes('아님')))
+  assert.ok(tooltip.some(r => r.kind === 'plain' && r.label === '매칭 조건' && r.value.includes('전체')))
 })
 
 test('tooltip rows: skip empty, rename last date, insert formatted registration date', () => {

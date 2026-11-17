@@ -141,28 +141,35 @@ export function buildSegments(text: string, matches: readonly Match[], opts: {
       const evidence = info.records.find(r => r.norm === norm)
       if (evidence) {
         const registered = String(evidence.match.term).trim()
-        const common = longestCommon(evidence.seg, registered)
+        const common = longestCommon(evidence.seg.toLowerCase(), registered.toLowerCase())
         const mcp = Array.from(evidence.seg), rcp = Array.from(registered)
-        const matchedCore = common.size >= 2 ? mcp.slice(common.a, common.a + common.size).join('') : ''
-        const registeredCore = common.size >= 2 ? rcp.slice(common.b, common.b + common.size).join('') : ''
-        let condition: string
-        if (opts.mode === 'similar') {
-          const saved = opts.approvedPartials[String(evidence.match.kwd_no ?? '')]
-          const approved = saved && saved.term === registered ? saved.expressions : []
-          const hit = approved.find(expr => evidence.seg.toLowerCase().includes(String(expr).toLowerCase()))
-          condition = hit ? `2글자 이상 승인 표현 ‘${hit}’가 입력 문구의 단어 경계와 일치했습니다.`
-            : '2글자 이상인 입력·등록 내용어 토큰을 Kiwi로 분석해 일치했습니다.'
-        } else if (opts.mode === 'partial') {
-          condition = `글자 수 매칭 방식에서 최소 ${Math.max(2, opts.partialMinLen)}글자 조건을 충족한 부분 문자열이 일치했습니다.`
-        } else {
-          condition = '키워드 완전 일치 방식으로 등록 표현이 입력 문구에서 발견됐습니다. 설정한 표기 비교 옵션이 적용될 수 있습니다.'
+        const matchedCore = evidence.match.match_reason ? evidence.match.matched_expression ?? ''
+          : common.size >= 2 ? mcp.slice(common.a, common.a + common.size).join('') : ''
+        const registeredCore = evidence.match.match_reason ? evidence.match.registered_expression ?? ''
+          : common.size >= 2 ? rcp.slice(common.b, common.b + common.size).join('') : ''
+        const conditions: Record<string, string> = {
+          exact: '등록 표현 전체가 설정된 표기 비교 옵션에 따라 일치했습니다.',
+          substring: '글자 수 조건을 충족한 부분 문자열입니다. 의미·위반 여부를 판단한 결과는 아닙니다.',
+          content_token: '입력과 등록 키워드의 내용어 토큰이 일치했습니다. 등록 문구 전체의 주장을 뜻하지 않습니다.',
+          approved_expression: `관리자 승인 표현 ‘${registeredCore || matchedCore}’가 단어 경계와 일치했습니다.`,
+          literal_expression: '등록 표현이 표기 비교 옵션과 단어 경계 조건에 따라 일치했습니다.',
         }
+        const condition = conditions[evidence.match.match_reason ?? '']
+          ?? '이전 분석 결과로, 실제 매칭 경로가 저장되지 않았습니다.'
+        const optionLabels: Record<string, string> = {
+          strip_bracket_notes: '등록 괄호 설명 제외', normalize_whitespace: '공백 차이 허용',
+          ignore_case: '대소문자 무시', normalize_symbols: '설정 기호 처리',
+        }
+        const options = evidence.match.normalization_options
+        const enabled = Object.entries(options ?? {}).filter(([, value]) => value).map(([key]) => optionLabels[key] ?? key)
         const dateIdx = tooltip.findIndex(r => r.label === '마지막 검색일자')
         let at = dateIdx >= 0 ? dateIdx + 1 : tooltip.length
         if (at < tooltip.length && tooltip[at].label === '키워드 등록일자') at++
         tooltip.splice(at, 0,
           { kind: 'match', label: '매칭 결과', matched: evidence.seg, registered, matchedCore, registeredCore },
-          { kind: 'plain', label: '매칭 조건', value: condition })
+          { kind: 'plain', label: '매칭 조건', value: condition },
+          ...(options ? [{ kind: 'plain' as const, label: '사용한 비교 옵션', value: enabled.join(' · ') || '모두 끔' }] : []),
+          { kind: 'plain', label: '주변 문맥', value: sliceCp(cps, Math.max(0, evidence.match.start - 40), evidence.match.end + 40) })
       }
       const key = JSON.stringify([norm, core])
       return { code: norm, token: token || norm, toggleKey: key, groupKey: core, color: RISK_TEXT[grade] ?? 'inherit', tooltip }

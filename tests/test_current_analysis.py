@@ -114,6 +114,25 @@ class CurrentAnalysisTests(unittest.TestCase):
         finally:
             api.app.dependency_overrides.clear()
 
+    def test_admin_and_member_receive_the_same_matching_evidence(self):
+        api.app.dependency_overrides[api.get_repository] = lambda: self.repository
+        try:
+            for role in ('admin', 'member'):
+                with self.subTest(role=role), patch('api.SupabaseRepository') as repository:
+                    repository.return_value.user.return_value = {
+                        'id': f'user-{role}', 'app_metadata': {'role': role}}
+                    with TestClient(api.app) as client:
+                        response = client.post('/api/v2/analyses', headers={'Authorization': f'Bearer test-{role}'},
+                            json={**self.request, 'analysis_id': str(uuid4())})
+                    self.assertEqual(response.status_code, 200, response.text)
+                    match = response.json()['matches'][0]
+                    self.assertEqual(match['match_reason'], 'exact')
+                    self.assertEqual(match['matched_expression'], '필러')
+                    self.assertEqual(match['registered_expression'], '필러')
+                    self.assertTrue(match['normalization_options']['ignore_case'])
+        finally:
+            api.app.dependency_overrides.clear()
+
 
 if __name__ == '__main__':
     unittest.main()

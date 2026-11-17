@@ -171,6 +171,10 @@ class AnalysisMatchResponse(BaseModel):
     evidence_type: str = ''
     hit_count: str = ''
     last_search_date: str = ''
+    match_reason: Literal['exact', 'substring', 'content_token', 'approved_expression', 'literal_expression'] | None = None
+    matched_expression: str = ''
+    registered_expression: str = ''
+    normalization_options: dict[str, bool] | None = None
 
 
 class CurrentAnalysisResponse(BaseModel):
