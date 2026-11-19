@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "prerequisite-gap-checker": {
+      "source": "GitbookIO/docs-skills",
+      "commit": "23a86ec1fbd6a2b5e0ed6fcc66c362a0f0e63465",
+      "sourceType": "github",
+      "skillPath": "skills/prerequisite-gap-checker/SKILL.md",
+      "computedHash": "8023725cb52ed6fdf71b9b4f2855dfa465dbc24b623c8d584837809c6eebd2c9"
+    }
+  }
+}
