@@ -90,3 +90,12 @@
 - 검증: Toolkit 스킬 사본 내용 일치 확인. 프로젝트 테스트는 실행하지 않음.
 - 커밋/푸시: 이 기록 및 스킬 설치 파일을 커밋하고 D-drive PC의 지정 명령으로 `main`에 푸시 완료.
 - 미해결 항목: 없음.
+
+## 2026-11-19 — Keyword Risk Analyzer 포트폴리오 자료 작성
+
+- 요청: 저장소의 AGENTS.md와 프로그램 자료를 읽고 설계 로직·기능 구현·목표·기대효과 등을 분석한 HTML 및 PDF 설명자료 작성.
+- 변경 파일: `docs/portfolio/keyword-risk-analyzer.html`, `output/pdf/keyword-risk-analyzer-portfolio.pdf`, 이 기록.
+- 실행한 명령과 결과: 저장소 설계서·README·운영 안내·현행 React/API/매칭/OCR/문서 검색 구현·작업 기록을 검토. Edge headless 인쇄로 PDF 생성. `git diff --check` 실행.
+- 검증: PDF 9페이지 생성 확인. 전체 페이지 축소본과 1·6·9페이지를 시각 점검해 한글, 표, 페이지 나눔, 링크 목록과 레이아웃 확인. 매칭 정확도·시간 절감·운영 품질은 측정값이 없어 기대효과와 추후 지표로 분리 표기. 코드 테스트 및 서비스 시작은 하지 않음.
+- 커밋/푸시: 변경 diff 검토 후 D-drive PC 지정 명령으로 main에 커밋·푸시.
+- 미해결 항목: 없음.
