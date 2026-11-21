@@ -165,13 +165,17 @@ function Shell() {
     }
     const applyWidths = (table: HTMLTableElement, widths: number[], userResized = false, titleColumn?: number) => {
       const rows = Array.from(table.rows)
+      const boundedWidths = widths.map((width, column) => {
+        const maxWidth = Number(rows[0]?.cells[column]?.dataset.maxWidth)
+        return maxWidth > 0 ? Math.min(width, maxWidth) : width
+      })
       table.classList.add('is-column-fitted')
       table.classList.toggle('is-column-resized', userResized)
       table.style.tableLayout = 'fixed'
-      table.style.width = `${widths.reduce((sum, width) => sum + width, 0)}px`
+      table.style.width = `${boundedWidths.reduce((sum, width) => sum + width, 0)}px`
       Array.from(rows[0]?.cells ?? []).forEach((cell, column) => {
-        if (widths[column] === undefined || cell.colSpan > 1) return
-        cell.style.width = `${widths[column]}px`
+        if (boundedWidths[column] === undefined || cell.colSpan > 1) return
+        cell.style.width = `${boundedWidths[column]}px`
         cell.style.boxSizing = 'border-box'
       })
       if (userResized) rows.forEach(row => Array.from(row.cells).forEach((cell, column) => {
@@ -213,7 +217,9 @@ function Shell() {
           const selectionWidth = cell.classList.contains('sel') ? metrics?.selectionWidth ?? 0 : 0
           if (metrics) context.font = metrics.font
           const width = Math.ceil(Math.max(context.measureText(measuredText).width + controlPadding, selectionWidth) + (metrics?.padding ?? 0) + (metrics?.borders ?? 0) + 1)
-          widths[column] = Math.max(widths[column] ?? 0, width)
+          const maxWidth = Number(cell.dataset.maxWidth)
+          const boundedWidth = maxWidth > 0 ? Math.min(width, maxWidth) : width
+          widths[column] = Math.max(widths[column] ?? 0, boundedWidth)
           if (row.parentElement !== table.tHead && text.trim()) columnsWithContent[column] = true
           column += 1
         })

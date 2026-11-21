@@ -33,7 +33,7 @@ export function KeywordList({ rows, columns }: { rows: readonly KeywordRow[]; co
       <div className="caption mt">현재 표시된 항목: {filtered.length} / 전체: {rows.length}</div>
       <DataTable rows={filtered} rowKey={(r, i) => `${r.kwd_no}-${i}`}
         columns={columns.map(c => ({
-          key: c, label: displayHeader(c),
+          key: c, label: displayHeader(c), maxWidth: 320,
           render: (r: KeywordRow) => (DATETIME_COLUMNS.has(c) ? formatDatetime(r[c]) : r[c] ?? ''),
         }))} />
       <div className="mt">

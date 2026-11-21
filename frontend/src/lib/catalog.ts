@@ -6,7 +6,6 @@ export const LEGACY_REG_DATE_COL = '키워드등록일자'
 
 /** Header renames used by Streamlit tables (L330-334). */
 export const DISPLAY_RENAMES: Record<string, string> = {
-  [CRITERIA_COL]: `${CRITERIA_COL} (셀을 더블 클릭하여 전체 내용을 확인하세요)`,
   [LAST_COL]: '마지막 검색일자',
 }
 export const displayHeader = (column: string) => DISPLAY_RENAMES[column] ?? column

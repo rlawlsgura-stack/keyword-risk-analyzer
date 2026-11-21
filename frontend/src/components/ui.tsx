@@ -247,6 +247,7 @@ export type Column<R> = {
   key: string
   label?: string
   width?: number | string
+  maxWidth?: number
   num?: boolean
   render?: (row: R, index: number) => ReactNode
 }
@@ -278,7 +279,7 @@ export function DataTable<R extends Record<string, unknown>>({
           <tr>
             {selectable && <th className="sel"><input type="checkbox" aria-label="전체 선택" checked={!!allOn} onChange={toggleAll} title={selectLabel} /></th>}
             {showIndex && <th className="num"></th>}
-            {columns.map(c => <th key={c.key} className={c.num ? 'num' : undefined} style={c.width ? { minWidth: c.width } : undefined}>{c.label ?? c.key}</th>)}
+            {columns.map(c => <th key={c.key} className={c.num ? 'num' : undefined} data-max-width={c.maxWidth} style={c.width ? { minWidth: c.width } : undefined}>{c.label ?? c.key}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -291,7 +292,7 @@ export function DataTable<R extends Record<string, unknown>>({
                 {selectable && <td className="sel"><input type="checkbox" aria-label={`${i + 1}행 선택`} checked={!!on} onChange={() => toggle(k)} /></td>}
                 {showIndex && <td className="num idx">{i}</td>}
                 {columns.map(c => (
-                  <td key={c.key} className={c.num ? 'num' : undefined}>
+                  <td key={c.key} className={c.num ? 'num' : undefined} data-max-width={c.maxWidth}>
                     {c.render ? c.render(row, i) : formatCell(row[c.key])}
                   </td>
                 ))}

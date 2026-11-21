@@ -373,3 +373,12 @@
 - 수정: 비교모드 state 초기값을 `requirements`에서 `differences`로 변경. 화면 로드 시 A/B 차이 분석 모드가 기본 선택됨.
 - 검증: README의 React 운영 진입점과 해당 공통 OCR 탭이 관리자·일반회원 모두에 제공되는 화면 분기를 확인. `npm run build` 및 `git diff --check` 통과(기존 대형 청크 경고). 로컬 서비스 포트 실행·변경 없음.
 - 커밋/푸시: 변경 diff 검토 후 프로젝트 지정 D-drive push 명령으로 main에 반영.
+
+## 2026-11-21 — 리스트 필터 열 너비 상한 및 열 제목 안내 정리
+
+- 요청: 리스트 필터 검색 결과 표에서 과도하게 넓어지는 열의 최대 너비를 기존 UI 기준에 맞춰 제한하고, 열 제목의 더블클릭 안내 문구를 모두 제거.
+- 변경 파일: `frontend/src/App.tsx`, `frontend/src/components/KeywordList.tsx`, `frontend/src/components/ui.tsx`, `frontend/src/lib/catalog.ts`, 이 기록.
+- 수정: 공용 DataTable 열 설정에 최대 너비 옵션을 추가하고 리스트 필터 표의 각 열 자동 맞춤·더블클릭 맞춤·수동 조절 폭을 최대 320px(20rem)로 제한. 표 셀은 기존 줄바꿈 규칙으로 긴 값을 표시. 공용 열 이름 변환에서 세부 심의기준 헤더의 더블클릭 안내 suffix 삭제.
+- 검증: README의 React 운영 UI, AnalysisTab의 관리자·일반회원 공통 노출, 기존 DataTable 자동 너비 조정 흐름을 확인. `npm run build` 성공(기존 대형 청크 경고), `git diff --check` 통과. `rg`로 안내 문구가 프런트엔드 소스에 남지 않음을 확인. 서비스 포트 실행·변경 없음.
+- 결과: 리스트 필터 표의 어떤 열도 자동/수동 너비 조절 시 320px를 넘지 않으며, 내용은 줄바꿈됩니다. 열 제목에서 더블클릭 안내가 제거됩니다.
+- 커밋/푸시: diff 검토 후 프로젝트 지정 D-drive push 명령으로 main에 반영.
