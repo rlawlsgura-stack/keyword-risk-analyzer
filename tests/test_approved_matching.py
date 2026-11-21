@@ -86,5 +86,23 @@ class ApprovedMatchingTests(unittest.TestCase):
         self.assertEqual((hit.matched_expression, hit.registered_expression), ('antiaging', 'ANTIAGING'))
         self.assertTrue(hit.normalization_options['ignore_case'])
 
+    def test_approved_similar_keyword_is_literal_and_works_in_each_mode(self):
+        frame = pd.DataFrame([{'kwd_no': 'W001', '키워드명': '체중 감량',
+                               '상품카테고리': '건강기능식품', '리스크 등급': '2등급'}])
+        aliases = {'W001': {'term': '체중 감량', 'items': [
+            {'expression': '몸무게 줄이기', 'canonical_term': '체중 감량'}]}}
+        for mode in ('exact', 'similar', 'partial'):
+            config = replace(self.config, mode=mode)
+            text = '😀 몸무게 줄이기 제품'
+            matches = match_text(text, frame, config=config, similar_keywords=aliases)
+            self.assertEqual(len(matches), 1)
+            hit = matches[0]
+            self.assertEqual((hit.kwd_no, hit.term, hit.match_reason),
+                             ('W001', '체중 감량', 'similar_keyword'))
+            self.assertEqual(text[hit.start:hit.end], '몸무게 줄이기')
+            self.assertEqual(hit.registered_expression, '몸무게 줄이기')
+        self.assertFalse(match_text('몸무게를 줄여준다', frame, config=self.config,
+                                    similar_keywords=aliases))
+
 if __name__ == '__main__':
     unittest.main()

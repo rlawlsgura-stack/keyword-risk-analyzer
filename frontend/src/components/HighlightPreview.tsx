@@ -83,11 +83,11 @@ export function HighlightPreview({ segments }: { segments: Segment[] }) {
           return (
             <span key={i}>
               {s.lead}
-              <span className="hl-mark" tabIndex={0} aria-label="검출 키워드 표시 전환" role="button"
-                style={{ background: RISK_BG[s.grade] ?? RISK_BG[0], color: '#000', borderRadius: 2, cursor: 'pointer' }}
+              <span className={`hl-mark${s.similar ? ' hl-similar' : ''}`} tabIndex={0} aria-label={s.similar ? '승인된 유사 키워드 검출 · 표시 전환' : '검출 키워드 표시 전환'} role="button"
+                style={{ background: s.similar ? '#dbeafe' : RISK_BG[s.grade] ?? RISK_BG[0], color: '#000', borderRadius: 2, cursor: 'pointer', ...(s.similar ? { outline: '1px solid #2563eb' } : {}) }}
                 onClick={e => { e.stopPropagation(); toggleMark(s.entries) }}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMark(s.entries) } }}>
-                【<b>{s.core}</b>】
+                【<b>{s.core}</b>】{s.similar && <span style={{ color: '#1d4ed8', fontSize: '.8em', fontWeight: 700 }}> ≈유사</span>}
                 {visible.length > 0 && (
                   <span className="kwdno-group" style={{ whiteSpace: 'nowrap' }}>(
                     {visible.map((entry, j) => {

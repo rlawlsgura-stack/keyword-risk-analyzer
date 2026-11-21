@@ -187,6 +187,18 @@ export const submitRegistrationRequests = (candidates: RegistrationCandidate[]) 
 export const normalizeUnmatched = (candidates: { surface: string; occurrences: number }[]) =>
   request<{ items: NormalizationRecommendation[] }>('/api/v1/unmatched-terms/normalize', { method: 'POST', body: json({ candidates }) })
 
+export const suggestSimilarKeywords = (terms: string[]) =>
+  request<{ items: { term: string; candidates: import('./types.ts').SimilarKeywordCandidate[] }[] }>(
+    '/api/v1/unmatched-terms/similar-keyword-suggestions', { method: 'POST', body: json({ terms }) })
+
+export const approveSimilarKeyword = (body: { kwd_no: string; term: string; expression: string; expected_expressions: string[] }) =>
+  request<{ kwd_no: string; term: string; expressions: string[] }>(
+    '/api/v1/admin/similar-keywords/approve', { method: 'POST', body: json(body) })
+
+export const revokeSimilarKeyword = (body: { kwd_no: string; term: string; expression: string; expected_expressions: string[] }) =>
+  request<{ kwd_no: string; term: string; expressions: string[] }>(
+    '/api/v1/admin/similar-keywords/revoke', { method: 'POST', body: json(body) })
+
 export const suggestKeyword = (term: string, category = '', context = '') =>
   request<import('./types.ts').KeywordSuggestion>('/api/v1/keyword-suggestions', {
     method: 'POST', body: json({ term, category, context }),

@@ -7,7 +7,8 @@ from fastapi.testclient import TestClient
 
 import api
 from auxiliary_analysis import (AuxiliaryUnavailable, _catalog_batch, _embed,
-                                analyze_auxiliary, morphology_candidates)
+                                analyze_auxiliary, morphology_candidates,
+                                semantic_keyword_candidates)
 
 
 class AuxiliaryTests(unittest.TestCase):
@@ -55,6 +56,16 @@ class AuxiliaryTests(unittest.TestCase):
         with patch('auxiliary_analysis.requests.post', return_value=response):
             with self.assertRaises(AuxiliaryUnavailable):
                 _embed(['test'], 'test', 'test-key')
+
+    def test_unmatched_semantic_candidates_batch_queries_and_rank_per_expression(self):
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'test-key'}), \
+             patch('auxiliary_analysis._embed', side_effect=[
+                 [[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]],
+             ]) as embed:
+            results = semantic_keyword_candidates(['개선하다', '지방'], self.df.to_dict('records'), 1)
+        self.assertEqual([result[0]['kwd_no'] for result in results], ['K1', 'K2'])
+        self.assertEqual(embed.call_count, 2)
+        self.assertEqual(embed.call_args_list[0].args[0], ['개선하다', '지방'])
 
     def test_auxiliary_endpoint_is_retired(self):
         with TestClient(api.app) as client:

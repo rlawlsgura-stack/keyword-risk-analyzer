@@ -30,6 +30,8 @@ def _explain(match, text, config, reason, expression):
     offset = registered.find(target) if target else -1
     surface = (match.term[positions[offset]:positions[offset + len(target) - 1] + 1]
                if offset >= 0 else '')
+    if reason == 'similar_keyword':
+        surface = expression
     return ExplainedMatch(**asdict(match), match_reason=reason,
                           matched_expression=text[match.start:match.end],
                           registered_expression=surface,
@@ -82,11 +84,45 @@ def _keyword_tokens(text):
                      if t.tag.split('-')[0] in _CONTENT_TAGS)
 
 
-def match_text(text, keywords, *, config, categories=(), risks=(), approved_partials=None, **options):
+def match_text(text, keywords, *, config, categories=(), risks=(), approved_partials=None,
+               similar_keywords=None, **options):
     if config.mode != 'similar':
         matches = legacy_match_text(text, keywords, config=config, categories=categories, risks=risks, **options)
-        return [_explain(match, text, config, 'exact' if config.mode == 'exact' else 'substring',
-                         text[match.start:match.end]) for match in matches]
+        matches = [_explain(match, text, config, 'exact' if config.mode == 'exact' else 'substring',
+                            text[match.start:match.end]) for match in matches]
+        # Approved similar keywords are literal aliases and apply in every analysis mode.
+        if similar_keywords:
+            selected = keywords
+            for column, values in (('상품카테고리', categories), ('리스크 등급', risks)):
+                if values:
+                    selected = (selected.loc[selected[column].astype(str).str.strip().isin(values)]
+                                if column in selected else selected.iloc[:0])
+            boundary_tokens = _kiwi().tokenize(_boundary_text(text, config))
+            starts = {token.start for token in boundary_tokens}
+            ends = {token.start + token.len for token in boundary_tokens}
+            normalized, index_map = _comparison_with_map(text, config)
+            for row in selected.fillna('').to_dict('records'):
+                term, code = str(row['키워드명']), str(row.get('kwd_no', ''))
+                saved = similar_keywords.get(code, {})
+                if saved.get('term') != term:
+                    continue
+                for item in saved.get('items', []):
+                    if not isinstance(item, dict) or item.get('canonical_term') != term:
+                        continue
+                    expression = str(item.get('expression', '')).strip()
+                    target, _ = _comparison_with_map(expression, config)
+                    if not _has_min_partial_chars(target):
+                        continue
+                    offset = 0
+                    while (found := normalized.find(target, offset)) >= 0:
+                        start, end = index_map[found], index_map[found + len(target) - 1] + 1
+                        if start in starts and end in ends:
+                            match = Match2(term, start, end, str(row.get('상품카테고리', '')),
+                                           str(row.get('리스크 등급', '')),
+                                           str(row.get('리스크 등급별 세부 심의기준', '')), code or None)
+                            matches.append(_explain(match, text, config, 'similar_keyword', expression))
+                        offset = found + 1
+        return sorted(_maximal_matches(matches), key=lambda m: (m.start, m.end))
     for column, selected in (('상품카테고리', categories), ('리스크 등급', risks)):
         if selected:
             keywords = (keywords.loc[keywords[column].astype(str).str.strip().isin(selected)]
@@ -98,6 +134,9 @@ def match_text(text, keywords, *, config, categories=(), risks=(), approved_part
     tokens = [t for t in tokens if t.tag.split('-')[0] in _CONTENT_TAGS]
     starts = {t.start for t in tokens}
     ends = {t.start + t.len for t in tokens}
+    alias_tokens = _kiwi().tokenize(_boundary_text(text, config))
+    alias_starts = {t.start for t in alias_tokens}
+    alias_ends = {t.start + t.len for t in alias_tokens}
     source_tokens = {}
     for token in tokens:
         key = _comparison_with_map(token.form, config)[0]
@@ -127,6 +166,15 @@ def match_text(text, keywords, *, config, categories=(), risks=(), approved_part
                                  if _has_min_partial_chars(_comparison_with_map(expression, config)[0])]
             approved = validate_expressions(term, saved_expressions, config)
             expressions.extend(approved)
+        similar_saved = (similar_keywords or {}).get(code, {})
+        aliases = []
+        if similar_saved.get('term') == term:
+            aliases = [str(item.get('expression', '')).strip()
+                       for item in similar_saved.get('items', [])
+                       if isinstance(item, dict) and item.get('canonical_term') == term]
+            aliases = [value for value in aliases if _has_min_partial_chars(
+                _comparison_with_map(value, config)[0])]
+            expressions.extend(aliases)
         for expression in dict.fromkeys(expressions):
             target, _ = _comparison_with_map(expression, config)
             if not target or not _has_min_partial_chars(target):
@@ -134,11 +182,13 @@ def match_text(text, keywords, *, config, categories=(), risks=(), approved_part
             offset = 0
             while (found := normalized.find(target, offset)) >= 0:
                 start, end = index_map[found], index_map[found + len(target) - 1] + 1
-                if start in starts and end in ends:
+                boundaries = (alias_starts, alias_ends) if expression in aliases else (starts, ends)
+                if start in boundaries[0] and end in boundaries[1]:
                     match = Match2(term, start, end, str(row.get('상품카테고리', '')),
                                           str(row.get('리스크 등급', '')),
                                           str(row.get('리스크 등급별 세부 심의기준', '')), code or None)
-                    matches.append(_explain(match, text, config,
-                        'approved_expression' if expression in approved else 'literal_expression', expression))
+                    reason = ('similar_keyword' if expression in aliases else
+                              'approved_expression' if expression in approved else 'literal_expression')
+                    matches.append(_explain(match, text, config, reason, expression))
                 offset = found + 1
     return sorted(_maximal_matches(matches), key=lambda m: (m.start, m.end))

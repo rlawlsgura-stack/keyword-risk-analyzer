@@ -94,7 +94,8 @@ export function AnalysisTab() {
         return Object.fromEntries(fresh.columns.map(c => [c, base[c] ?? ''])) as KeywordRow
       }))
       const segments = buildSegments(text, result.matches, {
-        catalogRows: fresh.rows, columns: fresh.columns, mode, partialMinLen: input.partial_min_len, approvedPartials: approved,
+        catalogRows: fresh.rows, columns: fresh.columns, mode, partialMinLen: input.partial_min_len,
+        approvedPartials: approved,
       })
       setOutcome({ show: true, count: uniqueCodes.length, rows, matches: result.matches, segments })
     } catch (error) {

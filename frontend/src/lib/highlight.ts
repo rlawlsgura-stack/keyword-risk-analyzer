@@ -16,12 +16,13 @@ export type CodeEntry = {
   toggleKey: string
   groupKey: string
   color: string
+  similarKeyword: boolean
   tooltip: TooltipRow[]
 }
 
 export type Segment =
   | { kind: 'text'; text: string }
-  | { kind: 'mark'; lead: string; core: string; trail: string; grade: number; entries: CodeEntry[] }
+  | { kind: 'mark'; lead: string; core: string; trail: string; grade: number; similar: boolean; entries: CodeEntry[] }
 
 const TOKEN_RE = /([A-Za-z]{2})\s*([0-9]{3,})/
 
@@ -170,13 +171,20 @@ export function buildSegments(text: string, matches: readonly Match[], opts: {
           { kind: 'plain', label: '매칭 조건', value: condition },
           ...(options ? [{ kind: 'plain' as const, label: '사용한 비교 옵션', value: enabled.join(' · ') || '모두 끔' }] : []),
           { kind: 'plain', label: '주변 문맥', value: sliceCp(cps, Math.max(0, evidence.match.start - 40), evidence.match.end + 40) })
+        if (evidence.match.match_reason === 'similar_keyword') tooltip.splice(at, 0,
+          { kind: 'plain', label: '검출 구분', value: '관리자 승인 유사 키워드' },
+          { kind: 'plain', label: '유사 키워드', value: evidence.match.matched_expression || evidence.seg },
+          { kind: 'plain', label: '연결 원 키워드', value: registered },
+          { kind: 'plain', label: '검출 사유', value: `승인된 유사 키워드 ‘${evidence.match.registered_expression || registered}’의 문자 표현이 입력 문구에서 일치했습니다.` })
       }
       const key = JSON.stringify([norm, core])
-      return { code: norm, token: token || norm, toggleKey: key, groupKey: core, color: RISK_TEXT[grade] ?? 'inherit', tooltip }
+      return { code: norm, token: token || norm, toggleKey: key, groupKey: core,
+        color: RISK_TEXT[grade] ?? 'inherit', similarKeyword: evidence?.match.match_reason === 'similar_keyword', tooltip }
     })
     const grades = new Set([...info.risk.values()].filter(Boolean))
     const grade = grades.size === 1 ? [...grades][0] : 0
-    out.push({ kind: 'mark', lead: seg.slice(0, seg.length - seg.trimStart().length), core, trail: seg.slice(seg.trimEnd().length), grade, entries })
+    out.push({ kind: 'mark', lead: seg.slice(0, seg.length - seg.trimStart().length), core,
+      trail: seg.slice(seg.trimEnd().length), grade, similar: entries.some(entry => entry.similarKeyword), entries })
     cur = info.end
     const tail = sliceCp(cps, cur, cps.length)
     const paren = parenRe.exec(tail)

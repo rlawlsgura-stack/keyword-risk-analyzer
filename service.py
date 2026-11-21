@@ -145,11 +145,13 @@ def analyze_current(repository, request, actor):
         **{name: payload[name] for name in NORMALIZATION_OPTIONS},
     ))
     approved = repository.load_setting(SETTING_NAME, {}) if config.mode == 'similar' else None
+    similar = repository.load_setting('approved_similar_keywords_v1', {})
     text = payload['text']
     matches = match_approved(text, keywords, config=config,
                              categories=payload['categories'], risks=payload['risks'],
-                             approved_partials=approved)
-    coverage = (match_approved(text, keywords, config=config, approved_partials=approved)
+                             approved_partials=approved, similar_keywords=similar)
+    coverage = (match_approved(text, keywords, config=config, approved_partials=approved,
+                                similar_keywords=similar)
                 if payload['categories'] or payload['risks'] else matches)
     candidates = extract_unmatched_term_surfaces(text, coverage, limit=None)
     collection_pending = False

@@ -126,6 +126,20 @@ test('similar mode reports the approved expression that fired', () => {
   assert.ok(condition?.kind === 'plain' && condition.value.includes('‘에이징’'))
 })
 
+test('approved similar keywords are visually distinct and explain their canonical match', () => {
+  const catalog = [row('W001', '체중 감량', '건강기능식품', { '리스크 등급': '2등급(대체키워드사용)' })]
+  const mark = buildSegments('몸무게 줄이기', [{ ...match(0, 7, 'W001', '체중 감량'),
+    match_reason: 'similar_keyword', matched_expression: '몸무게 줄이기', registered_expression: '몸무게 줄이기' }], {
+    catalogRows: catalog, columns: Object.keys(catalog[0]), mode: 'exact', partialMinLen: 2, approvedPartials: {},
+  })[0]
+  assert.ok(mark.kind === 'mark' && mark.similar)
+  if (mark.kind !== 'mark') return
+  assert.equal(mark.entries[0].similarKeyword, true)
+  assert.ok(mark.entries[0].tooltip.some(item => item.kind === 'plain' && item.label === '유사 키워드' && item.value === '몸무게 줄이기'))
+  assert.ok(mark.entries[0].tooltip.some(item => item.kind === 'plain' && item.label === '연결 원 키워드' && item.value === '체중 감량'))
+  assert.ok(mark.entries[0].tooltip.some(item => item.kind === 'plain' && item.label === '상품카테고리' && item.value === '건강기능식품'))
+})
+
 test('server evidence wins over current settings and preserves case-insensitive surfaces', () => {
   const hit: Match = { ...match(2, 11, 'B001', 'ANTIAGING'), match_reason: 'exact',
     matched_expression: 'antiaging', registered_expression: 'ANTIAGING',

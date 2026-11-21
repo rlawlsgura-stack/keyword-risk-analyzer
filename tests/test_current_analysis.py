@@ -21,12 +21,13 @@ class MemoryRepository:
         self.history_writes = 0
         self.collection_calls = 0
         self.fail_collection = False
+        self.settings = {}
 
     def load_keywords(self):
         return self.keywords.copy()
 
     def load_setting(self, name, default):
-        return default
+        return self.settings.get(name, default)
 
     def previous_analysis(self, analysis_id, actor, fingerprint=None):
         entry = self.saved.get(analysis_id)
@@ -81,13 +82,25 @@ class CurrentAnalysisTests(unittest.TestCase):
         self.assertTrue(first['recorded'])
         self.assertTrue(first['unmatched_collection_pending'])
         self.assertEqual(self.repository.history_writes, 1)
-
         self.repository.fail_collection = False
         retried = analyze_current(self.repository, self.request, 'user-1')
         self.assertFalse(retried['unmatched_collection_pending'])
         self.assertEqual(retried['analysis_id'], self.request['analysis_id'])
         self.assertEqual(self.repository.collection_calls, 2)
         self.assertEqual(self.repository.history_writes, 1)
+
+    def test_approved_similar_keyword_is_returned_as_canonical_match(self):
+        self.repository.keywords.loc[0, '키워드명'] = '체중 감량'
+        self.repository.settings['approved_similar_keywords_v1'] = {
+            'A001': {'term': '체중 감량', 'items': [
+                {'expression': '몸무게 줄이기', 'canonical_term': '체중 감량'}]}}
+        request = {**self.request, 'text': '광고의 몸무게 줄이기 표현'}
+        result = analyze_current(self.repository, request, 'user-1')
+        match = next(item for item in result['matches'] if item['match_reason'] == 'similar_keyword')
+        self.assertEqual((match['term'], match['kwd_no'], match['matched_expression'],
+                          match['registered_expression']),
+                         ('체중 감량', 'A001', '몸무게 줄이기', '몸무게 줄이기'))
+        self.assertEqual(request['text'][match['start']:match['end']], '몸무게 줄이기')
 
     def test_api_rejects_integration_token_for_recorded_analysis(self):
         api.app.dependency_overrides[api.current_actor] = lambda: 'integration'

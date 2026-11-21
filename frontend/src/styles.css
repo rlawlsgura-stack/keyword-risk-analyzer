@@ -513,6 +513,9 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 
 .recommendation-target { color: #8a4b00; background: #fff1c2; border-radius: 4px; padding: .2rem .4rem; font-weight: 600; }
 .recommendation-highlight { color: #842a00; background: #ffe08a; border-radius: 2px; padding: 0 .04em; font-weight: 700; }
+.similar-keyword-cell { min-width: 250px; }
+.similar-keyword-cell select { max-width: 360px; width: 100%; }
+.similar-approved-badge { display: inline-block; margin-top: .25rem; border-radius: 999px; padding: .15rem .45rem; background: #dbeafe; color: #1d4ed8; font-size: .78rem; font-weight: 700; }
 .recommendation-db-table { min-width: 760px; width: 100%; border-collapse: collapse; font-size: .9rem; }
 .recommendation-db-table th, .recommendation-db-table td { border: 1px solid #d9dde3; padding: .55rem; text-align: left; vertical-align: top; white-space: pre-wrap; }
 .recommendation-db-table th { background: #f3f5f7; }

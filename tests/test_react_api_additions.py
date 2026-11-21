@@ -147,6 +147,59 @@ class KeywordRequestAdditionsTests(unittest.TestCase):
         self.assertIn('/', response.json()['ignored_symbols'])
         self.assertIn('B001', response.json()['approved_partials'])
 
+    def test_admin_can_approve_similar_keyword_and_persist_review_provenance(self):
+        self.repository.user.return_value = {'id': 'u1', 'email': 'a@example.test',
+                                             'app_metadata': {'role': 'admin'}}
+        self.repository.load_setting.return_value = {}
+        response = self.client.post('/api/v1/admin/similar-keywords/approve', headers=self.headers, json={
+            'kwd_no': 'B001', 'term': '필러', 'expression': '볼륨을 채우기',
+            'expected_expressions': [],
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        name, value = self.repository.save_setting.call_args.args
+        self.assertEqual(name, 'approved_similar_keywords_v1')
+        saved = value['B001']['items'][0]
+        self.assertEqual((saved['expression'], saved['canonical_term']),
+                         ('볼륨을 채우기', '필러'))
+        self.assertTrue(saved['approved_at'])
+
+    def test_similar_keyword_approval_rejects_alias_that_is_an_existing_keyword(self):
+        self.repository.user.return_value = {'id': 'u1', 'email': 'a@example.test',
+                                             'app_metadata': {'role': 'admin'}}
+        self.repository.load_setting.return_value = {}
+        response = self.client.post('/api/v1/admin/similar-keywords/approve', headers=self.headers, json={
+            'kwd_no': 'B001', 'term': '필러', 'expression': '필러', 'expected_expressions': [],
+        })
+        self.assertEqual(response.status_code, 422)
+        self.repository.save_setting.assert_not_called()
+
+    def test_similar_keyword_suggestion_returns_catalog_context(self):
+        from unittest.mock import patch
+        with patch('auxiliary_analysis.semantic_keyword_candidates', return_value=[[
+            {'kwd_no': 'B001', 'keyword': '필러', 'similarity': 0.8123},
+        ]]) as suggest:
+            response = self.client.post('/api/v1/unmatched-terms/similar-keyword-suggestions',
+                                        headers=self.headers, json={'terms': ['볼륨을 채우기']})
+        self.assertEqual(response.status_code, 200, response.text)
+        item = response.json()['items'][0]['candidates'][0]
+        self.assertEqual((item['keyword'], item['category'], item['risk'], item['criteria']),
+                         ('필러', '화장품', '1등급(사용금지)', '기준'))
+        suggest.assert_called_once()
+
+    def test_admin_can_revoke_similar_keyword_without_dropping_other_approvals(self):
+        self.repository.user.return_value = {'id': 'u1', 'email': 'a@example.test',
+                                             'app_metadata': {'role': 'admin'}}
+        self.repository.load_setting.return_value = {'B001': {'term': '필러', 'items': [
+            {'expression': '볼륨 채우기', 'canonical_term': '필러'},
+            {'expression': '주입 시술', 'canonical_term': '필러'},
+        ]}}
+        response = self.client.post('/api/v1/admin/similar-keywords/revoke', headers=self.headers, json={
+            'kwd_no': 'B001', 'term': '필러', 'expression': '볼륨 채우기',
+            'expected_expressions': ['볼륨 채우기', '주입 시술'],
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['expressions'], ['주입 시술'])
+
 
 if __name__ == '__main__':
     unittest.main()

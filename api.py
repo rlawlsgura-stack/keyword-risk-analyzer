@@ -171,7 +171,7 @@ class AnalysisMatchResponse(BaseModel):
     evidence_type: str = ''
     hit_count: str = ''
     last_search_date: str = ''
-    match_reason: Literal['exact', 'substring', 'content_token', 'approved_expression', 'literal_expression'] | None = None
+    match_reason: Literal['exact', 'substring', 'content_token', 'approved_expression', 'literal_expression', 'similar_keyword'] | None = None
     matched_expression: str = ''
     registered_expression: str = ''
     normalization_options: dict[str, bool] | None = None
@@ -400,6 +400,37 @@ class AdminApprovedPartialUpdate(BaseModel):
     term: str = Field(min_length=1, max_length=500)
     expected_expressions: list[str] = Field(max_length=500)
     expressions: list[str] = Field(max_length=500)
+
+
+class SimilarKeywordSuggestionRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    terms: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator('terms')
+    @classmethod
+    def validate_terms(cls, values):
+        if any(not value.strip() or len(value.strip()) > 150 for value in values):
+            raise ValueError('각 미매칭 표현은 1~150자여야 합니다.')
+        return values
+
+
+class AdminSimilarKeywordApproval(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    kwd_no: str = Field(min_length=1, max_length=100)
+    term: str = Field(min_length=1, max_length=500)
+    expression: str = Field(min_length=2, max_length=150)
+    expected_expressions: list[str] = Field(max_length=500)
+
+
+def _similar_keyword_config(repository):
+    return load_matching_config(repository, MatchingConfig(
+        mode='exact', strip_bracket_notes=True, normalize_whitespace=True,
+        ignore_case=True, normalize_symbols=True))
+
+
+def _similar_keyword_comparison_key(value, config):
+    from matching_engine import _comparison_with_map
+    return _comparison_with_map(str(value or ''), config)[0]
 
 
 def _catalog_columns(current) -> list[str]:
@@ -707,6 +738,120 @@ def normalize_unmatched_terms(body: UnmatchedNormalizationRequest, actor=Depends
     except AuxiliaryUnavailable as exc:
         raise HTTPException(503, str(exc)) from exc
     return {'items': candidates}
+
+
+@app.post('/api/v1/unmatched-terms/similar-keyword-suggestions')
+def suggest_unmatched_similar_keywords(body: SimilarKeywordSuggestionRequest,
+                                       actor=Depends(current_actor),
+                                       repository=Depends(get_repository)):
+    if actor == 'integration':
+        raise HTTPException(403, 'A user account is required for AI suggestions')
+    from auxiliary_analysis import AuxiliaryUnavailable, semantic_keyword_candidates
+    keywords = repository.load_keywords().fillna('').to_dict('records')
+    terms = list(dict.fromkeys(value.strip() for value in body.terms if value.strip()))
+    by_code = {str(row.get('kwd_no', '')).strip(): row for row in keywords}
+    try:
+        candidates_by_term = semantic_keyword_candidates(terms, keywords, 5)
+    except AuxiliaryUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    results = [{'term': term, 'candidates': [{
+        'kwd_no': item['kwd_no'], 'keyword': item['keyword'], 'similarity': item['similarity'],
+        'category': str(by_code.get(item['kwd_no'], {}).get(DB_COLS[2], '')).strip(),
+        'risk': str(by_code.get(item['kwd_no'], {}).get(DB_COLS[3], '')).strip(),
+        'criteria': str(by_code.get(item['kwd_no'], {}).get(DB_COLS[5], '')).strip(),
+        'evidence_type': str(by_code.get(item['kwd_no'], {}).get(DB_COLS[6], '')).strip(),
+        'alternative': str(by_code.get(item['kwd_no'], {}).get(DB_COLS[4], '-')).strip() or '-'}
+        for item in candidates]}
+        for term, candidates in zip(terms, candidates_by_term)]
+    return {'items': results}
+
+
+@app.post('/api/v1/admin/similar-keywords/approve')
+def approve_admin_similar_keyword(body: AdminSimilarKeywordApproval,
+                                  actor=Depends(current_actor),
+                                  credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                  repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    user = repository.user(credentials.credentials)
+    if (user.get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    current = repository.load_keywords()
+    matched = current.loc[current['kwd_no'].astype(str).str.strip() == body.kwd_no.strip()]
+    if matched.empty or str(matched.iloc[0][DB_COLS[1]]).strip() != body.term.strip():
+        raise HTTPException(409, 'Keyword changed or no longer exists. Reload the editor.')
+    expression = body.expression.strip()
+    comparison_config = _similar_keyword_config(repository)
+    normalized = _similar_keyword_comparison_key(expression, comparison_config)
+    if len(''.join(normalized.split())) < 2:
+        raise HTTPException(422, '유사 키워드는 공백 제외 2글자 이상이어야 합니다.')
+    similar_setting = 'approved_similar_keywords_v1'
+    rules = repository.load_setting(similar_setting, {})
+    existing = rules.get(body.kwd_no, {})
+    items = existing.get('items', []) if existing.get('term') == body.term else []
+    expressions = [str(item.get('expression', '')).strip() for item in items if isinstance(item, dict)]
+    if expressions != body.expected_expressions:
+        raise HTTPException(409, '유사 키워드 규칙이 변경됐습니다. 새로고침 후 다시 승인하세요.')
+    collision = current.loc[current[DB_COLS[1]].astype(str).map(
+        lambda value: _similar_keyword_comparison_key(value, comparison_config) == normalized)]
+    if not collision.empty:
+        raise HTTPException(422, '이미 원 키워드로 등록된 표현은 유사 키워드로 승인할 수 없습니다.')
+    for code, entry in rules.items():
+        if code == body.kwd_no or not isinstance(entry, dict):
+            continue
+        for item in entry.get('items', []):
+            if not isinstance(item, dict):
+                continue
+            value = _similar_keyword_comparison_key(item.get('expression', ''), comparison_config)
+            if value == normalized:
+                raise HTTPException(409, '이미 다른 원 키워드에 연결된 표현입니다.')
+    if any(_similar_keyword_comparison_key(value, comparison_config) == normalized
+           for value in expressions):
+        return {'kwd_no': body.kwd_no, 'term': body.term, 'expressions': expressions}
+    items = [item for item in items if isinstance(item, dict)] + [{
+        'expression': expression, 'canonical_term': body.term,
+        'approved_at': datetime.now().astimezone().isoformat(),
+    }]
+    rules = dict(rules)
+    rules[body.kwd_no] = {'term': body.term, 'items': items}
+    repository.save_setting(similar_setting, rules)
+    return {'kwd_no': body.kwd_no, 'term': body.term,
+            'expressions': [item['expression'] for item in items]}
+
+
+@app.post('/api/v1/admin/similar-keywords/revoke')
+def revoke_admin_similar_keyword(body: AdminSimilarKeywordApproval,
+                                 actor=Depends(current_actor),
+                                 credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+                                 repository=Depends(get_repository)):
+    if actor == 'integration' or not credentials:
+        raise HTTPException(403, 'Administrator session required')
+    if (repository.user(credentials.credentials).get('app_metadata') or {}).get('role') != 'admin':
+        raise HTTPException(403, 'Administrator role required')
+    current = repository.load_keywords()
+    matched = current.loc[current['kwd_no'].astype(str).str.strip() == body.kwd_no.strip()]
+    if matched.empty or str(matched.iloc[0][DB_COLS[1]]).strip() != body.term.strip():
+        raise HTTPException(409, 'Keyword changed or no longer exists. Reload the editor.')
+    comparison_config = _similar_keyword_config(repository)
+    setting = 'approved_similar_keywords_v1'
+    rules = repository.load_setting(setting, {})
+    existing = rules.get(body.kwd_no, {})
+    items = existing.get('items', []) if existing.get('term') == body.term else []
+    expressions = [str(item.get('expression', '')).strip() for item in items if isinstance(item, dict)]
+    if expressions != body.expected_expressions:
+        raise HTTPException(409, '유사 키워드 규칙이 변경됐습니다. 새로고침 후 다시 취소하세요.')
+    target = _similar_keyword_comparison_key(body.expression, comparison_config)
+    remaining = [item for item in items if not (
+        isinstance(item, dict) and
+        _similar_keyword_comparison_key(item.get('expression', ''), comparison_config) == target)]
+    rules = dict(rules)
+    if remaining:
+        rules[body.kwd_no] = {'term': body.term, 'items': remaining}
+    else:
+        rules.pop(body.kwd_no, None)
+    repository.save_setting(setting, rules)
+    return {'kwd_no': body.kwd_no, 'term': body.term,
+            'expressions': [item['expression'] for item in remaining]}
 
 
 @app.get('/api/v1/unmatched-terms/recommendation-draft')
@@ -1571,7 +1716,8 @@ def matching_rules(actor=Depends(current_actor), repository=Depends(get_reposito
     """Read-only common matching rules for the analysis screen's summary and evidence text."""
     config = load_matching_config(repository, MatchingConfig())
     return {'ignored_symbols': list(config.ignored_symbols),
-            'approved_partials': repository.load_setting('approved_partial_expressions_v272', {})}
+            'approved_partials': repository.load_setting('approved_partial_expressions_v272', {}),
+            'similar_keywords': repository.load_setting('approved_similar_keywords_v1', {})}
 
 
 @app.get('/api/v1/reports/top-keywords', dependencies=[Depends(current_actor)],

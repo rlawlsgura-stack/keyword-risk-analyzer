@@ -283,3 +283,13 @@
 - 검증: 현행 승인 부분 표현은 등록명 내부의 문자만 허용하며 동의어 별칭은 미구현임을 확인. 기존 의미 유사 후보는 확정 매칭·위험 등급에 합치지 않음을 확인. 작업 기록 diff 및 `git diff --check` 확인. 앱 기능 테스트는 설계 설명 요청이므로 수행하지 않음.
 - 결과: 실제 미매칭 표현 수집→임베딩 후보 검색→AI 문맥 검토→미승인 후보 표시→관리자 일괄 승인→이후 결정적 별칭 매칭의 단계적 방안을 제시. 원문 위치 검증, 상품군 제한, 부정·조건 문맥, 성능·비용 및 측정 지표를 함께 제안.
 - 커밋/푸시: 이 기록을 검토한 뒤 저장소 지침의 D-drive 지정 명령으로 main에 반영.
+
+## 2026-11-21 — 관리자 승인 유사 키워드 흐름 구현
+
+- 요청: 미매칭 후보 목록에서 임베딩 기반 유사 원 키워드를 제안하고, 관리자 승인·취소, 원 키워드 분류 정보 자동 채움, 분석 하이라이트와 상세 팝업에 연결.
+- 변경 파일: `api.py`, `approved_matching.py`, `auxiliary_analysis.py`, `service.py`, `frontend/src/tabs/UnmatchedTab.tsx`, `frontend/src/tabs/AnalysisTab.tsx`, `frontend/src/components/HighlightPreview.tsx`, `frontend/src/lib/api.ts`, `frontend/src/lib/highlight.ts`, `frontend/src/lib/types.ts`, `frontend/src/styles.css`, 관련 테스트, `docs/design/02_api_design.md`, `docs/design/03_screen_design.md`, `docs/design/05_matching_design.md`, 이 기록.
+- 실행한 명령과 결과: 초기 작업분에 대해 지정된 `git push https://github.com/rlawlsgura-stack/keyword-risk-analyzer.git main:refs/heads/main`을 실행했고 원격 main이 당시 HEAD와 일치함을 확인. `npm run build`, `npm test`, `.venv`의 `python -m unittest discover -s tests`, `git diff --check` 실행.
+- 구현: 미매칭 표현 최대 20개를 한 번에 임베딩해 원 키워드 상위 5개를 제안하고 행별로 직접 선택. 임베딩 점수는 참고 정보이며 관리자 승인 전에는 분석 매칭·등급에 반영하지 않음. 승인 시 설정에 연결을 저장하고 승인 취소도 지원. 승인 표현은 원문 위치로 탐지해 모든 모드에서 원 키워드 코드·분류를 반환하고, 하이라이트와 툴팁에 유사 표현/원 키워드/이유를 구분. 정규화 작업 시 승인 표현은 원 키워드명과 분류 필드를 그대로 사용.
+- 검증: README의 React 운영 UI와 일반회원 추천·관리자 승인/취소 분기를 확인. 프런트엔드 빌드 성공, Node 테스트 17개 통과, Python 테스트 145개 통과·1개 skip, diff 공백 검사 통과. 초기 시스템 Python에는 테스트 의존성이 없어 프로젝트 `.venv`로 실행. 로컬 서비스를 시작하지 않았고 포트·Supabase 설정을 변경하지 않음.
+- 운영 제한: 선택 표현과 원 키워드·분류·심의기준 텍스트가 외부 임베딩 API로 전송되며 광고 원문 전체는 전송하지 않음. 현재는 문맥/부정 판단 LLM이 아니라 임베딩 후보 검색임을 UI·설계 문서에 명시. 설정 JSON의 읽기-수정-쓰기는 전체가 원자적이지 않아 초기에는 단일 관리자 승인 운영을 권고. API 사용자별 호출 한도와 임베딩 비용 집계도 후속 보완 대상.
+- 커밋/푸시: 구현·문서 diff 검토 후 프로젝트 지정 push 명령으로 main에 반영.

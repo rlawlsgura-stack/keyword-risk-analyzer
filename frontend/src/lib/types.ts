@@ -37,7 +37,7 @@ export type Match = {
   evidence_type: string
   hit_count: string
   last_search_date: string
-  match_reason?: 'exact' | 'substring' | 'content_token' | 'approved_expression' | 'literal_expression' | null
+  match_reason?: 'exact' | 'substring' | 'content_token' | 'approved_expression' | 'literal_expression' | 'similar_keyword' | null
   matched_expression?: string
   registered_expression?: string
   normalization_options?: Record<string, boolean> | null
@@ -60,7 +60,9 @@ export type AnalysisFilters = { categories: string[]; risks: string[]; evidence_
 
 export type KeywordPage = { total: number; revision: number | null; columns?: string[]; items: KeywordRow[] }
 
-export type MatchingRules = { ignored_symbols: string[]; approved_partials: ApprovedPartialRules }
+export type MatchingRules = { ignored_symbols: string[]; approved_partials: ApprovedPartialRules; similar_keywords: SimilarKeywordRules }
+
+export type SimilarKeywordRules = Record<string, { term: string; items: { expression: string; canonical_term: string; approved_at?: string; approved_by?: string }[] }>
 
 export type TopKeyword = {
   kwd_no: string
@@ -82,6 +84,11 @@ export type UnmatchedTerm = {
 
 export type UnmatchedPage = { total: number; rows: UnmatchedTerm[] }
 export type UnmatchedSort = 'occurrences' | 'registered'
+
+export type SimilarKeywordCandidate = {
+  kwd_no: string; keyword: string; similarity: number; category: string; risk: string
+  criteria: string; evidence_type: string; alternative: string
+}
 
 export type RegistrationCandidate = {
   term: string

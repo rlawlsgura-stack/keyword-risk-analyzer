@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteRegistrationRequests, deleteUnmatchedTerms, exportUnmatchedTerms, loadRecommendationDraft, loadRegistrationQueue,
-  loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests, saveRecommendationDraft, suggestKeyword,
+  loadMatchingRules, loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests,
+  saveRecommendationDraft, suggestKeyword, suggestSimilarKeywords, approveSimilarKeyword, revokeSimilarKeyword,
   submitRegistrationRequests,
 } from '../lib/api.ts'
 import { CRITERIA_COL, formatDatetime, koSorted } from '../lib/catalog.ts'
 import { downloadCsv } from '../lib/csv.ts'
 import { SearchSelect } from '../components/SearchSelect.tsx'
-import type { KeywordSuggestion, UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
+import type { KeywordSuggestion, SimilarKeywordCandidate, UnmatchedTerm, UnmatchedRegistrationRequest } from '../lib/types.ts'
 import { blankRow, emptyDraft, orderRows, sourceKeys, toWsRow, type Draft, type WsRow } from '../lib/workspace.ts'
 import { useStore } from '../store.tsx'
 import { Alert, Button, Help, Spinner, TextInput, errorText } from '../components/ui.tsx'
@@ -69,6 +70,9 @@ export function UnmatchedTab() {
   const [recommendProgress, setRecommendProgress] = useState<{ done: number; total: number; failed: string[] } | null>(null)
   const [failedRecommendationIds, setFailedRecommendationIds] = useState<string[]>([])
   const [directCells, setDirectCells] = useState<Set<string>>(() => new Set())
+  const [similarSuggestions, setSimilarSuggestions] = useState<Record<string, SimilarKeywordCandidate[]>>({})
+  const [similarSelections, setSimilarSelections] = useState<Record<string, SimilarKeywordCandidate>>({})
+  const [approvedSimilar, setApprovedSimilar] = useState<Record<string, SimilarKeywordCandidate>>({})
 
   const selection = selections[search] ?? { all: false, ids: {} }
   const setSelection = (next: Selection) => setSelections(s => ({ ...s, [search]: next }))
@@ -87,6 +91,31 @@ export function UnmatchedTab() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [search, page, refreshKey])
+
+  useEffect(() => {
+    if (!rows.length || !catalog?.rows.length) return
+    let cancelled = false
+    loadMatchingRules().then(rules => {
+      if (cancelled) return
+      const approved: Record<string, SimilarKeywordCandidate> = {}
+      for (const [kwdNo, rule] of Object.entries(rules.similar_keywords ?? {})) {
+        const catalogRow = catalog.rows.find(item => String(item.kwd_no).trim() === kwdNo)
+        if (!catalogRow || String(catalogRow['키워드명'] ?? '').trim() !== rule.term) continue
+        for (const item of rule.items) {
+          const key = item.expression.normalize('NFKC').toLocaleLowerCase().trim()
+          const row = rows.find(candidate => candidate.display_term.normalize('NFKC').toLocaleLowerCase().trim() === key)
+          if (row) approved[row.term_norm] = {
+            kwd_no: kwdNo, keyword: rule.term, similarity: 1,
+            category: String(catalogRow['상품카테고리'] ?? ''), risk: String(catalogRow['리스크 등급'] ?? ''),
+            criteria: String(catalogRow['리스크 등급별 세부 심의기준'] ?? ''),
+            evidence_type: String(catalogRow['증빙자료유형'] ?? ''), alternative: String(catalogRow['대체키워드'] ?? '-'),
+          }
+        }
+      }
+      setApprovedSimilar(current => ({ ...approved, ...current }))
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [rows, catalog])
 
   const surface = (r: UnmatchedTerm) => surfaceEdits[r.term_norm] ?? r.display_term
   const pageCount = Math.max(1, Math.ceil(total / PAGE))
@@ -330,13 +359,127 @@ export function UnmatchedTab() {
     if (!selected.length) { setWsMsg({ kind: 'warning', text: '분석할 행을 표에서 선택하세요.' }); return }
     setBusy(true)
     try {
-      const { items } = await normalizeUnmatched(selected.slice(0, 1000).map(r => ({ surface: surface(r), occurrences: r.total_occurrences })))
+      const chosen = selected.slice(0, 1000)
+      const approvedFromRules: Record<string, SimilarKeywordCandidate> = {}
+      const rules = await loadMatchingRules()
+      for (const [kwdNo, rule] of Object.entries(rules.similar_keywords ?? {})) {
+          const catalogRow = catalog?.rows.find(item => String(item.kwd_no).trim() === kwdNo)
+          if (!catalogRow || String(catalogRow['키워드명'] ?? '').trim() !== rule.term) continue
+        for (const item of rule.items) {
+          const key = item.expression.normalize('NFKC').toLocaleLowerCase().trim()
+          const row = chosen.find(candidate => surface(candidate).normalize('NFKC').toLocaleLowerCase().trim() === key)
+          if (row) approvedFromRules[row.term_norm] = {
+            kwd_no: kwdNo, keyword: String(catalogRow['키워드명']), similarity: 1,
+            category: String(catalogRow['상품카테고리'] ?? ''), risk: String(catalogRow['리스크 등급'] ?? ''),
+            criteria: String(catalogRow['리스크 등급별 세부 심의기준'] ?? ''),
+            evidence_type: String(catalogRow['증빙자료유형'] ?? ''), alternative: String(catalogRow['대체키워드'] ?? '-'),
+          }
+        }
+      }
+      const candidateFor = (r: UnmatchedTerm) => approvedSimilar[r.term_norm] ?? approvedFromRules[r.term_norm]
+      const approvedRows = chosen.filter(r => candidateFor(r))
+      const ordinaryRows = chosen.filter(r => !candidateFor(r))
+      const normalized = ordinaryRows.length
+        ? (await normalizeUnmatched(ordinaryRows.map(r => ({ surface: surface(r), occurrences: r.total_occurrences })))).items
+        : []
+      const approvedItems = approvedRows.map(r => {
+        const canonical = candidateFor(r)!
+        return { term: canonical.keyword, source_terms: surface(r), occurrences: r.total_occurrences,
+          category: canonical.category, risk: canonical.risk, criteria: canonical.criteria,
+          evidence_type: canonical.evidence_type, alternative: canonical.alternative || '-' }
+      })
+      const items = [...approvedItems, ...normalized]
       setDraft(d => ({
         ...d, recommendations: items.map(r => ({ term: r.term, occurrences: r.occurrences, source_terms: r.source_terms })),
         edits: {}, selected_ids: [], hidden_ids: [], ai_suggestions: {}, recommendation_version: d.recommendation_version + 1,
       }), true)
-      setWsMsg({ kind: 'success', text: `정규화 추천 ${items.length}건을 만들었습니다. 검토 후 승인하세요.` })
+      setWsMsg({ kind: 'success', text: `정규화 추천 ${items.length}건을 만들었습니다.${approvedItems.length ? ` 승인된 유사 키워드 ${approvedItems.length}건은 원 키워드의 분류 정보를 적용했습니다.` : ''} 검토 후 승인하세요.` })
     } catch (e) { setWsMsg({ kind: 'error', text: `미매칭 후보군 분석에 실패했습니다: ${errorText(e)}` }) }
+    finally { setBusy(false) }
+  }
+
+  const findSimilarCandidates = async () => {
+    setListMsg(null)
+    let selected: UnmatchedTerm[]
+    try { selected = await resolveSelection() } catch (e) { setListMsg({ kind: 'error', text: `선택한 후보를 불러오지 못했습니다: ${errorText(e)}` }); return }
+    if (!selected.length) { setListMsg({ kind: 'warning', text: 'AI 유사 키워드를 찾을 미매칭 표현을 선택하세요.' }); return }
+    if (selected.length > 20) { setListMsg({ kind: 'warning', text: '의미 검색은 한 번에 20개까지 가능합니다.' }); return }
+    setBusy(true)
+    try {
+      const { items } = await suggestSimilarKeywords(selected.map(r => surface(r)))
+      setSimilarSuggestions(current => ({ ...current, ...Object.fromEntries(items.map(item => [
+        selected.find(r => surface(r).trim() === item.term)?.term_norm ?? item.term,
+        item.candidates,
+      ])) }))
+      setSimilarSelections(current => Object.fromEntries(Object.entries(current).filter(([key]) =>
+        !selected.some(row => row.term_norm === key))))
+      const candidateCount = items.reduce((sum, item) => sum + item.candidates.length, 0)
+      setListMsg({ kind: candidateCount ? 'info' : 'warning', text: candidateCount
+        ? `${selected.length}개 표현에서 의미상 가까운 원 키워드 후보 ${candidateCount}건을 찾았습니다. 점수는 유사도 참고값이며 동의어 확정값이 아닙니다.`
+        : '가까운 원 키워드 후보를 찾지 못했습니다. AI 설정 또는 등록 키워드 범위를 확인하세요.' })
+    } catch (e) { setListMsg({ kind: 'error', text: `AI 유사 키워드 검색에 실패했습니다: ${errorText(e)}` }) }
+    finally { setBusy(false) }
+  }
+
+  const approveSimilarSelected = async () => {
+    if (!isAdmin) { setListMsg({ kind: 'error', text: '유사 키워드 승인은 관리자만 할 수 있습니다.' }); return }
+    setListMsg(null)
+    let selected: UnmatchedTerm[]
+    try { selected = await resolveSelection() } catch (e) { setListMsg({ kind: 'error', text: `선택한 후보를 불러오지 못했습니다: ${errorText(e)}` }); return }
+    const targets = selected.map(row => ({ row, candidate: similarSelections[row.term_norm] }))
+      .filter((item): item is { row: UnmatchedTerm; candidate: SimilarKeywordCandidate } => Boolean(item.candidate))
+    if (targets.length !== selected.length) { setListMsg({ kind: 'warning', text: '각 미매칭 후보에서 승인할 원 키워드를 직접 선택하세요.' }); return }
+    setBusy(true)
+    try {
+      const rules = await loadMatchingRules()
+      const expectedByCode = new Map<string, string[]>(Object.entries(rules.similar_keywords ?? {}).map(([code, rule]) =>
+        [code, rule.items.map(item => item.expression)]))
+      for (const { row, candidate } of targets) {
+        const expression = surface(row).trim()
+        const existingRule = rules.similar_keywords?.[candidate.kwd_no]
+        const expected = existingRule?.term === candidate.keyword ? (expectedByCode.get(candidate.kwd_no) ?? []) : []
+        await approveSimilarKeyword({ kwd_no: candidate.kwd_no, term: candidate.keyword,
+          expression, expected_expressions: expected })
+        expectedByCode.set(candidate.kwd_no, [...expected, expression])
+        setApprovedSimilar(current => ({ ...current, [row.term_norm]: candidate }))
+      }
+      setListMsg({ kind: 'success', text: `유사 키워드 ${targets.length}건을 승인했습니다. 분석 결과에 반영됩니다. 선택후보군 정규화 작업을 누르면 원 키워드의 분류 정보를 채웁니다.` })
+    } catch (e) { setListMsg({ kind: 'error', text: `유사 키워드 승인에 실패했습니다: ${errorText(e)}` }) }
+    finally { setBusy(false) }
+  }
+
+  const revokeSimilarSelected = async () => {
+    if (!isAdmin) return
+    setListMsg(null)
+    let selected: UnmatchedTerm[]
+    try { selected = await resolveSelection() } catch (e) { setListMsg({ kind: 'error', text: `선택한 후보를 불러오지 못했습니다: ${errorText(e)}` }); return }
+    const rules = await loadMatchingRules().catch(e => {
+      setListMsg({ kind: 'error', text: `승인 목록을 불러오지 못했습니다: ${errorText(e)}` })
+      return null
+    })
+    if (!rules) return
+    const toRevoke = selected.flatMap(row => {
+      const expression = surface(row).trim().normalize('NFKC').toLocaleLowerCase()
+      return Object.entries(rules.similar_keywords ?? {}).flatMap(([kwdNo, rule]) => {
+        const item = rule.items.find(entry => entry.expression.normalize('NFKC').toLocaleLowerCase().trim() === expression)
+        return item ? [{ row, kwdNo, rule, expression: item.expression }] : []
+      })
+    })
+    if (!toRevoke.length) { setListMsg({ kind: 'warning', text: '선택한 표현 중 승인된 유사 키워드가 없습니다.' }); return }
+    if (!window.confirm(`승인된 유사 키워드 ${toRevoke.length}건을 해제할까요? 해제 후 새 분석부터 해당 표현은 원 키워드에 연결되지 않습니다.`)) return
+    setBusy(true)
+    try {
+      const expectedByCode = new Map<string, string[]>(Object.entries(rules.similar_keywords ?? {}).map(([code, rule]) =>
+        [code, rule.items.map(item => item.expression)]))
+      for (const target of toRevoke) {
+        const expected = expectedByCode.get(target.kwdNo) ?? []
+        await revokeSimilarKeyword({ kwd_no: target.kwdNo, term: target.rule.term,
+          expression: target.expression, expected_expressions: expected })
+        expectedByCode.set(target.kwdNo, expected.filter(item => item !== target.expression))
+        setApprovedSimilar(current => { const next = { ...current }; delete next[target.row.term_norm]; return next })
+      }
+      setListMsg({ kind: 'success', text: `유사 키워드 ${toRevoke.length}건의 승인을 해제했습니다.` })
+    } catch (e) { setListMsg({ kind: 'error', text: `유사 키워드 승인 해제에 실패했습니다: ${errorText(e)}` }) }
     finally { setBusy(false) }
   }
 
@@ -538,7 +681,7 @@ export function UnmatchedTab() {
               <thead><tr>
                 <th className="sel"><input type="checkbox" aria-label="전체 선택/해제" checked={selection.all && !Object.values(selection.ids).some(v => v === false)}
                   disabled={!rows.length} onChange={e => setSelection({ all: e.target.checked, ids: {} })} /></th>
-                <th>미매칭 표현</th><th>최근 등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
+                <th>미매칭 표현</th><th>AI 유사 키워드 후보 · 원 키워드</th><th>최근 등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
               </tr></thead>
               <tbody>
                 {rows.map(r => {
@@ -553,6 +696,25 @@ export function UnmatchedTab() {
                         setSelection({ all: selection.all, ids })
                       }} /></td>
                       <td>{surface(r)}</td>
+                      <td className="similar-keyword-cell">
+                        {similarSuggestions[r.term_norm]?.length ? <>
+                          <select aria-label={`${surface(r)}의 원 키워드 후보 선택`}
+                            value={similarSelections[r.term_norm]?.kwd_no ?? ''}
+                            onChange={e => {
+                              const candidate = similarSuggestions[r.term_norm]?.find(item => item.kwd_no === e.target.value)
+                              if (candidate) setSimilarSelections(current => ({ ...current, [r.term_norm]: candidate }))
+                            }}>
+                            <option value="">원 키워드 선택...</option>
+                            {similarSuggestions[r.term_norm].map(candidate => <option key={candidate.kwd_no} value={candidate.kwd_no}>
+                              {candidate.keyword} · {candidate.kwd_no} · 유사도 {candidate.similarity.toFixed(3)}
+                            </option>)}
+                          </select>
+                          <div className="caption">{similarSelections[r.term_norm]?.category} · {similarSelections[r.term_norm]?.risk}</div>
+                          {approvedSimilar[r.term_norm]?.kwd_no === similarSelections[r.term_norm]?.kwd_no && <span className="similar-approved-badge">승인된 유사 키워드</span>}
+                        </> : approvedSimilar[r.term_norm]
+                          ? <><strong>{approvedSimilar[r.term_norm].keyword} · {approvedSimilar[r.term_norm].kwd_no}</strong><div><span className="similar-approved-badge">승인된 유사 키워드</span></div></>
+                          : <span className="caption">추천 전</span>}
+                      </td>
                       <td>{formatDatetime(r.last_seen)}</td>
                       <td>{STATUS_LABEL[r.review_status] ?? ''}</td>
                       <td className="num">{r.total_occurrences}</td>
@@ -563,7 +725,7 @@ export function UnmatchedTab() {
               </tbody>
             </table>
           </div>
-          <div className="caption">페이지가 바뀌어도 선택은 유지됩니다. 전체 선택은 현재 검색결과 전체에 적용됩니다.</div>
+          <div className="caption">페이지가 바뀌어도 선택은 유지됩니다. AI 후보는 참고용이며, 원 키워드와 문맥을 확인한 뒤 관리자만 승인할 수 있습니다.</div>
           {singleSelected && (
             <form className="row mt" onSubmit={e => {
               e.preventDefault()
@@ -582,7 +744,13 @@ export function UnmatchedTab() {
           )}
         </>
       )}
-      <div className="mt"><Button primary onClick={normalize} disabled={busy}>선택후보군 정규화 작업</Button></div>
+      <div className="row tight mt">
+        <Button onClick={findSimilarCandidates} disabled={busy}>선택 표현 AI 유사 키워드 추천</Button>
+        <Button primary onClick={normalize} disabled={busy}>선택후보군 정규화 작업</Button>
+        {isAdmin && <Button onClick={approveSimilarSelected} disabled={busy}>선택 유사 키워드 승인</Button>}
+        {isAdmin && <Button onClick={revokeSimilarSelected} disabled={busy}>선택 유사 키워드 승인 취소</Button>}
+      </div>
+      <div className="caption">의미 검색 시 선택한 표현과 원 키워드·분류·심의기준이 임베딩 API로 전송됩니다. 광고 원문 전체는 보내지 않습니다. 유사도는 참고값이며 승인 전에는 하이라이트·위험 기준에 반영되지 않습니다.</div>
       {busy && <Spinner />}
       {draftError && <Alert kind="warning">정규화 작업본을 저장하거나 복원하지 못했습니다. 연결 상태를 확인하세요.</Alert>}
       {queueError && <Alert kind="error">{`등록 요청을 불러오지 못했습니다: ${queueError}`}</Alert>}

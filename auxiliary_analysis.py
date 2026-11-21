@@ -197,6 +197,38 @@ def semantic_candidates(text, records, limit):
              'similarity': round(float(scores[i]), 4)} for i in order]
 
 
+def semantic_keyword_candidates(terms, records, limit=5):
+    """Batch semantic retrieval for short unmatched phrases, never a risk verdict."""
+    import numpy as np
+    if not records:
+        return [[] for _ in terms]
+    key = os.getenv('OPENAI_API_KEY', '').strip()
+    if not key:
+        raise AuxiliaryUnavailable('OPENAI_API_KEY를 설정한 후 의미 검색을 사용할 수 있습니다.')
+    model = os.getenv('EMBEDDING_MODEL', 'text-embedding-3-small')
+    documents = []
+    for row in records:
+        parts = [str(row.get(name, '')).strip() for name in
+                 ('키워드명', '상품카테고리', '리스크 등급별 세부 심의기준')]
+        documents.append('\n'.join(value for value in parts if value and value != '-')[:1200])
+    queries = np.asarray(_embed(list(terms), model, key), dtype=np.float32)
+    batches = [_catalog_batch(tuple(documents[i:i + 64]), model, key)
+               for i in range(0, len(documents), 64)]
+    catalog = np.concatenate(batches)
+    if queries.shape[1] != catalog.shape[1]:
+        raise AuxiliaryUnavailable('임베딩 차원이 일치하지 않습니다. 모델 설정을 확인하세요.')
+    queries /= np.maximum(np.linalg.norm(queries, axis=1, keepdims=True), 1e-12)
+    catalog /= np.maximum(np.linalg.norm(catalog, axis=1, keepdims=True), 1e-12)
+    scores = queries @ catalog.T
+    results = []
+    for row_scores in scores:
+        order = np.argsort(-row_scores, kind='stable')[:limit]
+        results.append([{'kwd_no': str(records[i]['kwd_no']),
+                         'keyword': str(records[i]['키워드명']),
+                         'similarity': round(float(row_scores[i]), 4)} for i in order])
+    return results
+
+
 def analyze_auxiliary(text, keywords, *, categories=(), risks=(), kiwi=True,
                       embeddings=False, limit=10):
     if not text.strip() or len(text) > 20000 or not 1 <= limit <= 20:

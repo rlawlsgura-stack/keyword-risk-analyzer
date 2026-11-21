@@ -216,6 +216,14 @@ days는 기본 7, 범위 1부터 366입니다. limit은 기본 10, 범위 1부�
 - 현재 라우트에는 response_model이 없어 서버 응답 스키마의 Pydantic 강제 검증이 없습니다.
 - `openapi.runtime.json`은 자동 생성 원본입니다. 보충 명세의 응답 구조는 현재 반환 코드에 근거한 문서 규약입니다.
 
+## 유사 키워드 후보·승인 API
+
+`POST /api/v1/unmatched-terms/similar-keyword-suggestions`는 사용자 세션으로 미매칭 표현을 최대 20개 받아 임베딩 검색 상위 5개 원 키워드를 반환합니다. 이 기능은 `OPENAI_API_KEY`가 필요하며 검색 문구와 원장 키워드·카테고리·심의기준을 임베딩 API에 전송합니다. 결과 유사도는 순위 참고값입니다.
+
+`POST /api/v1/admin/similar-keywords/approve`와 `/revoke`는 관리자 세션만 허용합니다. 원 키워드 코드·현재 등록명·표현·예상 표현 목록을 받아 원장 변경과 동시 수정 충돌을 확인한 뒤 `approved_similar_keywords_v1` 설정을 갱신합니다. 승인된 표현은 `POST /api/v2/analyses` 결과의 `match_reason=similar_keyword`, `matched_expression`, `registered_expression`, `start`, `end`에 반영됩니다. API는 문맥에 따른 동의어 판단이나 위험 등급 재산정을 수행하지 않습니다.
+
+추천 요청은 건당 20개로 제한하지만 사용자별 호출 한도와 임베딩 사용량 원장은 아직 없습니다. 외부 임베딩 API를 켜는 운영 환경은 공급자 지출 한도와 사용량을 별도로 관리해야 합니다.
+
 ## 기준 소스
 
 `api.py`의 AnalysisRequest, current_actor와 각 라우트, `service.py`의 analyze, `repository.py`의 request, `supabase/schema.sql`의 분석과 통계 RPC를 기준으로 작성했습니다.
