@@ -607,7 +607,7 @@ export function OcrABCompare() {
         if (side === 'b' && mode === 'requirements') return <div className="ocr-ab-upload ocr-ab-search-upload" key={side}>
           <div className="ocr-ab-upload-title"><strong>A안 검색어</strong><span>쉼표로 여러 개 입력</span></div>
           <label htmlFor="ocr-ab-search-terms">찾을 단어 또는 문구</label>
-          <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="제품명, 중량, 전성분, 제조번호 및 사용기한"
+          <textarea id="ocr-ab-search-terms" rows={3} value={searchInput} placeholder="ex) 제품명, 중량, 전성분, 제조번호 및 사용기한"
             onChange={event => { setSearchInput(event.target.value); setComparison(null); setOcrTextResults(null); setOcrTextDialogOpen(false); setError(''); setNotice(''); setTemplateMessage('') }} />
           <p>쉼표 또는 줄바꿈으로 검색어를 구분합니다. 입력한 문구가 A안 이미지에 있으면 표시합니다.</p>
           <div className="ocr-ab-template-tools">
