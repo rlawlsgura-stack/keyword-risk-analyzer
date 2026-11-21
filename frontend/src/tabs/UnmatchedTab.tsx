@@ -749,9 +749,9 @@ export function UnmatchedTab() {
       )}
       <div className="row tight mt">
         <Button primary onClick={normalize} disabled={busy}>선택후보군 정규화 작업</Button>
+        <Button onClick={findSimilarCandidates} disabled={busy}>선택 표현 AI 유사 키워드 추천</Button>
         {isAdmin && <Button onClick={approveSimilarSelected} disabled={busy}>선택 유사 키워드 승인</Button>}
         {isAdmin && <Button onClick={revokeSimilarSelected} disabled={busy}>선택 유사 키워드 승인 취소</Button>}
-        <Button onClick={findSimilarCandidates} disabled={busy}>선택 표현 AI 유사 키워드 추천</Button>
         <Help text="선택한 표현과 원 키워드·분류·심의기준이 외부 임베딩 API로 전송됩니다. 광고 원문 전체는 전송하지 않습니다. 추천은 참고 후보이며 승인 전에는 하이라이트나 위험 기준에 반영되지 않습니다. 원 키워드와 문맥을 확인한 뒤 관리자만 승인할 수 있습니다." />
       </div>
       {busy && <Spinner />}
