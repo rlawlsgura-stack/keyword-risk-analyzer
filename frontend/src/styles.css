@@ -513,9 +513,11 @@ input[type=checkbox], input[type=radio] { accent-color: #1e9eff; }
 
 .recommendation-target { color: #8a4b00; background: #fff1c2; border-radius: 4px; padding: .2rem .4rem; font-weight: 600; }
 .recommendation-highlight { color: #842a00; background: #ffe08a; border-radius: 2px; padding: 0 .04em; font-weight: 700; }
-.similar-keyword-cell { min-width: 250px; }
-.similar-keyword-cell select { max-width: 360px; width: 100%; }
+.similar-candidate-review { max-width: 13rem; }
+.similar-candidate-review .caption { display: block; }
+.similar-candidate-select { width: 100%; max-width: 13rem; min-width: 0 !important; }
 .similar-approved-badge { display: inline-block; margin-top: .25rem; border-radius: 999px; padding: .15rem .45rem; background: #dbeafe; color: #1d4ed8; font-size: .78rem; font-weight: 700; }
+.similar-match-badge { display: inline-block; margin-left: .2rem; padding: 0 .25rem; border: 1px solid #b7daf5; border-radius: 3px; background: #e9f5ff; color: #1670b5; font-size: .72em; font-weight: 700; vertical-align: middle; }
 .recommendation-db-table { min-width: 760px; width: 100%; border-collapse: collapse; font-size: .9rem; }
 .recommendation-db-table th, .recommendation-db-table td { border: 1px solid #d9dde3; padding: .55rem; text-align: left; vertical-align: top; white-space: pre-wrap; }
 .recommendation-db-table th { background: #f3f5f7; }

@@ -681,7 +681,7 @@ export function UnmatchedTab() {
               <thead><tr>
                 <th className="sel"><input type="checkbox" aria-label="전체 선택/해제" checked={selection.all && !Object.values(selection.ids).some(v => v === false)}
                   disabled={!rows.length} onChange={e => setSelection({ all: e.target.checked, ids: {} })} /></th>
-                <th>미매칭 표현</th><th>AI 유사 키워드 후보 · 원 키워드</th><th>최근 등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
+                <th>미매칭 표현</th><th>최근 등록일시</th><th>처리상태</th><th className="num">검출횟수(중복포함)</th><th className="num">분석 횟수</th>
               </tr></thead>
               <tbody>
                 {rows.map(r => {
@@ -695,25 +695,28 @@ export function UnmatchedTab() {
                         else delete ids[r.term_norm]
                         setSelection({ all: selection.all, ids })
                       }} /></td>
-                      <td>{surface(r)}</td>
-                      <td className="similar-keyword-cell">
+                      <td>
+                        <div>{surface(r)}</div>
                         {similarSuggestions[r.term_norm]?.length ? <>
-                          <select aria-label={`${surface(r)}의 원 키워드 후보 선택`}
-                            value={similarSelections[r.term_norm]?.kwd_no ?? ''}
-                            onChange={e => {
-                              const candidate = similarSuggestions[r.term_norm]?.find(item => item.kwd_no === e.target.value)
-                              if (candidate) setSimilarSelections(current => ({ ...current, [r.term_norm]: candidate }))
-                            }}>
-                            <option value="">원 키워드 선택...</option>
-                            {similarSuggestions[r.term_norm].map(candidate => <option key={candidate.kwd_no} value={candidate.kwd_no}>
-                              {candidate.keyword} · {candidate.kwd_no} · 유사도 {candidate.similarity.toFixed(3)}
-                            </option>)}
-                          </select>
-                          <div className="caption">{similarSelections[r.term_norm]?.category} · {similarSelections[r.term_norm]?.risk}</div>
-                          {approvedSimilar[r.term_norm]?.kwd_no === similarSelections[r.term_norm]?.kwd_no && <span className="similar-approved-badge">승인된 유사 키워드</span>}
+                          <div className="similar-candidate-review mt">
+                            <span className="caption">AI 유사 키워드 후보</span>
+                            <select className="similar-candidate-select" aria-label={`${surface(r)}의 원 키워드 후보 선택`}
+                              value={similarSelections[r.term_norm]?.kwd_no ?? ''}
+                              onChange={e => {
+                                const candidate = similarSuggestions[r.term_norm]?.find(item => item.kwd_no === e.target.value)
+                                if (candidate) setSimilarSelections(current => ({ ...current, [r.term_norm]: candidate }))
+                              }}>
+                              <option value="">원 키워드 선택...</option>
+                              {similarSuggestions[r.term_norm].map(candidate => <option key={candidate.kwd_no} value={candidate.kwd_no}>
+                                {candidate.keyword} · {candidate.kwd_no} · 유사도 {candidate.similarity.toFixed(3)}
+                              </option>)}
+                            </select>
+                            <div className="caption">{similarSelections[r.term_norm]?.category} · {similarSelections[r.term_norm]?.risk}</div>
+                            {approvedSimilar[r.term_norm]?.kwd_no === similarSelections[r.term_norm]?.kwd_no && <span className="similar-approved-badge">승인된 유사 키워드</span>}
+                          </div>
                         </> : approvedSimilar[r.term_norm]
-                          ? <><strong>{approvedSimilar[r.term_norm].keyword} · {approvedSimilar[r.term_norm].kwd_no}</strong><div><span className="similar-approved-badge">승인된 유사 키워드</span></div></>
-                          : <span className="caption">추천 전</span>}
+                          ? <div className="similar-candidate-review mt"><span className="caption">연결 원 키워드: <strong>{approvedSimilar[r.term_norm].keyword} · {approvedSimilar[r.term_norm].kwd_no}</strong></span><div><span className="similar-approved-badge">승인된 유사 키워드</span></div></div>
+                          : null}
                       </td>
                       <td>{formatDatetime(r.last_seen)}</td>
                       <td>{STATUS_LABEL[r.review_status] ?? ''}</td>
@@ -725,7 +728,7 @@ export function UnmatchedTab() {
               </tbody>
             </table>
           </div>
-          <div className="caption">페이지가 바뀌어도 선택은 유지됩니다. AI 후보는 참고용이며, 원 키워드와 문맥을 확인한 뒤 관리자만 승인할 수 있습니다.</div>
+          <div className="caption">페이지가 바뀌어도 선택은 유지됩니다. 전체 선택은 현재 검색결과 전체에 적용됩니다.</div>
           {singleSelected && (
             <form className="row mt" onSubmit={e => {
               e.preventDefault()
@@ -745,12 +748,12 @@ export function UnmatchedTab() {
         </>
       )}
       <div className="row tight mt">
-        <Button onClick={findSimilarCandidates} disabled={busy}>선택 표현 AI 유사 키워드 추천</Button>
         <Button primary onClick={normalize} disabled={busy}>선택후보군 정규화 작업</Button>
         {isAdmin && <Button onClick={approveSimilarSelected} disabled={busy}>선택 유사 키워드 승인</Button>}
         {isAdmin && <Button onClick={revokeSimilarSelected} disabled={busy}>선택 유사 키워드 승인 취소</Button>}
+        <Button onClick={findSimilarCandidates} disabled={busy}>선택 표현 AI 유사 키워드 추천</Button>
+        <Help text="선택한 표현과 원 키워드·분류·심의기준이 외부 임베딩 API로 전송됩니다. 광고 원문 전체는 전송하지 않습니다. 추천은 참고 후보이며 승인 전에는 하이라이트나 위험 기준에 반영되지 않습니다. 원 키워드와 문맥을 확인한 뒤 관리자만 승인할 수 있습니다." />
       </div>
-      <div className="caption">의미 검색 시 선택한 표현과 원 키워드·분류·심의기준이 임베딩 API로 전송됩니다. 광고 원문 전체는 보내지 않습니다. 유사도는 참고값이며 승인 전에는 하이라이트·위험 기준에 반영되지 않습니다.</div>
       {busy && <Spinner />}
       {draftError && <Alert kind="warning">정규화 작업본을 저장하거나 복원하지 못했습니다. 연결 상태를 확인하세요.</Alert>}
       {queueError && <Alert kind="error">{`등록 요청을 불러오지 못했습니다: ${queueError}`}</Alert>}
