@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   deleteRegistrationRequests, deleteUnmatchedTerms, exportUnmatchedTerms, loadRecommendationDraft, loadRegistrationQueue,
-  loadMatchingRules, loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows, rejectRegistrationRequests,
+  loadMatchingRules, loadUnmatchedTerms, normalizeUnmatched, registerUnmatchedRows,
   saveRecommendationDraft, suggestKeyword, suggestSimilarKeywords, approveSimilarKeyword, revokeSimilarKeyword,
   submitRegistrationRequests,
 } from '../lib/api.ts'
@@ -557,19 +557,6 @@ export function UnmatchedTab() {
     finally { setBusy(false) }
   }
 
-  const reject = async () => {
-    setWsMsg(null)
-    const targets = selectedRows.filter(r => r.request_id)
-    if (!targets.length) { setWsMsg({ kind: 'warning', text: '거절할 등록 요청을 선택하세요.' }); return }
-    try {
-      const { rejected } = await rejectRegistrationRequests(targets.map(r => r.request_id))
-      const ids = targets.map(r => r.recommendation_id)
-      setDraft(d => ({ ...d, hidden_ids: [...new Set([...d.hidden_ids, ...ids])], selected_ids: d.selected_ids.filter(x => !ids.includes(x)) }), true)
-      await loadQueue(); setRefreshKey(k => k + 1)
-      setWsMsg({ kind: 'success', text: `등록 요청 ${rejected}건을 거절했습니다.` })
-    } catch (e) { setWsMsg({ kind: 'error', text: `등록 요청을 거절하지 못했습니다: ${errorText(e)}` }) }
-  }
-
   const requestRegistration = async () => {
     setWsMsg(null)
     if (!selectedRows.length) { setWsMsg({ kind: 'warning', text: '정규화 후보를 선택하세요.' }); return }
@@ -796,15 +783,17 @@ export function UnmatchedTab() {
             <Button onClick={removeRows}>선택 항목 삭제</Button>
           </div>
           <div className="row tight mt">
-            <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
             {isAdmin ? (
               <>
                 <Button primary onClick={approve} disabled={busy}>선택 후보 승인 및 DB 등록</Button>
-                <Button onClick={reject} disabled={busy}>선택 요청 거절</Button>
+                <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
                 <Button onClick={async () => { await persist(draftRef.current); await loadQueue() }}>등록 요청 목록 새로고침</Button>
               </>
             ) : (
-              <Button primary onClick={requestRegistration} disabled={busy}>선택 후보 DB 등록요청</Button>
+              <>
+                <Button onClick={() => recommendSelected(false)} disabled={busy}>선택 키워드 AI 추천 초안</Button>
+                <Button primary onClick={requestRegistration} disabled={busy}>선택 후보 DB 등록요청</Button>
+              </>
             )}
             <Help text="선택한 행만 처리합니다. 셀 편집 내용은 작업본으로 자동 저장되어 다시 로그인해도 유지됩니다." />
           </div>

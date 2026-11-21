@@ -213,9 +213,6 @@ export const saveRecommendationDraft = (payload: Record<string, unknown>) =>
 export const loadRegistrationQueue = () =>
   request<{ items: UnmatchedRegistrationRequest[] }>('/api/v1/admin/unmatched-registration-requests')
 
-export const rejectRegistrationRequests = (request_ids: string[]) =>
-  request<{ rejected: number }>('/api/v1/admin/unmatched-registration-requests/reject', { method: 'POST', body: json({ request_ids }) })
-
 export type CatalogRegistrationRow = {
   term: string; source_terms: string; term_norm: string; request_id: string | null
   category: string; risk: string; criteria: string; evidence_type: string; alternative: string
