@@ -34,7 +34,10 @@ export function KeywordList({ rows, columns }: { rows: readonly KeywordRow[]; co
       <DataTable rows={filtered} rowKey={(r, i) => `${r.kwd_no}-${i}`}
         columns={columns.map(c => ({
           key: c, label: displayHeader(c), maxWidth: 320,
-          render: (r: KeywordRow) => (DATETIME_COLUMNS.has(c) ? formatDatetime(r[c]) : r[c] ?? ''),
+          render: (r: KeywordRow) => {
+            const value = DATETIME_COLUMNS.has(c) ? formatDatetime(r[c]) : String(r[c] ?? '')
+            return <div className="keyword-list-cell" title={value}>{value}</div>
+          },
         }))} />
       <div className="mt">
         <Button onClick={() => {
