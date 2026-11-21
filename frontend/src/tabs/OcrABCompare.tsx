@@ -354,7 +354,7 @@ export function OcrABCompare() {
   const [urlA, setUrlA] = useState('')
   const [urlB, setUrlB] = useState('')
   const [comparison, setComparison] = useState<Comparison | null>(null)
-  const [mode, setMode] = useState<ComparisonMode>('requirements')
+  const [mode, setMode] = useState<ComparisonMode>('differences')
   const [searchInput, setSearchInput] = useState('')
   const [templates, setTemplates] = useState<SearchTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState('')

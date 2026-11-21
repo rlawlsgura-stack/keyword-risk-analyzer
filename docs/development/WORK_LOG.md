@@ -365,3 +365,11 @@
 - 수정: A안 검색어 입력란 placeholder를 `ex) 제품명, 중량, 전성분, 제조번호 및 사용기한`으로 변경. 다른 템플릿 입력란과 화면 스타일은 그대로 둠.
 - 검증: README의 React 운영 진입점과 관리자·일반회원 공통 탭 구성을 확인. `npm run build` 성공(기존 대형 청크 경고). `git diff --check` 통과. 서비스 포트 실행·변경 없음.
 - 커밋/푸시: 변경 diff를 검토하고 프로젝트 지정 D-drive push 명령으로 main에 반영.
+
+## 2026-11-21 — A/B 이미지 비교모드 기본값 변경
+
+- 요청: A/B 이미지 비교 검토의 기본 비교모드를 `A안 대비 B안의 차이 찾기`로 설정.
+- 변경 파일: `frontend/src/tabs/OcrABCompare.tsx`, 이 기록.
+- 수정: 비교모드 state 초기값을 `requirements`에서 `differences`로 변경. 화면 로드 시 A/B 차이 분석 모드가 기본 선택됨.
+- 검증: README의 React 운영 진입점과 해당 공통 OCR 탭이 관리자·일반회원 모두에 제공되는 화면 분기를 확인. `npm run build` 및 `git diff --check` 통과(기존 대형 청크 경고). 로컬 서비스 포트 실행·변경 없음.
+- 커밋/푸시: 변경 diff 검토 후 프로젝트 지정 D-drive push 명령으로 main에 반영.
